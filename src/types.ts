@@ -118,7 +118,7 @@ export interface SolcastConfig extends SeverityFields {
 
 /**
  * Konfigurace jednoho patra. Patro je uzel se dvěma vstupy:
- * grid větev (Shelly *-GRID-AC-OUT) a ostrovní větev (budoucí Shelly na FVE straně).
+ * grid větev (Shelly *-GRID-AC-OUT) a FVE/ostrovní větev.
  * Fáze grid větve mají volitelné vlastní názvy + ikony (pračka, sušička, sporák...).
  */
 export interface FloorConfig {
@@ -127,7 +127,7 @@ export interface FloorConfig {
   grid_power?: string;
   /** Energie patra ze sítě (kWh). */
   grid_energy?: string;
-  /** Výkon patra z ostrova (W) — budoucí patrové Shelly na FVE větvi. */
+  /** Výkon patra z ostrova/FVE (W) — patrová Shelly na FVE větvi. */
   island_power?: string;
   /** Energie patra z ostrova (kWh). */
   island_energy?: string;

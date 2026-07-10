@@ -47,8 +47,8 @@ export function computeLayout(floorCount: number): Layout {
   const n = Math.max(1, floorCount);
 
   const pv: Rect = { x: 50, y: 40, w: 300, h: 190 };
-  const mppt: Rect = { x: 50, y: 280, w: 300, h: 130 };
-  const battery: Rect = { x: 50, y: 480, w: 300, h: 300 };
+  const mppt: Rect = { x: 50, y: 280, w: 300, h: 150 };
+  const battery: Rect = { x: 50, y: 480, w: 300, h: 320 };
   const inverter: Rect = { x: 590, y: 360, w: 280, h: 260 };
   // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný.
   const solcast: Rect = { x: 590, y: 40, w: 280, h: 190 };

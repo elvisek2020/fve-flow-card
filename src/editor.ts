@@ -178,7 +178,7 @@ const FLOOR_SCHEMA = [
     type: 'expandable',
     flatten: true,
     expanded: true,
-    title: 'FVE (ostrov) — budoucí Shelly',
+    title: 'FVE (ostrov)',
     icon: 'mdi:solar-power',
     schema: [
       { name: 'island_power', selector: ENTITY },
@@ -241,7 +241,7 @@ const LABELS: Record<string, string> = {
   severity_invert: 'Obrátit barvy (vysoká hodnota = špatná)',
   grid_power: 'Výkon ze sítě (W) — nepovinné, jinak součet fází',
   grid_energy: 'Energie ze sítě (kWh)',
-  island_power: 'Výkon z FVE (W) — budoucí Shelly',
+  island_power: 'Výkon z FVE (W)',
   island_energy: 'Energie z FVE (kWh)',
 };
 
@@ -325,7 +325,7 @@ export class FveFlowCardEditor extends LitElement {
       ${!floors.length
         ? html`<div class="hint">
             Zatím žádná patra — přidej první přes tlačítko výše. Každé patro může mít grid větev
-            (Shelly *-GRID-AC-OUT), ostrovní větev (budoucí Shelly na FVE straně) a pojmenované fáze.
+            (Shelly *-GRID-AC-OUT), FVE větev a pojmenované fáze.
           </div>`
         : nothing}
     `;

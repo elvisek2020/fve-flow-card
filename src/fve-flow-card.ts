@@ -326,8 +326,10 @@ export class FveFlowCard extends LitElement {
       ${iconMppt(r.x + 18, r.y + 44, 48, C.solar)}
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}">${state}</text>
       <text class="small" x="${r.x + 80}" y="${r.y + 92}">
-        ${pv.voltage ? formatState(this.hass, pv.voltage) : '—'} ·
-        ${pv.current ? formatState(this.hass, pv.current) : '—'}
+        Napětí <tspan class="strong">${pv.voltage ? formatState(this.hass, pv.voltage) : '—'}</tspan>
+      </text>
+      <text class="small" x="${r.x + 80}" y="${r.y + 114}">
+        Proud <tspan class="strong">${pv.current ? formatState(this.hass, pv.current) : '—'}</tspan>
       </text>
       ${this._hit(r, pv.mppt_state ?? pv.voltage)}
     `;
@@ -358,20 +360,24 @@ export class FveFlowCard extends LitElement {
       <text class="big" x="${r.x + 118}" y="${r.y + 90}" style="fill: ${socColor}">${b.soc ? `${Math.round(soc)} %` : '—'}</text>
       <text class="medium" x="${r.x + 118}" y="${r.y + 122}" style="fill: ${stateColor}">${b.power ? stateText : ''}</text>
       <text class="small" x="${r.x + 118}" y="${r.y + 152}">
-        ${b.voltage ? formatState(this.hass, b.voltage) : '—'} ·
-        ${b.current ? formatState(this.hass, b.current) : '—'}
+        Napětí <tspan class="strong">${b.voltage ? formatState(this.hass, b.voltage) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 118}" y="${r.y + 176}">
-        ${b.temperature ? formatState(this.hass, b.temperature) : '—'}
-        ${b.soh ? ` · SoH ${formatState(this.hass, b.soh)}` : ''}
+      <text class="small" x="${r.x + 118}" y="${r.y + 174}">
+        Proud <tspan class="strong">${b.current ? formatState(this.hass, b.current) : '—'}</tspan>
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 204}">
+      <text class="small" x="${r.x + 118}" y="${r.y + 198}">
+        Teplota <tspan class="strong">${b.temperature ? formatState(this.hass, b.temperature) : '—'}</tspan>
+      </text>
+      <text class="small" x="${r.x + 118}" y="${r.y + 220}">
+        ${b.soh ? `SoH ${formatState(this.hass, b.soh)}` : ''}
+      </text>
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 244}">
         ${b.runtime ? `Výdrž ${formatState(this.hass, b.runtime)}` : ''}
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 226}">
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 264}">
         ${b.cycles ? `Počet cyklů ${formatState(this.hass, b.cycles)}` : ''}
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 248}">
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 284}">
         ${charging && b.time_to_full ? `Do nabití ${formatState(this.hass, b.time_to_full)}` : ''}
       </text>
       ${this._hit(r, b.soc)}
@@ -390,23 +396,27 @@ export class FveFlowCard extends LitElement {
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${inv.name || 'Měnič MultiPlus-II'}</text>
       ${iconInverter(r.x + 18, r.y + 46, 56, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(p)}</text>
-      ${sev ? this._bar(r, p, inv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <circle cx="${r.x + 96}" cy="${r.y + 106}" r="4" fill="${state !== '—' ? C.ok : 'rgba(148,170,190,0.4)'}"/>
       <text class="small" x="${r.x + 108}" y="${r.y + 111}">${state}</text>
-      ${inv.voltage || inv.current
+      ${inv.voltage
         ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 138}">
-            ${inv.voltage ? formatState(this.hass, inv.voltage) : '—'} ·
-            ${inv.current ? formatState(this.hass, inv.current) : '—'}
+            Napětí <tspan class="strong">${formatState(this.hass, inv.voltage)}</tspan>
+          </text>`
+        : nothing}
+      ${inv.current
+        ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 160}">
+            Proud <tspan class="strong">${formatState(this.hass, inv.current)}</tspan>
           </text>`
         : nothing}
       ${inv.load_power
-        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + 164}">
+        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + 184}">
             Kritické zátěže ${formatPower(toNum(this.hass, inv.load_power))}
           </text>`
         : nothing}
+      ${sev ? this._bar(r, p, inv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       ${inv.days_in_service
-        ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 190}">
-            V provozu <tspan class="strong">${formatState(this.hass, inv.days_in_service)}</tspan>
+        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + r.h - 20}">
+            Počet dní v provozu <tspan class="strong">${formatState(this.hass, inv.days_in_service)}</tspan>
           </text>`
         : nothing}
       ${this._hit(r, inv.power ?? inv.load_power)}
@@ -445,11 +455,11 @@ export class FveFlowCard extends LitElement {
     const accent = sev ?? C.grid;
     return svg`
       ${this._panel(r, accent, active)}
-      <text class="node-title" x="${r.x + 90}" y="${r.y + 28}">${g.name ?? 'Síť ČEZ'} · AC-IN</text>
-      ${iconPylon(r.x + 16, r.y + 36, 52, active ? accent : 'rgba(148,170,190,0.5)')}
-      <text class="big" x="${r.x + 90}" y="${r.y + 78}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
+      <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${g.name || 'Síť ČEZ'}</text>
+      ${iconPylon(r.x + 16, r.y + 44, 52, active ? accent : 'rgba(148,170,190,0.5)')}
+      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
-      <text class="tiny" x="${r.x + 90}" y="${r.y + 98}">
+      <text class="tiny" x="${r.x + 90}" y="${r.y + 108}">
         ${g.energy_total ? `Celkem ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
         ${g.energy_today ? ` · dnes ${formatEnergy(toNum(this.hass, g.energy_today))}` : ''}
       </text>

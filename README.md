@@ -100,7 +100,7 @@ floors:
   - name: 0NP
     grid_power: sensor.0np_grid_ac_out_vykon   # nepovinné, jinak součet fází
     grid_energy: sensor.0np_grid_ac_out_energie
-    island_power: sensor.0np_fve_ac_out_vykon  # výkon z FVE — budoucí Shelly
+    island_power: sensor.0np_fve_ac_out_vykon  # výkon z FVE na patře
     phase_a_entity: sensor.0np_grid_ac_out_l1
     phase_a_name: Pračka                       # vlastní název zásuvky/spotřebiče
     phase_a_icon: mdi:washing-machine
