@@ -4,15 +4,20 @@ import type { Rect } from './layout';
 import { iconBolt } from './icons';
 import { formatPower, toNum } from './utils';
 
-export interface PhaseChipsOptions {
+export interface ChipStyle {
+  icon?: (x: number, y: number, size: number, color: string) => TemplateResult;
+  iconColor?: string;
+  borderColor?: string;
+}
+
+export interface PhaseChipsOptions extends ChipStyle {
   /** Index řádku odspodu (0 = u dolního okraje uzlu), pro stohování více řad chipů. */
   rowFromBottom?: number;
-  /** Vlastní ikona místo výchozího blesku (např. sluníčko pro FVE výrobu). */
-  icon?: (x: number, y: number, size: number, color: string) => TemplateResult;
-  /** Barva ikony a jejího glow. */
-  iconColor?: string;
-  /** Barva rámečku chipu (default neutrální modrošedá). */
-  borderColor?: string;
+  /**
+   * Styl jednotlivého chipu podle indexu — pro smíchané řady, kde první
+   * položka (např. FVE výroba) potřebuje jinou ikonu/barvu než ostatní.
+   */
+  itemStyle?: (ph: PhaseSpec, index: number) => ChipStyle | undefined;
 }
 
 /**
@@ -34,11 +39,12 @@ export function renderPhaseChips(
   const gap = 8;
   const totalW = r.w - pad * 2;
   const chipW = (totalW - gap * Math.max(0, phases.length - 1)) / phases.length;
-  const drawIcon = opts?.icon ?? iconBolt;
-  const iconColor = opts?.iconColor ?? 'rgba(226,240,248,0.75)';
-  const borderColor = opts?.borderColor ?? 'rgba(120,180,210,0.16)';
 
   return svg`${phases.map((ph, i) => {
+    const style = opts?.itemStyle?.(ph, i);
+    const drawIcon = style?.icon ?? opts?.icon ?? iconBolt;
+    const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
+    const borderColor = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
     const x = r.x + pad + i * (chipW + gap);
     const cx = x + chipW / 2;
     const power = formatPower(toNum(hass, ph.entity));

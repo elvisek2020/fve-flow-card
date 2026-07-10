@@ -27,12 +27,14 @@ export interface Layout {
 }
 
 const FLOOR_W = 310;
-// Patro má dva řádky chipů (FVE + grid fáze), grid uzel jen jeden.
-const FLOOR_H = 240;
-const GRID_H = 170;
+// Patro má jen jeden řádek chipů (FVE + grid fáze vedle sebe).
+const FLOOR_H = 170;
+// Grid uzel má navíc řádek se souhrnnou energií, proto potřebuje víc
+// místa nad chipy, aby se ikonka fáze nepřekrývala s textem "Celkem/dnes".
+const GRID_H = 210;
 const FLOOR_GAP = 30;
 const FLOOR_X = 1020;
-const FLOORS_TOP = 210;
+const FLOORS_TOP = 40 + GRID_H;
 const ISLAND_TRUNK_X = 950;
 const GRID_TRUNK_X = 1388;
 

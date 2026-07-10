@@ -40,7 +40,7 @@ const SCHEMA = [
       { name: 'voltage', selector: ENTITY },
       { name: 'current', selector: ENTITY },
       { name: 'mppt_state', selector: ENTITY },
-      { name: 'name', selector: TEXT },
+      { name: 'name', selector: TEXT, custom_label: 'Vlastní název FVE panelů' },
       { name: 'mppt_name', selector: TEXT },
       ...SEVERITY_W,
     ],
@@ -61,7 +61,7 @@ const SCHEMA = [
       { name: 'time_to_full', selector: ENTITY },
       { name: 'capacity', selector: ENTITY },
       { name: 'invert', selector: BOOL },
-      { name: 'name', selector: TEXT },
+      { name: 'name', selector: TEXT, custom_label: 'Vlastní název baterie' },
       ...SEVERITY_PCT,
     ],
   },
@@ -77,7 +77,7 @@ const SCHEMA = [
       { name: 'load_power', selector: ENTITY },
       { name: 'total_yield', selector: ENTITY },
       { name: 'days_in_service', selector: ENTITY },
-      { name: 'name', selector: TEXT },
+      { name: 'name', selector: TEXT, custom_label: 'Vlastní název měniče' },
       ...SEVERITY_W,
     ],
   },
@@ -92,7 +92,7 @@ const SCHEMA = [
       { name: 'phase_c', selector: ENTITY },
       { name: 'energy_total', selector: ENTITY },
       { name: 'energy_today', selector: ENTITY },
-      { name: 'name', selector: TEXT },
+      { name: 'name', selector: TEXT, custom_label: 'Vlastní název sítě' },
       ...SEVERITY_W,
     ],
   },
@@ -129,7 +129,7 @@ const SCHEMA = [
  * protože jde o rozpad gridové AC-OUT větve (Shelly), ne FVE.
  */
 const FLOOR_SCHEMA = [
-  { name: 'name', required: true, selector: TEXT },
+  { name: 'name', required: true, selector: TEXT, custom_label: 'Název patra' },
   {
     name: 'floor_grid',
     type: 'expandable',
@@ -249,8 +249,8 @@ export class FveFlowCardEditor extends LitElement {
     this._config = config;
   }
 
-  private _computeLabel = (schema: { name: string }): string =>
-    LABELS[schema.name] ?? schema.name;
+  private _computeLabel = (schema: { name: string; custom_label?: string }): string =>
+    schema.custom_label ?? LABELS[schema.name] ?? schema.name;
 
   private _computeHelper = (schema: { name: string }): string | undefined =>
     HELPERS[schema.name];
