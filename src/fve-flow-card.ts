@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { FloorConfig, FveFlowCardConfig, HomeAssistant, PhaseSpec } from './types';
 import { computeLayout, type Layout, type Rect } from './layout';
 import { renderFlow, type FlowOptions } from './flow';
+import { renderPhaseChips } from './phase-chips';
 import {
   iconBattery,
   iconHome,
@@ -462,31 +463,7 @@ export class FveFlowCard extends LitElement {
           <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 32}" text-anchor="end">
             <tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>
           </text>`}
-      ${phases.length
-        ? svg`
-          <foreignObject x="${r.x + 14}" y="${r.y + r.h - 88}" width="${r.w - 28}" height="76">
-            ${html`
-              <div class="chips" xmlns="http://www.w3.org/1999/xhtml">
-                ${phases.map(
-                  (ph) => html`
-                    <div
-                      class="chip"
-                      title=${`${ph.label} · ${ph.name}`}
-                      @click=${(e: Event) => {
-                        e.stopPropagation();
-                        this._open(ph.entity);
-                      }}
-                    >
-                      <ha-icon .icon=${ph.icon}></ha-icon>
-                      <span class="chip-value">${formatPower(toNum(this.hass, ph.entity))}</span>
-                      <span class="chip-name">${ph.name}</span>
-                    </div>
-                  `,
-                )}
-              </div>
-            `}
-          </foreignObject>`
-        : nothing}
+      ${phases.length ? renderPhaseChips(r, phases, this.hass, (id) => this._open(id)) : nothing}
       ${this._hit({ x: r.x, y: r.y, w: r.w, h: 64 }, f.grid_power ?? f.island_power ?? phases[0]?.entity)}
     `;
   }
@@ -583,49 +560,24 @@ export class FveFlowCard extends LitElement {
     .hit:hover {
       fill: rgba(255, 255, 255, 0.04);
     }
-    .chips {
-      display: flex;
-      gap: 8px;
-      height: 100%;
-      box-sizing: border-box;
-    }
-    .chip {
-      flex: 1 1 0;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      background: rgba(255, 255, 255, 0.045);
-      border: 1px solid rgba(120, 180, 210, 0.16);
-      border-radius: 12px;
+    .phase-chip {
       cursor: pointer;
-      padding: 4px 2px;
-      transition: background 0.15s ease, border-color 0.15s ease;
     }
-    .chip:hover {
-      background: rgba(255, 255, 255, 0.09);
-      border-color: rgba(79, 195, 247, 0.55);
+    .phase-chip rect {
+      transition: fill 0.15s ease, stroke 0.15s ease;
     }
-    .chip ha-icon {
-      --mdc-icon-size: 18px;
-      color: rgba(226, 240, 248, 0.75);
+    .phase-chip:hover rect {
+      fill: rgba(255, 255, 255, 0.09);
+      stroke: rgba(79, 195, 247, 0.55);
     }
     .chip-value {
       font-size: 13px;
       font-weight: 700;
-      color: #4fc3f7;
-      line-height: 1.1;
+      fill: #4fc3f7;
     }
     .chip-name {
       font-size: 10px;
-      color: rgba(226, 240, 248, 0.5);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 100%;
-      line-height: 1.1;
+      fill: rgba(226, 240, 248, 0.5);
     }
   `;
 }
