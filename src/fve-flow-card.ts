@@ -45,6 +45,13 @@ const C = {
   crit: '#ff5252',
 };
 
+const PHASE_STYLE: Record<string, { color: string; border: string }> = {
+  L1: { color: '#f5f5f5', border: 'rgba(245,245,245,0.28)' },
+  // Fyzická černá je na tmavém dashboardu nahrazena kontrastní grafitovou.
+  L2: { color: '#78909c', border: 'rgba(120,144,156,0.35)' },
+  L3: { color: '#b87333', border: 'rgba(184,115,51,0.38)' },
+};
+
 console.info(
   `%c FVE-FLOW-CARD %c v${CARD_VERSION} `,
   'color: #0a0f16; background: #00e676; font-weight: 700;',
@@ -255,16 +262,15 @@ export class FveFlowCard extends LitElement {
   private _openFloorHistory(f: FloorConfig, phases: PhaseSpec[]): void {
     const title = `${f.name || 'Patro'} · výkon`;
     const series: HistorySeries[] = [];
-    const phaseColors = ['#4fc3f7', '#82b1ff', '#b388ff'];
 
     if (f.grid_power) {
       series.push({ entity: f.grid_power, name: 'Síť', color: C.grid });
     } else {
-      phases.forEach((phase, index) => {
+      phases.forEach((phase) => {
         series.push({
           entity: phase.entity,
           name: phase.name || phase.label,
-          color: phaseColors[index % phaseColors.length],
+          color: PHASE_STYLE[phase.label]?.color ?? C.grid,
         });
       });
     }
@@ -626,8 +632,24 @@ export class FveFlowCard extends LitElement {
         g.power ? () => this._openEntity(g.power, g.name || 'Síť', accent) : undefined,
       )}
       ${phaseSpecs.length
-        ? renderPhaseChips(r, phaseSpecs, this.hass, (id) =>
-            this._openEntity(id, this._entityName(id), C.grid),
+        ? renderPhaseChips(
+            r,
+            phaseSpecs,
+            this.hass,
+            (id) => {
+              const phase = phaseSpecs.find((item) => item.entity === id);
+              this._openEntity(
+                id,
+                this._entityName(id),
+                phase ? PHASE_STYLE[phase.label]?.color ?? C.grid : C.grid,
+              );
+            },
+            {
+              itemStyle: (phase) => ({
+                iconColor: PHASE_STYLE[phase.label]?.color ?? C.grid,
+                borderColor: PHASE_STYLE[phase.label]?.border,
+              }),
+            },
           )
         : nothing}
     `;
@@ -669,13 +691,20 @@ export class FveFlowCard extends LitElement {
             this._openEntity(
               id,
               chip ? `${f.name || 'Patro'} · ${chip.name}` : this._entityName(id),
-              chip === islandChip ? C.island : C.grid,
+              chip === islandChip
+                ? C.island
+                : chip
+                  ? PHASE_STYLE[chip.label]?.color ?? C.grid
+                  : C.grid,
             );
           }, {
             itemStyle: (ph) =>
               ph === islandChip
                 ? { icon: iconSun, iconColor: C.island, borderColor: 'rgba(0,230,118,0.22)' }
-                : undefined,
+                : {
+                    iconColor: PHASE_STYLE[ph.label]?.color ?? C.grid,
+                    borderColor: PHASE_STYLE[ph.label]?.border,
+                  },
           })
         : nothing}
     `;
