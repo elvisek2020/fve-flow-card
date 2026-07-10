@@ -278,8 +278,10 @@ export class FveFlowCard extends LitElement {
     return svg`
       <rect x="${r.x + 20}" y="${r.y + r.h - 12}" width="${w}" height="4" rx="2"
         fill="rgba(255,255,255,0.08)"/>
-      <rect x="${r.x + 20}" y="${r.y + r.h - 12}" width="${Math.max(4, w * pct)}" height="4" rx="2"
-        fill="${color}" style="filter: drop-shadow(0 0 4px ${color})"/>`;
+      ${pct > 0
+        ? svg`<rect x="${r.x + 20}" y="${r.y + r.h - 12}" width="${Math.max(4, w * pct)}" height="4" rx="2"
+            fill="${color}" style="filter: drop-shadow(0 0 4px ${color})"/>`
+        : nothing}`;
   }
 
   /** Neviditelná klikací plocha přes celý uzel. */
@@ -302,15 +304,15 @@ export class FveFlowCard extends LitElement {
       ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${pv.name || 'FVE panely'}</text>
       ${iconSolarPanel(r.x + 18, r.y + 46, 60, active ? accent : 'rgba(148,170,190,0.5)')}
-      <text class="big" x="${r.x + 92}" y="${r.y + 84}" style="fill: ${accent}">${pv.power ? formatPower(p) : '—'}</text>
+      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${pv.power ? formatPower(p) : '—'}</text>
       ${sev ? this._bar(r, p, pv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
-      <text class="small" x="${r.x + 92}" y="${r.y + 112}">
+      <text class="small" x="${r.x + 90}" y="${r.y + 112}">
         Dnes <tspan class="strong">${pv.energy_today ? formatEnergy(toNum(this.hass, pv.energy_today)) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 92}" y="${r.y + 134}">
+      <text class="small" x="${r.x + 90}" y="${r.y + 134}">
         Špička dnes <tspan class="strong">${pv.max_power_today ? formatPower(toNum(this.hass, pv.max_power_today)) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 92}" y="${r.y + 156}">
+      <text class="small" x="${r.x + 90}" y="${r.y + 156}">
         Celkem <tspan class="strong">${pv.energy_total ? formatEnergy(toNum(this.hass, pv.energy_total)) : '—'}</tspan>
       </text>
       ${this._hit(r, pv.power)}
@@ -365,19 +367,19 @@ export class FveFlowCard extends LitElement {
       <text class="small" x="${r.x + 118}" y="${r.y + 174}">
         Proud <tspan class="strong">${b.current ? formatState(this.hass, b.current) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 118}" y="${r.y + 198}">
+      <text class="small" x="${r.x + 118}" y="${r.y + 196}">
         Teplota <tspan class="strong">${b.temperature ? formatState(this.hass, b.temperature) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 118}" y="${r.y + 220}">
+      <text class="small" x="${r.x + 118}" y="${r.y + 218}">
         ${b.soh ? `SoH ${formatState(this.hass, b.soh)}` : ''}
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 244}">
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 242}">
         ${b.runtime ? `Výdrž ${formatState(this.hass, b.runtime)}` : ''}
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 264}">
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 262}">
         ${b.cycles ? `Počet cyklů ${formatState(this.hass, b.cycles)}` : ''}
       </text>
-      <text class="tiny" x="${r.x + 118}" y="${r.y + 284}">
+      <text class="tiny" x="${r.x + 118}" y="${r.y + 282}">
         ${charging && b.time_to_full ? `Do nabití ${formatState(this.hass, b.time_to_full)}` : ''}
       </text>
       ${this._hit(r, b.soc)}
@@ -429,18 +431,20 @@ export class FveFlowCard extends LitElement {
     const p = toNum(this.hass, s.power_now);
     const sev = severityColor(p, s);
     const accent = sev ?? '#ffd54f';
+    // Stejné chování jako FVE: při nulové predikci se rámeček ztlumí.
+    const active = Math.abs(p) >= this._flowBase().deadband;
     return svg`
-      ${this._panel(r, accent, true)}
+      ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Předpověď Solcast</text>
-      ${iconSun(r.x + 16, r.y + 58, 56, accent)}
-      <text class="big" x="${r.x + 88}" y="${r.y + 84}" style="fill: ${accent}">
+      ${iconSun(r.x + 16, r.y + 58, 56, active ? accent : 'rgba(148,170,190,0.5)')}
+      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">
         ${s.power_now ? formatPower(p) : '—'}
       </text>
       ${sev ? this._bar(r, p, s.bar_max ?? this._flowBase().maxPower, sev) : nothing}
-      <text class="small" x="${r.x + 88}" y="${r.y + 112}">
+      <text class="small" x="${r.x + 90}" y="${r.y + 112}">
         Zbývá dnes <tspan class="strong">${s.remaining_today ? formatEnergy(toNum(this.hass, s.remaining_today)) : '—'}</tspan>
       </text>
-      <text class="small" x="${r.x + 88}" y="${r.y + 134}">
+      <text class="small" x="${r.x + 90}" y="${r.y + 134}">
         Dnes celkem <tspan class="strong">${s.total_today ? formatEnergy(toNum(this.hass, s.total_today)) : '—'}</tspan>
       </text>
       ${this._hit(r, s.power_now)}
@@ -460,7 +464,7 @@ export class FveFlowCard extends LitElement {
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <text class="tiny" x="${r.x + 90}" y="${r.y + 108}">
-        ${g.energy_total ? `Celkem ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
+        ${g.energy_total ? `ze sítě ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
         ${g.energy_today ? ` · dnes ${formatEnergy(toNum(this.hass, g.energy_today))}` : ''}
       </text>
       ${phaseSpecs.length

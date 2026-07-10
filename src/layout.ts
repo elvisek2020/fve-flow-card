@@ -30,7 +30,7 @@ const FLOOR_W = 310;
 // Patro má jen jeden řádek chipů (FVE + grid fáze vedle sebe).
 const FLOOR_H = 170;
 // Grid uzel má navíc řádek se souhrnnou energií, proto potřebuje víc
-// místa nad chipy, aby se ikonka fáze nepřekrývala s textem "Celkem/dnes".
+// místa nad chipy, aby se ikonka fáze nepřekrývala s textem "ze sítě/dnes".
 const GRID_H = 210;
 const FLOOR_GAP = 30;
 const FLOOR_X = 1020;
