@@ -62,6 +62,8 @@ pv:
   voltage: sensor.mppt_napeti_fv
   current: sensor.mppt_proud_dc
   mppt_state: sensor.mppt_rezim
+  name: FVE panely                             # vlastní název panelu
+  mppt_name: MPPT regulátor                    # vlastní název MPPT uzlu
 battery:
   soc: sensor.baterie_nabijeni                 # povinné pro zobrazení baterie
   power: sensor.baterie_vykon                  # kladné = nabíjení (Victron)
@@ -70,12 +72,16 @@ battery:
   temperature: sensor.baterie_teplota
   soh: sensor.baterie_zdravi
   runtime: sensor.baterie_odhadovana_vydrz
+  cycles: sensor.fve_baterie_pocet_cyklu
   time_to_full: sensor.baterie_doba_do_nabiti
   capacity: sensor.baterie_kapacita
   invert: false                                # true = kladné znamená vybíjení
+  name: Baterie Pylontech                      # vlastní název baterie
 inverter:
   power: sensor.multiplus_vystupni_vykon
   state: sensor.multiplus_stav
+  voltage: sensor.multiplus_vystupni_napeti
+  current: sensor.multiplus_vystupni_proud
   load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba
   total_yield: sensor.mppt_celkovy_vynos       # informační řádek (kWh)
   days_in_service: sensor.fve_pocet_dni        # informační řádek

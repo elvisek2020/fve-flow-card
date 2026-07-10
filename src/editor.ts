@@ -40,6 +40,8 @@ const SCHEMA = [
       { name: 'voltage', selector: ENTITY },
       { name: 'current', selector: ENTITY },
       { name: 'mppt_state', selector: ENTITY },
+      { name: 'name', selector: TEXT },
+      { name: 'mppt_name', selector: TEXT },
       ...SEVERITY_W,
     ],
   },
@@ -55,9 +57,11 @@ const SCHEMA = [
       { name: 'temperature', selector: ENTITY },
       { name: 'soh', selector: ENTITY },
       { name: 'runtime', selector: ENTITY },
+      { name: 'cycles', selector: ENTITY },
       { name: 'time_to_full', selector: ENTITY },
       { name: 'capacity', selector: ENTITY },
       { name: 'invert', selector: BOOL },
+      { name: 'name', selector: TEXT },
       ...SEVERITY_PCT,
     ],
   },
@@ -68,6 +72,8 @@ const SCHEMA = [
     schema: [
       { name: 'power', selector: ENTITY },
       { name: 'state', selector: ENTITY },
+      { name: 'voltage', selector: ENTITY },
+      { name: 'current', selector: ENTITY },
       { name: 'load_power', selector: ENTITY },
       { name: 'total_yield', selector: ENTITY },
       { name: 'days_in_service', selector: ENTITY },
@@ -98,6 +104,7 @@ const SCHEMA = [
       { name: 'power_now', selector: ENTITY },
       { name: 'remaining_today', selector: ENTITY },
       { name: 'total_today', selector: ENTITY },
+      ...SEVERITY_W,
     ],
   },
   {
@@ -115,22 +122,47 @@ const SCHEMA = [
   },
 ];
 
-/** Schéma jednoho patra — ploché klíče, ať se data ukládají přímo do objektu patra. */
+/**
+ * Schéma jednoho patra. Grid a FVE větev jsou samostatné skládací sekce
+ * (stejně jako u hlavního formuláře), ale data zůstávají plochá přímo
+ * v objektu patra — proto `flatten: true`. Fáze L1–L3 patří pod Grid,
+ * protože jde o rozpad gridové AC-OUT větve (Shelly), ne FVE.
+ */
 const FLOOR_SCHEMA = [
   { name: 'name', required: true, selector: TEXT },
-  { name: 'grid_power', selector: ENTITY },
-  { name: 'grid_energy', selector: ENTITY },
-  { name: 'island_power', selector: ENTITY },
-  { name: 'island_energy', selector: ENTITY },
-  { name: 'phase_a_entity', selector: ENTITY },
-  { name: 'phase_a_name', selector: TEXT },
-  { name: 'phase_a_icon', selector: ICON },
-  { name: 'phase_b_entity', selector: ENTITY },
-  { name: 'phase_b_name', selector: TEXT },
-  { name: 'phase_b_icon', selector: ICON },
-  { name: 'phase_c_entity', selector: ENTITY },
-  { name: 'phase_c_name', selector: TEXT },
-  { name: 'phase_c_icon', selector: ICON },
+  {
+    name: 'floor_grid',
+    type: 'expandable',
+    flatten: true,
+    expanded: true,
+    title: 'Grid (síť) — Shelly *-GRID-AC-OUT',
+    icon: 'mdi:transmission-tower',
+    schema: [
+      { name: 'grid_power', selector: ENTITY },
+      { name: 'grid_energy', selector: ENTITY },
+      { name: 'phase_a_entity', selector: ENTITY },
+      { name: 'phase_a_name', selector: TEXT },
+      { name: 'phase_a_icon', selector: ICON },
+      { name: 'phase_b_entity', selector: ENTITY },
+      { name: 'phase_b_name', selector: TEXT },
+      { name: 'phase_b_icon', selector: ICON },
+      { name: 'phase_c_entity', selector: ENTITY },
+      { name: 'phase_c_name', selector: TEXT },
+      { name: 'phase_c_icon', selector: ICON },
+    ],
+  },
+  {
+    name: 'floor_fve',
+    type: 'expandable',
+    flatten: true,
+    expanded: true,
+    title: 'FVE (ostrov) — budoucí Shelly',
+    icon: 'mdi:solar-power',
+    schema: [
+      { name: 'island_power', selector: ENTITY },
+      { name: 'island_energy', selector: ENTITY },
+    ],
+  },
 ];
 
 const LABELS: Record<string, string> = {
@@ -152,6 +184,7 @@ const LABELS: Record<string, string> = {
   temperature: 'Teplota',
   soh: 'Zdraví SoH (%)',
   runtime: 'Odhadovaná výdrž',
+  cycles: 'Počet nabíjecích cyklů',
   time_to_full: 'Doba do plného nabití',
   capacity: 'Instalovaná kapacita',
   invert: 'Obrátit znaménko výkonu baterie',
@@ -159,7 +192,8 @@ const LABELS: Record<string, string> = {
   load_power: 'Ostrovní spotřeba — kritické zátěže (W)',
   total_yield: 'Celkový výnos FVE (kWh)',
   days_in_service: 'Počet dní v provozu',
-  name: 'Název',
+  name: 'Vlastní název',
+  mppt_name: 'Vlastní název MPPT regulátoru',
   phase_a: 'Fáze L1',
   phase_b: 'Fáze L2',
   phase_c: 'Fáze L3',
@@ -176,11 +210,11 @@ const LABELS: Record<string, string> = {
   remaining_today: 'Zbývá dnes (kWh)',
   total_today: 'Dnes celkem (kWh)',
   max_flow_w: 'Výkon pro plnou rychlost animace (W)',
-  deadband_w: 'Mrtvá zóna linky (W)',
-  dots: 'Počet teček na lince',
-  min_duration: 'Nejrychlejší oběh (s)',
-  max_duration: 'Nejpomalejší oběh (s)',
-  animation: 'Animace zapnuté',
+  deadband_w: 'Mrtvá zóna — pod tímto výkonem je linka neaktivní (W)',
+  dots: 'Počet svítících teček na jedné aktivní lince',
+  min_duration: 'Nejrychlejší oběh tečky — při max. výkonu (s)',
+  max_duration: 'Nejpomalejší oběh tečky — těsně nad mrtvou zónou (s)',
+  animation: 'Animace pulzujících teček zapnuté',
   yellow_from: 'Žlutá od hodnoty (pod ní červená)',
   green_from: 'Zelená od hodnoty',
   bar_max: 'Rozsah progress baru (max)',
@@ -189,6 +223,20 @@ const LABELS: Record<string, string> = {
   grid_energy: 'Energie ze sítě (kWh)',
   island_power: 'Výkon z FVE (W) — budoucí Shelly',
   island_energy: 'Energie z FVE (kWh)',
+};
+
+/**
+ * Doplňující vysvětlující text pod polem (ha-form `computeHelper`).
+ * Používá se hlavně pro sekci „Chování a animace", kde názvy polí
+ * sami o sobě nejsou úplně samovysvětlující.
+ */
+const HELPERS: Record<string, string> = {
+  max_flow_w: 'Výkon, při kterém pulzy na lince běží nejrychleji (rychlost je od "mrtvé zóny" po tuto hodnotu plynulá). Nastav podle reálné špičky tvého systému, např. 5000 W pro měnič 5 kW.',
+  deadband_w: 'Pod touto hodnotou je tok energie tak malý, že se linka vykreslí jako klidná/šedá bez pulzů — potlačí to "věčné" mihotání kvůli šumu měření.',
+  dots: 'Kolik světelných teček se najednou pohybuje po jedné aktivní lince. Víc teček = hustší, "plnější" tok při vysokém výkonu.',
+  min_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon na hraně `max_flow_w` (nejrychlejší možný pohyb).',
+  max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
+  animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
 };
 
 @customElement('fve-flow-card-editor')
@@ -204,6 +252,9 @@ export class FveFlowCardEditor extends LitElement {
   private _computeLabel = (schema: { name: string }): string =>
     LABELS[schema.name] ?? schema.name;
 
+  private _computeHelper = (schema: { name: string }): string | undefined =>
+    HELPERS[schema.name];
+
   protected render(): TemplateResult {
     if (!this.hass || !this._config) return html``;
     const floors = this._config.floors ?? [];
@@ -213,6 +264,7 @@ export class FveFlowCardEditor extends LitElement {
         .data=${this._config}
         .schema=${SCHEMA}
         .computeLabel=${this._computeLabel}
+        .computeHelper=${this._computeHelper}
         @value-changed=${this._mainChanged}
       ></ha-form>
 
@@ -243,6 +295,7 @@ export class FveFlowCardEditor extends LitElement {
                 .data=${floor}
                 .schema=${FLOOR_SCHEMA}
                 .computeLabel=${this._computeLabel}
+                .computeHelper=${this._computeHelper}
                 @value-changed=${(e: CustomEvent) => this._floorChanged(e, idx)}
               ></ha-form>
             </div>

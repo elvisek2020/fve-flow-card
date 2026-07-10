@@ -42,6 +42,10 @@ export interface PvConfig extends SeverityFields {
   current?: string;
   /** Provozní režim MPPT. */
   mppt_state?: string;
+  /** Zobrazovaný název panelu FVE, default "FVE panely". */
+  name?: string;
+  /** Zobrazovaný název MPPT regulátoru, default "MPPT regulátor". */
+  mppt_name?: string;
 }
 
 /** Konfigurace baterie. Prahy default: žlutá od 15 %, zelená od 40 %. */
@@ -59,10 +63,14 @@ export interface BatteryConfig extends SeverityFields {
   runtime?: string;
   /** Doba do plného nabití. */
   time_to_full?: string;
+  /** Počet nabíjecích cyklů. */
+  cycles?: string;
   /** Instalovaná kapacita (kWh / Ah). */
   capacity?: string;
   /** Obrátit znaménko výkonu (kladný = vybíjení). */
   invert?: boolean;
+  /** Zobrazovaný název, default "Baterie Pylontech". */
+  name?: string;
 }
 
 /** Konfigurace měniče (ostrovní strana). */
@@ -73,6 +81,10 @@ export interface InverterConfig extends SeverityFields {
   state?: string;
   /** Celková ostrovní spotřeba — kritické zátěže (W). */
   load_power?: string;
+  /** Výstupní napětí AC (V). */
+  voltage?: string;
+  /** Výstupní proud AC (A). */
+  current?: string;
   /** Celkový výnos FVE (kWh) — informační řádek. */
   total_yield?: string;
   /** Počet dní v provozu — informační řádek. */
@@ -96,8 +108,8 @@ export interface GridConfig extends SeverityFields {
   name?: string;
 }
 
-/** Konfigurace Solcast predikce. */
-export interface SolcastConfig {
+/** Konfigurace Solcast predikce. Prahy se počítají z `power_now`. */
+export interface SolcastConfig extends SeverityFields {
   /** Predikovaný výkon teď (W). */
   power_now?: string;
   /** Zbývající dnešní predikce (kWh). */

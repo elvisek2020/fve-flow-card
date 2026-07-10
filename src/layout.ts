@@ -27,7 +27,9 @@ export interface Layout {
 }
 
 const FLOOR_W = 310;
-const FLOOR_H = 170;
+// Patro má dva řádky chipů (FVE + grid fáze), grid uzel jen jeden.
+const FLOOR_H = 240;
+const GRID_H = 170;
 const FLOOR_GAP = 30;
 const FLOOR_X = 1020;
 const FLOORS_TOP = 210;
@@ -44,10 +46,10 @@ export function computeLayout(floorCount: number): Layout {
   const pv: Rect = { x: 50, y: 40, w: 300, h: 190 };
   const mppt: Rect = { x: 50, y: 280, w: 300, h: 130 };
   const battery: Rect = { x: 50, y: 480, w: 300, h: 300 };
-  const inverter: Rect = { x: 590, y: 360, w: 280, h: 230 };
+  const inverter: Rect = { x: 590, y: 360, w: 280, h: 260 };
   // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný.
   const solcast: Rect = { x: 590, y: 40, w: 280, h: 190 };
-  const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: 150 };
+  const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: GRID_H };
 
   const floors: Rect[] = [];
   for (let i = 0; i < n; i++) {
