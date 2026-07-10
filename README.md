@@ -10,20 +10,22 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
   (L1 = Pračka, L2 = Sušička, ...)
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
   mrtvá linka pod prahem zešedne
-- Klik na uzel / fázi otevře nativní HA more-info dialog s historií entity
+- Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
 
 ## Předpoklady a závislosti
 
-Karta sama nemá žádné JS závislosti (vše je zabundlované), ale počítá s tím,
-že v Home Assistantu existují entity z těchto integrací:
+Pro vlastní 48hodinové grafy karta používá volitelnou `apexcharts-card`.
+Pokud není dostupná, kliknutí bezpečně otevře původní nativní historii HA.
+Datové entity dodávají tyto integrace:
 
 | Komponenta | Integrace | Co dodává |
 | --- | --- | --- |
 | **Victron** (Cerbo GX / Venus OS, MultiPlus-II, SmartSolar MPPT, Pylontech) | např. [victron-hacs](https://github.com/sfstar/hass-victron) nebo MQTT z Venus OS | výkon FVE, stav MPPT, SoC/výkon baterie, výkon a stav měniče, kritické zátěže |
 | **Shelly** (3EM / Pro 3EM na AC-IN a patrech) | nativní [Shelly integrace](https://www.home-assistant.io/integrations/shelly/) | příkon ze sítě celkem + po fázích, energie a výkony jednotlivých pater |
 | **Solcast** | [Solcast PV Forecast](https://github.com/BJReplay/ha-solcast-solar) (HACS) | predikce výkonu a denní výroby |
+| **ApexCharts Card** (doporučeno) | [`apexcharts-card`](https://github.com/RomRider/apexcharts-card) (HACS) | vlastní kontinuální 48h grafy po kliknutí |
 
 Konkrétní entity se vybírají v GUI editoru — karta není závislá na přesných
 názvech, funguje s čímkoli, co vrací čísla ve W / kWh / %.
@@ -34,7 +36,8 @@ názvech, funguje s čímkoli, co vrací čísla ve W / kWh / %.
 
 1. HACS → tři tečky vpravo nahoře → **Custom repositories**
 2. Vlož URL tohoto repozitáře, kategorie **Dashboard** (Lovelace)
-3. Nainstaluj **FVE Flow Card** a reloadni prohlížeč
+3. Pro vlastní grafy nainstaluj z HACS také **ApexCharts Card**
+4. Nainstaluj **FVE Flow Card** a reloadni prohlížeč
 
 HACS řeší registraci resource i cache-busting automaticky; updaty se nabízejí
 z GitHub releases.
@@ -148,6 +151,10 @@ s fill podle SoC; progress bar u ní nahrazuje samotná ikona baterie.
 
 Poznámky:
 
+- **Historie** používá klouzavé okno posledních 48 hodin a pětiminutové průměry.
+  Baterie zobrazuje SoC v %, ostatní numerické uzly výkon ve W. Klik na MPPT
+  stav zůstává v nativním HA dialogu. Bez ApexCharts se nativní dialog použije
+  automaticky jako fallback.
 - **Patra** jsou dynamický seznam — nové patro (např. 2NP, 1f) přidáš v editoru
   bez zásahu do kódu. Dokud patro nemá `island_power`, ostrovní tok se zobrazuje
   jen souhrnně z měniče a patrové ostrovní číslo je skryté.
@@ -176,8 +183,8 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
 
 ## Známá omezení
 
-- Karta nezobrazuje vlastní historické grafy — historie je přes klik na
-  uzel/fázi (nativní HA more-info dialog).
+- Vlastní graf vyžaduje nainstalovanou `apexcharts-card`; bez ní se použije
+  nativní HA historie.
 - Export do gridu se nevizualizuje (ostrovní systém nedodává do sítě).
 - Fáze jsou max. 3 na patro (A/B/C dle Shelly 3EM).
 

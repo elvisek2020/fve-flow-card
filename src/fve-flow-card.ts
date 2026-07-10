@@ -22,6 +22,7 @@ import {
   severityColor,
   toNum,
 } from './utils';
+import { openHistoryDialog, type HistorySeries } from './history-dialog';
 import './editor';
 
 const CARD_VERSION = '__CARD_VERSION__';
@@ -150,8 +151,50 @@ export class FveFlowCard extends LitElement {
     };
   }
 
-  private _open(entityId?: string): void {
-    moreInfo(this, entityId);
+  private _entityName(entityId: string, fallback?: string): string {
+    const friendlyName = this.hass?.states[entityId]?.attributes.friendly_name;
+    return fallback || (typeof friendlyName === 'string' ? friendlyName : entityId);
+  }
+
+  private _historySeries(entityId: string | undefined, name: string, color: string): HistorySeries[] {
+    return entityId ? [{ entity: entityId, name, color }] : [];
+  }
+
+  private async _openHistory(series: HistorySeries[], title: string): Promise<void> {
+    if (!this.hass || !series.length) return;
+    const opened = await openHistoryDialog({ hass: this.hass, title, series });
+    if (!opened) moreInfo(this, series[0].entity);
+  }
+
+  private _openEntity(entityId: string | undefined, title: string, color: string): void {
+    if (!entityId) return;
+    void this._openHistory(
+      this._historySeries(entityId, this._entityName(entityId, title), color),
+      title,
+    );
+  }
+
+  private _openFloorHistory(f: FloorConfig, phases: PhaseSpec[]): void {
+    const title = `${f.name || 'Patro'} · výkon`;
+    const series: HistorySeries[] = [];
+    const phaseColors = ['#4fc3f7', '#82b1ff', '#b388ff'];
+
+    if (f.grid_power) {
+      series.push({ entity: f.grid_power, name: 'Síť', color: C.grid });
+    } else {
+      phases.forEach((phase, index) => {
+        series.push({
+          entity: phase.entity,
+          name: phase.name || phase.label,
+          color: phaseColors[index % phaseColors.length],
+        });
+      });
+    }
+    if (f.island_power) {
+      series.push({ entity: f.island_power, name: 'FVE', color: C.island });
+    }
+
+    void this._openHistory(series, title);
   }
 
   /** Fáze gridu AC-IN (L1–L3). */
@@ -289,12 +332,12 @@ export class FveFlowCard extends LitElement {
   }
 
   /** Neviditelná klikací plocha přes celý uzel. */
-  private _hit(r: Rect, entityId?: string): TemplateResult | typeof nothing {
-    if (!entityId) return nothing;
+  private _hit(r: Rect, onClick?: () => void): TemplateResult | typeof nothing {
+    if (!onClick) return nothing;
     return svg`
       <rect class="hit" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="18"
-        fill="transparent" @click=${() => this._open(entityId)}>
-        <title>Zobrazit historii</title>
+        fill="transparent" @click=${onClick}>
+        <title>Zobrazit graf za 48 hodin</title>
       </rect>`;
   }
 
@@ -319,17 +362,25 @@ export class FveFlowCard extends LitElement {
       <text class="small" x="${r.x + 90}" y="${r.y + 156}">
         Celkem <tspan class="strong">${pv.energy_total ? formatEnergy(toNum(this.hass, pv.energy_total)) : '—'}</tspan>
       </text>
-      ${this._hit(r, pv.power)}
+      ${this._hit(
+        r,
+        pv.power ? () => this._openEntity(pv.power, pv.name || 'FVE panely', accent) : undefined,
+      )}
     `;
   }
 
   private _nodeMppt(r: Rect): TemplateResult {
     const pv = this._config?.pv ?? {};
     const state = formatState(this.hass, pv.mppt_state);
+    const rawState = pv.mppt_state
+      ? this.hass?.states[pv.mppt_state]?.state.trim().toLowerCase()
+      : undefined;
+    const active =
+      !!rawState && !['off', 'vypnuto', 'unknown', 'unavailable'].includes(rawState);
     return svg`
-      ${this._panel(r, C.solar, state !== '—')}
+      ${this._panel(r, C.solar, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${pv.mppt_name || 'MPPT regulátor'}</text>
-      ${iconMppt(r.x + 18, r.y + 44, 48, C.solar)}
+      ${iconMppt(r.x + 18, r.y + 44, 48, active ? C.solar : 'rgba(148,170,190,0.5)')}
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}">${state}</text>
       <text class="small" x="${r.x + 80}" y="${r.y + 92}">
         Napětí <tspan class="strong">${pv.voltage ? formatState(this.hass, pv.voltage) : '—'}</tspan>
@@ -337,7 +388,12 @@ export class FveFlowCard extends LitElement {
       <text class="small" x="${r.x + 80}" y="${r.y + 114}">
         Proud <tspan class="strong">${pv.current ? formatState(this.hass, pv.current) : '—'}</tspan>
       </text>
-      ${this._hit(r, pv.mppt_state ?? pv.voltage)}
+      ${this._hit(
+        r,
+        pv.mppt_state || pv.voltage
+          ? () => moreInfo(this, pv.mppt_state ?? pv.voltage)
+          : undefined,
+      )}
     `;
   }
 
@@ -386,7 +442,12 @@ export class FveFlowCard extends LitElement {
       <text class="tiny" x="${r.x + 118}" y="${r.y + 282}">
         ${charging && b.time_to_full ? `Do nabití ${formatState(this.hass, b.time_to_full)}` : ''}
       </text>
-      ${this._hit(r, b.soc)}
+      ${this._hit(
+        r,
+        b.soc
+          ? () => this._openEntity(b.soc, `${b.name || 'Baterie Pylontech'} · SoC`, socColor)
+          : undefined,
+      )}
     `;
   }
 
@@ -425,7 +486,12 @@ export class FveFlowCard extends LitElement {
             Počet dní v provozu <tspan class="strong">${formatState(this.hass, inv.days_in_service)}</tspan>
           </text>`
         : nothing}
-      ${this._hit(r, inv.power ?? inv.load_power)}
+      ${this._hit(
+        r,
+        inv.power || inv.load_power
+          ? () => this._openEntity(inv.power ?? inv.load_power, inv.name || 'Měnič MultiPlus-II', accent)
+          : undefined,
+      )}
     `;
   }
 
@@ -454,7 +520,10 @@ export class FveFlowCard extends LitElement {
       <text class="small" x="${r.x + 90}" y="${r.y + 156}">
         Zítra celkem <tspan class="strong">${s.total_tomorrow ? formatEnergy(toNum(this.hass, s.total_tomorrow)) : '—'}</tspan>
       </text>
-      ${this._hit(r, s.power_now)}
+      ${this._hit(
+        r,
+        s.power_now ? () => this._openEntity(s.power_now, 'Předpověď Solcast', accent) : undefined,
+      )}
     `;
   }
 
@@ -474,10 +543,15 @@ export class FveFlowCard extends LitElement {
         ${g.energy_total ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
         ${g.energy_today ? ` · dnes ${formatEnergy(toNum(this.hass, g.energy_today))}` : ''}
       </text>
+      ${this._hit(
+        r,
+        g.power ? () => this._openEntity(g.power, g.name || 'Síť', accent) : undefined,
+      )}
       ${phaseSpecs.length
-        ? renderPhaseChips(r, phaseSpecs, this.hass, (id) => this._open(id))
+        ? renderPhaseChips(r, phaseSpecs, this.hass, (id) =>
+            this._openEntity(id, this._entityName(id), C.grid),
+          )
         : nothing}
-      ${this._hit(r, g.power)}
     `;
   }
 
@@ -505,20 +579,27 @@ export class FveFlowCard extends LitElement {
         ${f.grid_energy ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}` : ''}
         ${f.island_energy ? ` · z fve ${formatEnergy(toNum(this.hass, f.island_energy))}` : ''}
       </text>
+      ${this._hit(
+        { x: r.x, y: r.y, w: r.w, h: 64 },
+        f.grid_power || f.island_power || phases.length
+          ? () => this._openFloorHistory(f, phases)
+          : undefined,
+      )}
       ${chips.length
-        ? renderPhaseChips(r, chips, this.hass, (id) => this._open(id), {
+        ? renderPhaseChips(r, chips, this.hass, (id) => {
+            const chip = chips.find((item) => item.entity === id);
+            this._openEntity(
+              id,
+              chip ? `${f.name || 'Patro'} · ${chip.name}` : this._entityName(id),
+              chip === islandChip ? C.island : C.grid,
+            );
+          }, {
             itemStyle: (ph) =>
               ph === islandChip
                 ? { icon: iconSun, iconColor: C.island, borderColor: 'rgba(0,230,118,0.22)' }
                 : undefined,
           })
         : nothing}
-      ${this._hit(
-        { x: r.x, y: r.y, w: r.w, h: 64 },
-        // Preferuj souhrnné entity patra (výkon/energie); jednotlivá fáze
-        // by ukázala jen zlomek spotřeby, ne celek za patro.
-        f.grid_power ?? f.island_power ?? f.grid_energy ?? f.island_energy,
-      )}
     `;
   }
 

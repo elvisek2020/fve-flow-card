@@ -13,6 +13,16 @@ export interface HomeAssistant {
   formatEntityState?: (stateObj: HassEntity) => string;
 }
 
+/** Minimální rozhraní dynamicky vytvořené Lovelace karty. */
+export interface LovelaceCard extends HTMLElement {
+  hass?: HomeAssistant;
+  setConfig?: (config: Record<string, unknown>) => void;
+}
+
+export interface LovelaceCardHelpers {
+  createCardElement: (config: Record<string, unknown>) => LovelaceCard | Promise<LovelaceCard>;
+}
+
 /**
  * Barevné prahy uzlu (semafor): pod `yellow_from` červená,
  * od `yellow_from` žlutá, od `green_from` zelená.
