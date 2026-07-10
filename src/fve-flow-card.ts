@@ -247,7 +247,7 @@ export class FveFlowCard extends LitElement {
         },
       ],
       'Solcast · skutečnost a predikce',
-      '24h',
+      '+24h',
       '24 h historie · 24 h predikce',
     );
   }

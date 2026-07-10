@@ -1,4 +1,4 @@
-import type { HomeAssistant, LovelaceCard, LovelaceCardHelpers } from './types';
+import type { HomeAssistant, LovelaceCard } from './types';
 
 export interface HistorySeries {
   entity: string;
@@ -17,12 +17,6 @@ export interface HistoryDialogOptions {
   series: HistorySeries[];
   spanOffset?: string;
   rangeLabel?: string;
-}
-
-declare global {
-  interface Window {
-    loadCardHelpers?: () => Promise<LovelaceCardHelpers>;
-  }
 }
 
 const DIALOG_TAG = 'fve-flow-history-dialog';
@@ -245,23 +239,12 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
       })),
     };
 
-    let card: LovelaceCard | undefined;
-    if (window.loadCardHelpers) {
-      try {
-        const helpers = await window.loadCardHelpers();
-        card = await Promise.resolve(helpers.createCardElement(config));
-        if (card.tagName.toLowerCase() === 'hui-error-card') card = undefined;
-      } catch (helperError) {
-        console.warn('[FVE Flow Card] HA card helpers selhaly, zkouším přímé vytvoření.', helperError);
-      }
-    }
-
-    if (!card) {
-      const directCard = document.createElement('apexcharts-card') as LovelaceCard;
-      if (typeof directCard.setConfig !== 'function') return false;
-      directCard.setConfig(config);
-      card = directCard;
-    }
+    // ApexCharts už je zaregistrovaná jako HACS resource. Přímé vytvoření
+    // neaktivuje dynamické HA helper chunky, které mohou znovu registrovat
+    // lit-virtualizer a způsobit konflikt CustomElementRegistry.
+    const card = document.createElement('apexcharts-card') as LovelaceCard;
+    if (typeof card.setConfig !== 'function') return false;
+    card.setConfig(config);
 
     card.hass = options.hass;
     card.style.setProperty('--ha-card-background', 'transparent');

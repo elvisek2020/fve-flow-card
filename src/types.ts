@@ -19,10 +19,6 @@ export interface LovelaceCard extends HTMLElement {
   setConfig?: (config: Record<string, unknown>) => void;
 }
 
-export interface LovelaceCardHelpers {
-  createCardElement: (config: Record<string, unknown>) => LovelaceCard | Promise<LovelaceCard>;
-}
-
 /**
  * Barevné prahy uzlu (semafor): pod `yellow_from` červená,
  * od `yellow_from` žlutá, od `green_from` zelená.
