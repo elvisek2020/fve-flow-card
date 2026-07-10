@@ -35,7 +35,8 @@ export function renderPhaseChips(
   const chipH = 72;
   const rowGap = 8;
   const row = opts?.rowFromBottom ?? 0;
-  const chipY = r.y + r.h - chipH - 10 - row * (chipH + rowGap);
+  // 24 px od spodní hrany: 4 px bar + mezera, aby chipy neseděly na progress baru.
+  const chipY = r.y + r.h - chipH - 24 - row * (chipH + rowGap);
   const gap = 8;
   const totalW = r.w - pad * 2;
   const chipW = (totalW - gap * Math.max(0, phases.length - 1)) / phases.length;
@@ -50,7 +51,7 @@ export function renderPhaseChips(
     const power = formatPower(toNum(hass, ph.entity));
     const iconSize = 14;
     const iconX = cx - iconSize / 2;
-    const iconY = chipY + 8;
+    const iconY = chipY + 12;
 
     return svg`
       <g class="phase-chip" @click=${(e: Event) => {

@@ -406,11 +406,12 @@ export class FveFlowCard extends LitElement {
   private _bar(r: Rect, value: number, max: number, color: string): TemplateResult {
     const w = r.w - 40;
     const pct = Math.max(0, Math.min(1, Math.abs(value) / Math.max(1, max)));
+    const y = r.y + r.h - 12;
     return svg`
-      <rect x="${r.x + 20}" y="${r.y + r.h - 12}" width="${w}" height="4" rx="2"
+      <rect x="${r.x + 20}" y="${y}" width="${w}" height="4" rx="2"
         fill="rgba(255,255,255,0.08)"/>
       ${pct > 0
-        ? svg`<rect x="${r.x + 20}" y="${r.y + r.h - 12}" width="${Math.max(4, w * pct)}" height="4" rx="2"
+        ? svg`<rect x="${r.x + 20}" y="${y}" width="${Math.max(4, w * pct)}" height="4" rx="2"
             fill="${color}" style="filter: drop-shadow(0 0 4px ${color})"/>`
         : nothing}`;
   }
