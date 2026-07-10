@@ -34,7 +34,8 @@ const FLOOR_H = 170;
 const GRID_H = 210;
 const FLOOR_GAP = 30;
 const FLOOR_X = 1020;
-const FLOORS_TOP = 40 + GRID_H;
+// Stejná mezera mezi AC-IN a prvním patrem jako mezi jednotlivými patry.
+const FLOORS_TOP = 40 + GRID_H + FLOOR_GAP;
 const ISLAND_TRUNK_X = 950;
 const GRID_TRUNK_X = 1388;
 

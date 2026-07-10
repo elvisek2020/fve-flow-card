@@ -83,7 +83,6 @@ inverter:
   voltage: sensor.multiplus_vystupni_napeti
   current: sensor.multiplus_vystupni_proud
   load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba
-  total_yield: sensor.mppt_celkovy_vynos       # informační řádek (kWh)
   days_in_service: sensor.fve_pocet_dni        # informační řádek
   name: MultiPlus-II
 grid:

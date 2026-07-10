@@ -85,8 +85,6 @@ export interface InverterConfig extends SeverityFields {
   voltage?: string;
   /** Výstupní proud AC (A). */
   current?: string;
-  /** Celkový výnos FVE (kWh) — informační řádek. */
-  total_yield?: string;
   /** Počet dní v provozu — informační řádek. */
   days_in_service?: string;
   /** Zobrazovaný název, default "MultiPlus-II". */

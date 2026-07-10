@@ -102,7 +102,6 @@ export class FveFlowCard extends LitElement {
         power: 'sensor.multiplus_ii_48_5000_70_50_id_275_vystupni_vykon_l1',
         state: 'sensor.multiplus_ii_48_5000_70_50_id_275_stav',
         load_power: 'sensor.gx_device_kriticke_zateze_na_l1',
-        total_yield: 'sensor.smartsolar_mppt_ve_can_250_100_rev2_id_273_celkovy_vynos',
         days_in_service: 'sensor.fve_pocet_dni_v_provozu',
         name: 'MultiPlus-II',
       },
@@ -395,23 +394,18 @@ export class FveFlowCard extends LitElement {
       <circle cx="${r.x + 96}" cy="${r.y + 106}" r="4" fill="${state !== '—' ? C.ok : 'rgba(148,170,190,0.4)'}"/>
       <text class="small" x="${r.x + 108}" y="${r.y + 111}">${state}</text>
       ${inv.voltage || inv.current
-        ? svg`<text class="small" x="${r.x + 20}" y="${r.y + 138}">
+        ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 138}">
             ${inv.voltage ? formatState(this.hass, inv.voltage) : '—'} ·
             ${inv.current ? formatState(this.hass, inv.current) : '—'}
           </text>`
         : nothing}
       ${inv.load_power
-        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 164}">
+        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + 164}">
             Kritické zátěže ${formatPower(toNum(this.hass, inv.load_power))}
           </text>`
         : nothing}
-      ${inv.total_yield
-        ? svg`<text class="small" x="${r.x + 20}" y="${r.y + 190}">
-            Celkový výnos <tspan class="strong">${formatEnergy(toNum(this.hass, inv.total_yield))}</tspan>
-          </text>`
-        : nothing}
       ${inv.days_in_service
-        ? svg`<text class="small" x="${r.x + 20}" y="${r.y + 214}">
+        ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 190}">
             V provozu <tspan class="strong">${formatState(this.hass, inv.days_in_service)}</tspan>
           </text>`
         : nothing}
@@ -451,7 +445,7 @@ export class FveFlowCard extends LitElement {
     const accent = sev ?? C.grid;
     return svg`
       ${this._panel(r, accent, active)}
-      <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${g.name ?? 'Síť ČEZ'} · AC-IN</text>
+      <text class="node-title" x="${r.x + 90}" y="${r.y + 28}">${g.name ?? 'Síť ČEZ'} · AC-IN</text>
       ${iconPylon(r.x + 16, r.y + 36, 52, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 78}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
