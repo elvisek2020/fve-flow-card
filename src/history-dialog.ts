@@ -181,63 +181,88 @@ if (!customElements.get(DIALOG_TAG)) {
  * `false` znamená, že ApexCharts není dostupný a volající má použít fallback.
  */
 export async function openHistoryDialog(options: HistoryDialogOptions): Promise<boolean> {
-  if (!options.series.length || !customElements.get('apexcharts-card') || !window.loadCardHelpers) {
-    return false;
-  }
+  if (!options.series.length) return false;
 
   try {
-    const helpers = await window.loadCardHelpers();
-    const card = await Promise.resolve(
-      helpers.createCardElement({
-        type: 'custom:apexcharts-card',
-        graph_span: '48h',
-        ...(options.spanOffset ? { span: { offset: options.spanOffset } } : {}),
-        update_interval: '1min',
-        header: { show: false },
-        now: { show: true, label: 'Nyní' },
-        apex_config: {
-          chart: {
-            height: 360,
-            background: 'transparent',
-            animations: { enabled: true, easing: 'easeinout', speed: 500 },
-          },
-          legend: {
-            show: options.series.length > 1,
-            position: 'top',
-            horizontalAlign: 'left',
-          },
-          grid: { borderColor: 'rgba(148, 170, 190, 0.12)' },
-          tooltip: { shared: true, intersect: false },
-        },
-        series: options.series.map((series) => ({
-          entity: series.entity,
-          name: series.name,
-          color: series.color,
-          type: 'area',
-          curve: 'smooth',
-          stroke_width: 2,
-          stroke_dash: series.strokeDash ?? 0,
-          opacity: series.opacity ?? 0.22,
-          extend_to: series.extendTo ?? 'end',
-          ...(series.dataGenerator
-            ? { data_generator: series.dataGenerator }
-            : {
-                fill_raw: series.fill ?? 'last',
-                group_by: {
-                  func: 'avg',
-                  duration: '5min',
-                  fill: series.fill ?? 'last',
-                },
-              }),
-          show: {
-            extremas: true,
-            in_header: false,
-          },
-        })),
-      }),
-    );
+    // HACS resources se mohou registrovat až po vykreslení hlavní karty.
+    // Krátce počkej, aby první klik neskončil zbytečně v nativním fallbacku.
+    if (!customElements.get('apexcharts-card')) {
+      await Promise.race([
+        customElements.whenDefined('apexcharts-card'),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+      ]);
+    }
+    if (!customElements.get('apexcharts-card')) {
+      console.warn('[FVE Flow Card] apexcharts-card není zaregistrovaná.');
+      return false;
+    }
 
-    if (!card || card.tagName.toLowerCase() === 'hui-error-card') return false;
+    const config: Record<string, unknown> = {
+      type: 'custom:apexcharts-card',
+      graph_span: '48h',
+      ...(options.spanOffset ? { span: { offset: options.spanOffset } } : {}),
+      update_interval: '1min',
+      header: { show: false },
+      now: { show: true, label: 'Nyní' },
+      apex_config: {
+        chart: {
+          height: 360,
+          background: 'transparent',
+          animations: { enabled: true, easing: 'easeinout', speed: 500 },
+        },
+        legend: {
+          show: options.series.length > 1,
+          position: 'top',
+          horizontalAlign: 'left',
+        },
+        grid: { borderColor: 'rgba(148, 170, 190, 0.12)' },
+        tooltip: { shared: true, intersect: false },
+      },
+      series: options.series.map((series) => ({
+        entity: series.entity,
+        name: series.name,
+        color: series.color,
+        type: 'area',
+        curve: 'smooth',
+        stroke_width: 2,
+        stroke_dash: series.strokeDash ?? 0,
+        opacity: series.opacity ?? 0.22,
+        extend_to: series.extendTo ?? 'end',
+        ...(series.dataGenerator
+          ? { data_generator: series.dataGenerator }
+          : {
+              fill_raw: series.fill ?? 'last',
+              group_by: {
+                func: 'avg',
+                duration: '5min',
+                fill: series.fill ?? 'last',
+              },
+            }),
+        show: {
+          extremas: true,
+          in_header: false,
+        },
+      })),
+    };
+
+    let card: LovelaceCard | undefined;
+    if (window.loadCardHelpers) {
+      try {
+        const helpers = await window.loadCardHelpers();
+        card = await Promise.resolve(helpers.createCardElement(config));
+        if (card.tagName.toLowerCase() === 'hui-error-card') card = undefined;
+      } catch (helperError) {
+        console.warn('[FVE Flow Card] HA card helpers selhaly, zkouším přímé vytvoření.', helperError);
+      }
+    }
+
+    if (!card) {
+      const directCard = document.createElement('apexcharts-card') as LovelaceCard;
+      if (typeof directCard.setConfig !== 'function') return false;
+      directCard.setConfig(config);
+      card = directCard;
+    }
+
     card.hass = options.hass;
     card.style.setProperty('--ha-card-background', 'transparent');
     card.style.setProperty('--card-background-color', 'transparent');
