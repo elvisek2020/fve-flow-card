@@ -155,6 +155,9 @@ Poznámky:
   Baterie zobrazuje SoC v %, ostatní numerické uzly výkon ve W. Klik na MPPT
   stav zůstává v nativním HA dialogu. Bez ApexCharts se nativní dialog použije
   automaticky jako fallback.
+- **Solcast graf** je vystředěný na aktuálním čase: vlevo ukazuje 24 hodin
+  skutečné historie výkonu a vpravo 24 hodin predikce z `detailedForecast`.
+  Predikce je přerušovaná a hodnoty Solcastu se převádějí z kW na W.
 - **Patra** jsou dynamický seznam — nové patro (např. 2NP, 1f) přidáš v editoru
   bez zásahu do kódu. Dokud patro nemá `island_power`, ostrovní tok se zobrazuje
   jen souhrnně z měniče a patrové ostrovní číslo je skryté.

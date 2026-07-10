@@ -1,6 +1,13 @@
 import { LitElement, html, css, svg, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { FloorConfig, FveFlowCardConfig, GridConfig, HomeAssistant, PhaseSpec } from './types';
+import type {
+  FloorConfig,
+  FveFlowCardConfig,
+  GridConfig,
+  HomeAssistant,
+  PhaseSpec,
+  SolcastConfig,
+} from './types';
 import { computeLayout, type Layout, type Rect } from './layout';
 import { renderFlow, type FlowOptions } from './flow';
 import { renderPhaseChips } from './phase-chips';
@@ -160,9 +167,20 @@ export class FveFlowCard extends LitElement {
     return entityId ? [{ entity: entityId, name, color }] : [];
   }
 
-  private async _openHistory(series: HistorySeries[], title: string): Promise<void> {
+  private async _openHistory(
+    series: HistorySeries[],
+    title: string,
+    spanOffset?: string,
+    rangeLabel?: string,
+  ): Promise<void> {
     if (!this.hass || !series.length) return;
-    const opened = await openHistoryDialog({ hass: this.hass, title, series });
+    const opened = await openHistoryDialog({
+      hass: this.hass,
+      title,
+      series,
+      spanOffset,
+      rangeLabel,
+    });
     if (!opened) moreInfo(this, series[0].entity);
   }
 
@@ -171,6 +189,66 @@ export class FveFlowCard extends LitElement {
     void this._openHistory(
       this._historySeries(entityId, this._entityName(entityId, title), color),
       title,
+    );
+  }
+
+  private _openSolcastHistory(solcast: SolcastConfig): void {
+    if (!solcast.power_now) return;
+    const forecastEntities = [solcast.total_today, solcast.total_tomorrow].filter(
+      (entity): entity is string => !!entity,
+    );
+    if (!forecastEntities.length) {
+      this._openEntity(solcast.power_now, 'Předpověď Solcast', '#ffd54f');
+      return;
+    }
+
+    const dataGenerator = `
+      const entityIds = ${JSON.stringify(forecastEntities)};
+      const now = Date.now();
+      const forecastEnd = now + 24 * 60 * 60 * 1000;
+      return entityIds
+        .flatMap((entityId) => {
+          const forecastEntity = hass.states[entityId];
+          return forecastEntity && Array.isArray(forecastEntity.attributes.detailedForecast)
+            ? forecastEntity.attributes.detailedForecast
+            : [];
+        })
+        .map((item) => {
+          const timestamp = new Date(item.period_start).getTime();
+          const watts = Number(item.pv_estimate) * 1000;
+          return [timestamp, watts];
+        })
+        .filter(([timestamp, watts]) =>
+          timestamp >= now - 30 * 60 * 1000 &&
+          timestamp <= forecastEnd &&
+          Number.isFinite(watts)
+        )
+        .map(([timestamp, watts]) => [Math.max(timestamp, now), watts]);
+    `;
+
+    void this._openHistory(
+      [
+        {
+          entity: solcast.power_now,
+          name: 'Skutečnost',
+          color: '#4fc3f7',
+          opacity: 0.18,
+          extendTo: 'now',
+          fill: 'null',
+        },
+        {
+          entity: forecastEntities[0],
+          name: 'Predikce',
+          color: '#ffd54f',
+          dataGenerator,
+          strokeDash: 5,
+          opacity: 0.12,
+          extendTo: false,
+        },
+      ],
+      'Solcast · skutečnost a predikce',
+      '24h',
+      '24 h historie · 24 h predikce',
     );
   }
 
@@ -522,7 +600,7 @@ export class FveFlowCard extends LitElement {
       </text>
       ${this._hit(
         r,
-        s.power_now ? () => this._openEntity(s.power_now, 'Předpověď Solcast', accent) : undefined,
+        s.power_now ? () => this._openSolcastHistory(s) : undefined,
       )}
     `;
   }

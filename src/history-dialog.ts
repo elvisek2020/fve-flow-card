@@ -4,12 +4,19 @@ export interface HistorySeries {
   entity: string;
   name: string;
   color: string;
+  dataGenerator?: string;
+  strokeDash?: number;
+  opacity?: number;
+  extendTo?: 'end' | 'now' | false;
+  fill?: 'last' | 'zero' | 'null';
 }
 
 export interface HistoryDialogOptions {
   hass: HomeAssistant;
   title: string;
   series: HistorySeries[];
+  spanOffset?: string;
+  rangeLabel?: string;
 }
 
 declare global {
@@ -156,8 +163,9 @@ class FveFlowHistoryDialog extends HTMLElement {
     this._dialog.addEventListener('close', () => this.remove());
   }
 
-  public show(title: string, accent: string, card: LovelaceCard): void {
+  public show(title: string, rangeLabel: string, accent: string, card: LovelaceCard): void {
     this.shadowRoot!.querySelector('h2')!.textContent = title;
+    this.shadowRoot!.querySelector('.range')!.textContent = rangeLabel;
     this.style.setProperty('--dialog-accent', accent);
     this._chartHost.replaceChildren(card);
     this._dialog.showModal();
@@ -183,6 +191,7 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
       helpers.createCardElement({
         type: 'custom:apexcharts-card',
         graph_span: '48h',
+        ...(options.spanOffset ? { span: { offset: options.spanOffset } } : {}),
         update_interval: '1min',
         header: { show: false },
         now: { show: true, label: 'Nyní' },
@@ -207,13 +216,19 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
           type: 'area',
           curve: 'smooth',
           stroke_width: 2,
-          opacity: 0.22,
-          fill_raw: 'last',
-          group_by: {
-            func: 'avg',
-            duration: '5min',
-            fill: 'last',
-          },
+          stroke_dash: series.strokeDash ?? 0,
+          opacity: series.opacity ?? 0.22,
+          extend_to: series.extendTo ?? 'end',
+          ...(series.dataGenerator
+            ? { data_generator: series.dataGenerator }
+            : {
+                fill_raw: series.fill ?? 'last',
+                group_by: {
+                  func: 'avg',
+                  duration: '5min',
+                  fill: series.fill ?? 'last',
+                },
+              }),
           show: {
             extremas: true,
             in_header: false,
@@ -230,7 +245,12 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
 
     const dialog = document.createElement(DIALOG_TAG) as FveFlowHistoryDialog;
     document.body.append(dialog);
-    dialog.show(options.title, options.series[0].color, card);
+    dialog.show(
+      options.title,
+      options.rangeLabel || 'posledních 48 hodin',
+      options.series[0].color,
+      card,
+    );
     return true;
   } catch (error) {
     console.warn('[FVE Flow Card] Nepodařilo se otevřít 48h graf, používám nativní historii.', error);
