@@ -9,6 +9,8 @@ export interface HomeAssistant {
   states: Record<string, HassEntity>;
   language?: string;
   locale?: { language?: string };
+  /** HA API — vrátí lokalizovaný stav entity (např. „Vypnuto" místo „off"). */
+  formatEntityState?: (stateObj: HassEntity) => string;
 }
 
 /**

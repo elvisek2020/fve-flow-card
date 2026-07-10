@@ -57,7 +57,7 @@ export function formatEnergy(kwh: number): string {
   return `${nf1.format(kwh)} kWh`;
 }
 
-/** Surový stav entity + jednotka (pro textové/ostatní senzory). */
+/** Surový / lokalizovaný stav entity + jednotka u číselných senzorů. */
 export function formatState(hass: HomeAssistant | undefined, entityId: string | undefined): string {
   if (!hass || !entityId) return '—';
   const st = hass.states[entityId];
@@ -66,6 +66,10 @@ export function formatState(hass: HomeAssistant | undefined, entityId: string | 
   const num = parseFloat(st.state);
   if (Number.isFinite(num) && String(num) === st.state.trim()) {
     return unit ? `${nf1.format(num)} ${unit}` : nf1.format(num);
+  }
+  // Enum / textové stavy — použij HA překlad (cs: „Vypnuto", „MPPT aktivní", …)
+  if (hass.formatEntityState) {
+    return hass.formatEntityState(st);
   }
   return unit ? `${st.state} ${unit}` : st.state;
 }
