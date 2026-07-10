@@ -117,6 +117,7 @@ export class FveFlowCard extends LitElement {
         power_now: 'sensor.solcast_pv_forecast_power_now',
         remaining_today: 'sensor.solcast_pv_forecast_forecast_remaining_today',
         total_today: 'sensor.solcast_pv_forecast_forecast_today',
+        total_tomorrow: 'sensor.solcast_pv_forecast_forecast_tomorrow',
       },
       floors: [
         {
@@ -225,7 +226,10 @@ export class FveFlowCard extends LitElement {
             : nothing}
 
           <!-- Toky (pod uzly) -->
-          ${cfg.solcast?.power_now || cfg.solcast?.remaining_today || cfg.solcast?.total_today
+          ${cfg.solcast?.power_now ||
+          cfg.solcast?.remaining_today ||
+          cfg.solcast?.total_today ||
+          cfg.solcast?.total_tomorrow
             ? svg`<path d="${layout.paths.pvSolcast}" fill="none" stroke="#ffd54f"
                 stroke-opacity="0.3" stroke-width="2" stroke-dasharray="4 8" stroke-linecap="round"/>`
             : nothing}
@@ -427,7 +431,7 @@ export class FveFlowCard extends LitElement {
 
   private _nodeSolcast(r: Rect): TemplateResult | typeof nothing {
     const s = this._config?.solcast;
-    if (!s || (!s.power_now && !s.remaining_today && !s.total_today)) return nothing;
+    if (!s || (!s.power_now && !s.remaining_today && !s.total_today && !s.total_tomorrow)) return nothing;
     const p = toNum(this.hass, s.power_now);
     const sev = severityColor(p, s);
     const accent = sev ?? '#ffd54f';
@@ -446,6 +450,9 @@ export class FveFlowCard extends LitElement {
       </text>
       <text class="small" x="${r.x + 90}" y="${r.y + 134}">
         Dnes celkem <tspan class="strong">${s.total_today ? formatEnergy(toNum(this.hass, s.total_today)) : '—'}</tspan>
+      </text>
+      <text class="small" x="${r.x + 90}" y="${r.y + 156}">
+        Zítra celkem <tspan class="strong">${s.total_tomorrow ? formatEnergy(toNum(this.hass, s.total_tomorrow)) : '—'}</tspan>
       </text>
       ${this._hit(r, s.power_now)}
     `;

@@ -114,6 +114,8 @@ export interface SolcastConfig extends SeverityFields {
   remaining_today?: string;
   /** Dnešní celková predikce (kWh). */
   total_today?: string;
+  /** Zítřejší celková predikce (kWh). */
+  total_tomorrow?: string;
 }
 
 /**

@@ -96,6 +96,7 @@ solcast:
   power_now: sensor.solcast_power_now
   remaining_today: sensor.solcast_remaining_today
   total_today: sensor.solcast_forecast_today
+  total_tomorrow: sensor.solcast_forecast_tomorrow
 floors:
   - name: 0NP
     grid_power: sensor.0np_grid_ac_out_vykon   # nepovinné, jinak součet fází
