@@ -464,7 +464,7 @@ export class FveFlowCard extends LitElement {
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <text class="tiny" x="${r.x + 90}" y="${r.y + 108}">
-        ${g.energy_total ? `ze sítě ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
+        ${g.energy_total ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
         ${g.energy_today ? ` · dnes ${formatEnergy(toNum(this.hass, g.energy_today))}` : ''}
       </text>
       ${phaseSpecs.length
@@ -495,7 +495,7 @@ export class FveFlowCard extends LitElement {
         <tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>
       </text>
       <text class="tiny" x="${r.x + 54}" y="${r.y + 56}">
-        ${f.grid_energy ? `ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}` : ''}
+        ${f.grid_energy ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}` : ''}
         ${f.island_energy ? ` · z fve ${formatEnergy(toNum(this.hass, f.island_energy))}` : ''}
       </text>
       ${chips.length
