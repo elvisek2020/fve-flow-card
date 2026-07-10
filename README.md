@@ -77,6 +77,8 @@ inverter:
   power: sensor.multiplus_vystupni_vykon
   state: sensor.multiplus_stav
   load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba
+  total_yield: sensor.mppt_celkovy_vynos       # informační řádek (kWh)
+  days_in_service: sensor.fve_pocet_dni        # informační řádek
   name: MultiPlus-II
 grid:
   power: sensor.grid_ac_in_vykon               # když chybí, sečtou se patra
@@ -93,7 +95,7 @@ floors:
   - name: 0NP
     grid_power: sensor.0np_grid_ac_out_vykon   # nepovinné, jinak součet fází
     grid_energy: sensor.0np_grid_ac_out_energie
-    island_power: sensor.0np_fve_ac_out_vykon  # budoucí Shelly na FVE větvi
+    island_power: sensor.0np_fve_ac_out_vykon  # výkon z FVE — budoucí Shelly
     phase_a_entity: sensor.0np_grid_ac_out_l1
     phase_a_name: Pračka                       # vlastní název zásuvky/spotřebiče
     phase_a_icon: mdi:washing-machine

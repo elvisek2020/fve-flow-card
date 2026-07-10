@@ -101,6 +101,8 @@ export class FveFlowCard extends LitElement {
         power: 'sensor.multiplus_ii_48_5000_70_50_id_275_vystupni_vykon_l1',
         state: 'sensor.multiplus_ii_48_5000_70_50_id_275_stav',
         load_power: 'sensor.gx_device_kriticke_zateze_na_l1',
+        total_yield: 'sensor.smartsolar_mppt_ve_can_250_100_rev2_id_273_celkovy_vynos',
+        days_in_service: 'sensor.fve_pocet_dni_v_provozu',
         name: 'MultiPlus-II',
       },
       grid: {
@@ -375,6 +377,16 @@ export class FveFlowCard extends LitElement {
       <text class="tiny" x="${r.x + 20}" y="${r.y + 146}">
         ${inv.load_power && inv.power ? `Kritické zátěže ${formatPower(toNum(this.hass, inv.load_power))}` : 'Ostrovní spotřeba'}
       </text>
+      ${inv.total_yield
+        ? svg`<text class="small" x="${r.x + 20}" y="${r.y + 176}">
+            Celkový výnos <tspan class="strong">${formatEnergy(toNum(this.hass, inv.total_yield))}</tspan>
+          </text>`
+        : nothing}
+      ${inv.days_in_service
+        ? svg`<text class="small" x="${r.x + 20}" y="${r.y + 200}">
+            V provozu <tspan class="strong">${formatState(this.hass, inv.days_in_service)}</tspan>
+          </text>`
+        : nothing}
       ${this._hit(r, inv.power ?? inv.load_power)}
     `;
   }
@@ -436,12 +448,12 @@ export class FveFlowCard extends LitElement {
       <text class="floor-name" x="${r.x + 54}" y="${r.y + 34}">${f.name ?? 'Patro'}</text>
       <text class="tiny" x="${r.x + 54}" y="${r.y + 56}">
         ${f.grid_energy ? `ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}` : ''}
-        ${f.island_energy ? ` · z ostrova ${formatEnergy(toNum(this.hass, f.island_energy))}` : ''}
+        ${f.island_energy ? ` · z fve ${formatEnergy(toNum(this.hass, f.island_energy))}` : ''}
       </text>
       ${hasIsland
         ? svg`
           <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 32}" text-anchor="end">
-            <tspan class="dim">ostrov </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>
+            <tspan class="dim">fve </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>
           </text>
           <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 56}" text-anchor="end">
             <tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>
@@ -488,6 +500,9 @@ export class FveFlowCard extends LitElement {
       height: 100%;
       overflow: hidden;
       padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       background:
         radial-gradient(1100px 700px at 18% -10%, #122433 0%, transparent 60%),
         radial-gradient(900px 600px at 95% 105%, #0d1d2e 0%, transparent 55%),
@@ -497,7 +512,10 @@ export class FveFlowCard extends LitElement {
     svg {
       display: block;
       width: 100%;
-      height: 100%;
+      height: auto;
+      /* Vejít se i na výšku: viewport minus HA hlavička a odsazení.
+         SVG drží poměr stran (viewBox + meet), takže se jen zmenší a vycentruje. */
+      max-height: calc(100vh - var(--header-height, 56px) - 24px);
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Segoe UI', sans-serif);
     }
     text {

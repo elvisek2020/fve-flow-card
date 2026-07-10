@@ -69,6 +69,8 @@ const SCHEMA = [
       { name: 'power', selector: ENTITY },
       { name: 'state', selector: ENTITY },
       { name: 'load_power', selector: ENTITY },
+      { name: 'total_yield', selector: ENTITY },
+      { name: 'days_in_service', selector: ENTITY },
       { name: 'name', selector: TEXT },
       ...SEVERITY_W,
     ],
@@ -155,6 +157,8 @@ const LABELS: Record<string, string> = {
   invert: 'Obrátit znaménko výkonu baterie',
   state: 'Stav měniče',
   load_power: 'Ostrovní spotřeba — kritické zátěže (W)',
+  total_yield: 'Celkový výnos FVE (kWh)',
+  days_in_service: 'Počet dní v provozu',
   name: 'Název',
   phase_a: 'Fáze L1',
   phase_b: 'Fáze L2',
@@ -183,8 +187,8 @@ const LABELS: Record<string, string> = {
   severity_invert: 'Obrátit barvy (vysoká hodnota = špatná)',
   grid_power: 'Výkon ze sítě (W) — nepovinné, jinak součet fází',
   grid_energy: 'Energie ze sítě (kWh)',
-  island_power: 'Výkon z ostrova (W) — budoucí Shelly',
-  island_energy: 'Energie z ostrova (kWh)',
+  island_power: 'Výkon z FVE (W) — budoucí Shelly',
+  island_energy: 'Energie z FVE (kWh)',
 };
 
 @customElement('fve-flow-card-editor')

@@ -71,6 +71,10 @@ export interface InverterConfig extends SeverityFields {
   state?: string;
   /** Celková ostrovní spotřeba — kritické zátěže (W). */
   load_power?: string;
+  /** Celkový výnos FVE (kWh) — informační řádek. */
+  total_yield?: string;
+  /** Počet dní v provozu — informační řádek. */
+  days_in_service?: string;
   /** Zobrazovaný název, default "MultiPlus-II". */
   name?: string;
 }
