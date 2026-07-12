@@ -111,7 +111,7 @@ export class FveFlowMiniCard extends LitElement {
   }
 
   public getGridOptions(): Record<string, unknown> {
-    return { columns: 12, rows: 6, min_rows: 5 };
+    return { columns: 6, rows: 5, min_rows: 4 };
   }
 
   public static async getConfigElement(): Promise<HTMLElement> {
@@ -155,10 +155,10 @@ export class FveFlowMiniCard extends LitElement {
     const solcastNow = toNum(this.hass, cfg.solcast_power_now);
 
     const W = 400;
-    const H = 400;
+    const H = 344;
     const cx = W / 2;
-    const cy = 128;
-    const r = 84;
+    const cy = 114;
+    const r = 74;
 
     const infoLines: string[] = [];
     if (b.runtime) infoLines.push(`Odhadovaná výdrž ${formatState(this.hass, b.runtime)}`);
@@ -172,31 +172,31 @@ export class FveFlowMiniCard extends LitElement {
             : nothing}
 
           ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
-          <text class="gauge-value" x="${cx}" y="${cy + 38}" text-anchor="middle" style="fill: ${socColor}">
+          <text class="gauge-value" x="${cx}" y="${cy + 6}" text-anchor="middle" style="fill: ${socColor}">
             ${b.soc ? `${Math.round(soc)} %` : '—'}
           </text>
-          <text class="gauge-label" x="${cx}" y="${cy + 62}" text-anchor="middle">
+          <text class="gauge-label" x="${cx}" y="${cy + 30}" text-anchor="middle">
             ${b.name || 'Stav baterie'}
           </text>
           ${infoLines.map(
             (line, i) => svg`
-              <text class="info-line" x="${cx}" y="${cy + 86 + i * 20}" text-anchor="middle">${line}</text>
+              <text class="info-line" x="${cx}" y="${cy + 52 + i * 18}" text-anchor="middle">${line}</text>
             `,
           )}
 
-          <line x1="24" y1="252" x2="${W - 24}" y2="252" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
+          <line x1="24" y1="202" x2="${W - 24}" y2="202" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
 
-          <text class="headline-value" x="${W * 0.28}" y="286" text-anchor="middle" style="fill: ${C_ACTUAL}">
+          <text class="headline-value" x="${W * 0.28}" y="234" text-anchor="middle" style="fill: ${C_ACTUAL}">
             ${cfg.pv_power ? formatPower(pvNow) : '—'}
           </text>
-          <text class="headline-label" x="${W * 0.28}" y="304" text-anchor="middle">Realita</text>
+          <text class="headline-label" x="${W * 0.28}" y="252" text-anchor="middle">Realita</text>
 
-          <text class="headline-value" x="${W * 0.72}" y="286" text-anchor="middle" style="fill: ${C_FORECAST}">
+          <text class="headline-value" x="${W * 0.72}" y="234" text-anchor="middle" style="fill: ${C_FORECAST}">
             ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
           </text>
-          <text class="headline-label" x="${W * 0.72}" y="304" text-anchor="middle">Predikce</text>
+          <text class="headline-label" x="${W * 0.72}" y="252" text-anchor="middle">Predikce</text>
 
-          ${renderMiniChart(this._actual, this._forecastPoints(), 24, 318, W - 48, 54, {
+          ${renderMiniChart(this._actual, this._forecastPoints(), 24, 266, W - 48, 56, {
             actual: C_ACTUAL,
             forecast: C_FORECAST,
           })}
@@ -214,9 +214,6 @@ export class FveFlowMiniCard extends LitElement {
       height: 100%;
       overflow: hidden;
       padding: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       cursor: pointer;
       background:
         radial-gradient(1100px 700px at 18% -10%, #122433 0%, transparent 60%),
@@ -226,8 +223,11 @@ export class FveFlowMiniCard extends LitElement {
     }
     svg {
       display: block;
+      /* Vyplní přesně tolik místa, kolik dá HA grid — obsah (viewBox)
+         se pak jen přiměřeně zmenší/zvětší (preserveAspectRatio="meet"
+         v render()), takže se nikdy neuseká spodek karty. */
       width: 100%;
-      height: auto;
+      height: 100%;
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Segoe UI', sans-serif);
     }
     text {

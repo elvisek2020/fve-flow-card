@@ -22,10 +22,23 @@ function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: nu
 }
 
 /**
- * Půlkruhový (180°) gauge se semaforovými zónami — track jde od 180°
- * (vlevo) přes 270° (nahoru) do 360° (vpravo), vzor HA gauge karty.
- * Vrací jen geometrii (zóny + ručička + náboj); popisky/text si vykresluje
- * volající, stejně jako u ostatních ikon v `icons.ts`.
+ * Horizontální poloha bodu na obloučku v rozsahu 0 (vlevo) – 1 (vpravo).
+ * Track jde přesně od 180° do 360°, kde je x monotónní — díky tomu jde
+ * gradient zarovnaný na osu x 1:1 přeložit na úhlovou pozici na oblouku.
+ */
+const fracForAngle = (deg: number): number => (Math.cos(toRad(deg)) + 1) / 2;
+
+const GRADIENT_ID = 'fve-gauge-gradient';
+
+/**
+ * Půlkruhový (180°) gauge s plynulým semaforovým přechodem
+ * červená → žlutá → zelená. Track je jediný souvislý `<path>` barvený
+ * lineárním gradientem zarovnaným na osu oblouku — žádné švy ani zaoblené
+ * „kolečka" na hranicích zón, jak by vznikly při skládání z několika
+ * samostatných segmentů se `stroke-linecap="round"`. Přechody jsou jemné,
+ * ale úzké (`BLEND`), takže barva stále zůstává v okolí reálného prahu.
+ * Aktuální hodnota je jen malý svítící bod přímo na obloučku (vzor
+ * nativní HA gauge karty — žádná ručička do středu).
  */
 export function renderArcGauge(
   cx: number,
@@ -42,22 +55,35 @@ export function renderArcGauge(
   const angleFor = (v: number) => 180 + ((Math.max(min, Math.min(max, v)) - min) / span) * 180;
   const yellowAngle = angleFor(thresholds.yellowFrom);
   const greenAngle = Math.max(angleFor(thresholds.greenFrom), yellowAngle);
-  const needleAngle = angleFor(value);
-  const needleInner = polar(cx, cy, r * 0.4, needleAngle);
-  const needleOuter = polar(cx, cy, r + 3, needleAngle);
+  const marker = polar(cx, cy, r, angleFor(value));
+
+  const BLEND = 0.05;
+  const yFrac = fracForAngle(yellowAngle);
+  const gFrac = fracForAngle(greenAngle);
+  let last = 0;
+  const stops = [
+    { offset: 0, color: '#ff5252' },
+    { offset: yFrac - BLEND, color: '#ff5252' },
+    { offset: yFrac + BLEND, color: '#ffd740' },
+    { offset: gFrac - BLEND, color: '#ffd740' },
+    { offset: gFrac + BLEND, color: '#00e676' },
+    { offset: 1, color: '#00e676' },
+  ].map((s) => {
+    const offset = Math.max(last, Math.min(1, s.offset));
+    last = offset;
+    return { offset, color: s.color };
+  });
 
   return svg`
-    <g>
-      <path d="${arcPath(cx, cy, r, 180, yellowAngle)}" fill="none" stroke="#ff5252"
-        stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.5"/>
-      <path d="${arcPath(cx, cy, r, yellowAngle, greenAngle)}" fill="none" stroke="#ffd740"
-        stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.5"/>
-      <path d="${arcPath(cx, cy, r, greenAngle, 360)}" fill="none" stroke="#00e676"
-        stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.5"/>
-      <line x1="${needleInner.x.toFixed(2)}" y1="${needleInner.y.toFixed(2)}"
-        x2="${needleOuter.x.toFixed(2)}" y2="${needleOuter.y.toFixed(2)}"
-        stroke="${color}" stroke-width="4" stroke-linecap="round"
-        style="filter: drop-shadow(0 0 6px ${color})"/>
-      <circle cx="${cx}" cy="${cy}" r="6" fill="${color}" style="filter: drop-shadow(0 0 6px ${color})"/>
-    </g>`;
+    <defs>
+      <linearGradient id="${GRADIENT_ID}" gradientUnits="userSpaceOnUse"
+        x1="${(cx - r).toFixed(2)}" y1="${cy}" x2="${(cx + r).toFixed(2)}" y2="${cy}">
+        ${stops.map((s) => svg`<stop offset="${(s.offset * 100).toFixed(1)}%" stop-color="${s.color}"/>`)}
+      </linearGradient>
+    </defs>
+    <path d="${arcPath(cx, cy, r, 180, 360)}" fill="none" stroke="url(#${GRADIENT_ID})"
+      stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="${marker.x.toFixed(2)}" cy="${marker.y.toFixed(2)}" r="${strokeWidth / 2 + 3}"
+      fill="${color}" stroke="rgba(8,14,20,0.9)" stroke-width="2.5"
+      style="filter: drop-shadow(0 0 7px ${color})"/>`;
 }
