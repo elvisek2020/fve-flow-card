@@ -14,6 +14,7 @@ import { renderPhaseChips } from './phase-chips';
 import {
   iconBattery,
   iconFan,
+  iconGear,
   iconHome,
   iconInverter,
   iconMppt,
@@ -373,6 +374,18 @@ export class FveFlowCard extends LitElement {
       </g>`;
   }
 
+  /**
+   * Přepne dashboard přímo do editačního režimu (HA URL param `?edit=1`),
+   * bez ručního průchodu přes postranní menu → Nastavení → Dashboardy.
+   * Panelový view s jedinou kartou pak hned nabídne tužku pro její úpravu.
+   */
+  private _openDashboardEdit(): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set('edit', '1');
+    window.history.pushState(null, '', url.toString());
+    window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+  }
+
   private _floorGridPower(f: FloorConfig): number {
     if (f.grid_power && hasNum(this.hass, f.grid_power)) return toNum(this.hass, f.grid_power);
     return this._phases(f).reduce((sum, p) => sum + toNum(this.hass, p.entity), 0);
@@ -412,6 +425,15 @@ export class FveFlowCard extends LitElement {
           ${cfg.title
             ? svg`<text class="card-title" x="${layout.width / 2}" y="26" text-anchor="middle">${cfg.title}</text>`
             : nothing}
+          <g class="settings-btn" @click=${(e: Event) => {
+            e.stopPropagation();
+            this._openDashboardEdit();
+          }}>
+            <title>Upravit dashboard</title>
+            <circle cx="${layout.width - 28}" cy="20" r="15" fill="rgba(255,255,255,0.05)"
+              stroke="rgba(148,170,190,0.4)" stroke-width="1"/>
+            ${iconGear(layout.width - 28 - 8, 12, 16, 'rgba(226,240,248,0.55)')}
+          </g>
 
           <!-- Toky (pod uzly) -->
           ${cfg.solcast?.power_now ||
@@ -929,6 +951,16 @@ export class FveFlowCard extends LitElement {
       font-size: 12px;
       font-weight: 650;
       letter-spacing: 0.03em;
+    }
+    .settings-btn {
+      cursor: pointer;
+    }
+    .settings-btn circle {
+      transition: fill 0.15s ease, stroke 0.15s ease;
+    }
+    .settings-btn:hover circle {
+      fill: rgba(255, 255, 255, 0.1);
+      stroke: rgba(79, 195, 247, 0.55);
     }
     /* Rotace lopatek ventilátoru, když je chlazení zapnuté. */
     .spin {

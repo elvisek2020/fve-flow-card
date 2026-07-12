@@ -172,6 +172,10 @@ Poznámky:
   Zapnout/Vypnout externí chlazení (přepíná rovnou, běžící ventilátor se točí),
   `pv.mppt_switch` zobrazí v panelu MPPT stejný chip chráněný potvrzovacím
   dialogem. Bez nakonfigurované switch entity se tlačítka nevykreslí.
+- **Tlačítko nastavení**: ikonka ozubeného kolečka v pravém horním rohu karty
+  přepne dashboard přímo do editačního režimu (HA URL param `?edit=1`) —
+  ušetří průchod přes postranní menu. U panelového view s jedinou kartou se
+  hned nabídne tužka pro úpravu konfigurace.
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 
