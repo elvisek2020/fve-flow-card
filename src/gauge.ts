@@ -30,9 +30,17 @@ const fracForAngle = (deg: number): number => (Math.cos(toRad(deg)) + 1) / 2;
 
 const GRADIENT_ID = 'fve-gauge-gradient';
 
-/** mdi:arrow-up-bold (24×24 box), vizuální střed ~(12, 11) — stejná ikona jako
- * u textového ukazatele nabíjení/vybíjení, jen otočená do směru poloměru. */
-const ARROW_PATH = 'M15,20H9V12H4.16L12,4.16L19.84,12H15V20Z';
+/**
+ * Ručička přesně podle nativní HA `ha-gauge` komponenty (viz
+ * home-assistant/frontend, src/components/ha-gauge.ts) — úzká „jehla"
+ * s kulatým hrotem, který přesahuje mimo poloměr oblouku, a zaobleným
+ * zadním koncem uvnitř. Souřadnice jsou v původní 40-jednotkové bázi
+ * HA komponenty (střed gauge = [0,0], poloměr oblouku = 40) a v klidu
+ * míří vlevo (na hodnotu `min`) — díky `scale`/`rotate` transformu ji
+ * lze 1:1 přenést na libovolný poloměr a úhel.
+ */
+const NEEDLE_PATH = 'M -34,-3 L -48,-1 A 1,1,0,0,0,-48,1 L -34,3 A 2,2,0,0,0,-34,-3 Z';
+const NEEDLE_BASIS_RADIUS = 40;
 
 /**
  * Půlkruhový (180°) gauge s plynulým semaforovým přechodem
@@ -41,9 +49,9 @@ const ARROW_PATH = 'M15,20H9V12H4.16L12,4.16L19.84,12H15V20Z';
  * „kolečka" na hranicích zón, jak by vznikly při skládání z několika
  * samostatných segmentů se `stroke-linecap="round"`. Přechody jsou jemné,
  * ale úzké (`BLEND`), takže barva stále zůstává v okolí reálného prahu.
- * Aktuální hodnota je vyznačená stejnou plnou šipkou (mdi:arrow-up-bold)
- * jako jinde v kartě — jen otočenou tak, aby mířila ven ve směru poloměru
- * přímo z místa na obloučku. Žádná ručička do středu.
+ * Aktuální hodnota je vyznačená ručičkou ve stejném tvaru, jaký používá
+ * nativní HA gauge karta (`ha-gauge` s `needle: true`) — tenká jehla
+ * s hrotem přesahujícím mimo oblouček.
  */
 export function renderArcGauge(
   cx: number,
@@ -62,15 +70,12 @@ export function renderArcGauge(
   const greenAngle = Math.max(angleFor(thresholds.greenFrom), yellowAngle);
   const markerAngle = angleFor(value);
 
-  // Ikona (mdi:arrow-up-bold) v klidu míří „nahoru", což v naší úhlové
-  // konvenci (0°=vpravo, 90°=dolů, 180°=vlevo, 270°=nahoru) odpovídá 270°.
-  // Pro nasměrování ven ve směru poloměru proto stačí pootočit o rozdíl
-  // od 270° — díky tomu je ukazatel na první pohled čitelný jako šipka
-  // (stejný tvar jako u řádku „Nabíjení/Vybíjení").
-  const markerPos = polar(cx, cy, r, markerAngle);
-  const markerRotation = markerAngle - 270;
-  const markerSize = 24;
-  const markerScale = markerSize / 24;
+  // NEEDLE_PATH v klidu míří vlevo (180° v naší konvenci) — stačí tedy
+  // pootočit o rozdíl od 180° a přeškálovat z HA-basis poloměru (40) na
+  // reálný poloměr oblouku `r`. Ručička se otáčí kolem středu gauge (cx,cy),
+  // ne kolem bodu na obloučku — přesně jako u nativní HA komponenty.
+  const needleRotation = markerAngle - 180;
+  const needleScale = r / NEEDLE_BASIS_RADIUS;
 
   const BLEND = 0.05;
   const yFrac = fracForAngle(yellowAngle);
@@ -98,10 +103,9 @@ export function renderArcGauge(
     </defs>
     <path d="${arcPath(cx, cy, r, 180, 360)}" fill="none" stroke="url(#${GRADIENT_ID})"
       stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
-    <g transform="translate(${markerPos.x.toFixed(2)},${markerPos.y.toFixed(2)})
-        rotate(${markerRotation.toFixed(2)}) scale(${markerScale}) translate(-12,-11)"
-      fill="${color}" stroke="rgba(8,14,20,0.85)" stroke-width="0.8"
-      style="filter: drop-shadow(0 0 3px ${color})">
-      <path d="${ARROW_PATH}"/>
+    <g transform="translate(${cx},${cy}) rotate(${needleRotation.toFixed(2)}) scale(${needleScale.toFixed(3)})"
+      fill="rgba(226,240,248,0.95)" stroke="rgba(8,14,20,0.9)" stroke-width="1" stroke-linecap="round"
+      style="filter: drop-shadow(0 0 5px ${color})">
+      <path d="${NEEDLE_PATH}"/>
     </g>`;
 }

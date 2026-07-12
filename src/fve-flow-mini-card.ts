@@ -207,23 +207,25 @@ export class FveFlowMiniCard extends LitElement {
             `;
           })}
 
-          <line x1="24" y1="220" x2="${W - 24}" y2="220" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
-
-          <text class="headline-value" x="${W * 0.28}" y="252" text-anchor="middle" style="fill: ${C_ACTUAL}">
-            ${cfg.pv_power ? formatPower(pvNow) : '—'}
-          </text>
-          <text class="headline-label" x="${W * 0.28}" y="270" text-anchor="middle">Realita</text>
-
-          <text class="headline-value" x="${W * 0.72}" y="252" text-anchor="middle" style="fill: ${C_FORECAST}">
-            ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
-          </text>
-          <text class="headline-label" x="${W * 0.72}" y="270" text-anchor="middle">Predikce</text>
-
           ${hasChartSignal
-            ? renderMiniChart(this._actual, forecastPoints, 24, 284, W - 48, 56, {
+            ? svg`
+              <line x1="24" y1="220" x2="${W - 24}" y2="220" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
+
+              <text class="headline-value" x="${W * 0.28}" y="252" text-anchor="middle" style="fill: ${C_ACTUAL}">
+                ${cfg.pv_power ? formatPower(pvNow) : '—'}
+              </text>
+              <text class="headline-label" x="${W * 0.28}" y="270" text-anchor="middle">Realita</text>
+
+              <text class="headline-value" x="${W * 0.72}" y="252" text-anchor="middle" style="fill: ${C_FORECAST}">
+                ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
+              </text>
+              <text class="headline-label" x="${W * 0.72}" y="270" text-anchor="middle">Predikce</text>
+
+              ${renderMiniChart(this._actual, forecastPoints, 24, 284, W - 48, 56, {
                 actual: C_ACTUAL,
                 forecast: C_FORECAST,
-              })
+              })}
+            `
             : nothing}
         </svg>
       </ha-card>

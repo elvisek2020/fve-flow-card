@@ -220,10 +220,11 @@ Poznámky:
 - **Výdrž / doba do nabití**: `battery.runtime` se zobrazí vždy, `battery.time_to_full`
   jen dokud baterie nabíjí (výkon ≥ `battery.charge_threshold_w`, default 25 W — sniž,
   pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
-- **Graf jen při výrobě**: graf je vidět, jen dokud aktuální výkon FVE ("Realita")
-  dosahuje alespoň `chart_min_power_w` (default 50 W) — v noci nebo při zanedbatelné
-  výrobě se úplně skryje (žádný placeholder text), jakmile výroba znovu naběhne, graf
-  se zase objeví.
+- **Graf jen při výrobě**: celá spodní sekce (hodnoty „Realita"/„Predikce" i graf) je
+  vidět jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň `chart_min_power_w`
+  (default 50 W) — v noci nebo při zanedbatelné výrobě se úplně skryje (žádný
+  placeholder text, žádné osamocené „0 W"), jakmile výroba znovu naběhne, sekce se
+  zase objeví.
 - **Graf „dnes"** kombinuje historii `pv_power` od půlnoci (plná plocha, zelená)
   a Solcast predikci z atributu `detailedForecast` (přerušovaná čára, žlutá),
   se svislou značkou aktuálního času.
