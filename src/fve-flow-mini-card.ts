@@ -1,0 +1,289 @@
+import { LitElement, html, css, svg, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import type { FveFlowMiniCardConfig, HomeAssistant } from './types';
+import { formatPower, formatState, moreInfo, severityColor, toNum } from './utils';
+import { fetchHistory, type HistoryPoint } from './sparkline';
+import { renderArcGauge } from './gauge';
+import { renderMiniChart } from './mini-chart';
+import './mini-editor';
+
+const C_ACTUAL = '#00e676';
+const C_FORECAST = '#ffd54f';
+const HISTORY_REFRESH_MS = 5 * 60 * 1000;
+
+/**
+ * Kompaktní karta pro hlavní dashboard: baterie jako hlavní ukazatel
+ * (gauge se SoC, výdrž/doba do nabití) + hlavičkové hodnoty výroby FVE
+ * ("Realita") vs. Solcast predikce ("Predikce") + lehký graf dnešního dne.
+ * Klik kamkoli na kartu naviguje na velký `fve-flow-card` dashboard
+ * (bez `navigation_path` otevře jen historii baterie jako fallback).
+ */
+@customElement('fve-flow-mini-card')
+export class FveFlowMiniCard extends LitElement {
+  @property({ attribute: false }) public hass?: HomeAssistant;
+
+  @state() private _config?: FveFlowMiniCardConfig;
+
+  /** Historie výkonu FVE od půlnoci (pro graf) — samostatná od velkokarty sparklin. */
+  @state() private _actual: HistoryPoint[] = [];
+  private _historyEntity?: string;
+  private _historyTimer?: number;
+
+  public setConfig(config: FveFlowMiniCardConfig): void {
+    if (!config) throw new Error('Chybí konfigurace');
+    this._config = config;
+  }
+
+  public connectedCallback(): void {
+    super.connectedCallback();
+    this._historyTimer = window.setInterval(() => void this._refreshHistory(), HISTORY_REFRESH_MS);
+  }
+
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._historyTimer !== undefined) {
+      window.clearInterval(this._historyTimer);
+      this._historyTimer = undefined;
+    }
+  }
+
+  protected updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    if (!this.hass || !this._config) return;
+    const entity = this._config.pv_power;
+    if (entity !== this._historyEntity) {
+      this._historyEntity = entity;
+      void this._refreshHistory();
+    }
+  }
+
+  private _minutesSinceMidnight(): number {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(0, 0, 0, 0);
+    return Math.max(1, Math.round((now.getTime() - midnight.getTime()) / 60000));
+  }
+
+  private async _refreshHistory(): Promise<void> {
+    const entity = this._config?.pv_power;
+    if (!this.hass || !entity) {
+      this._actual = [];
+      return;
+    }
+    this._actual = await fetchHistory(this.hass, entity, this._minutesSinceMidnight());
+  }
+
+  /** Dnešní křivka Solcast predikce z atributu `detailedForecast`, počítá se přímo z hass.states. */
+  private _forecastPoints(): HistoryPoint[] {
+    const entityId = this._config?.solcast_total_today;
+    const stateObj = entityId ? this.hass?.states[entityId] : undefined;
+    const detailed = stateObj?.attributes.detailedForecast;
+    if (!Array.isArray(detailed)) return [];
+
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const t0 = dayStart.getTime();
+    const t1 = t0 + 24 * 60 * 60 * 1000;
+
+    const points: HistoryPoint[] = [];
+    for (const item of detailed) {
+      if (!item || typeof item !== 'object') continue;
+      const rec = item as { period_start?: string; pv_estimate?: number };
+      const t = new Date(rec.period_start ?? '').getTime();
+      const w = Number(rec.pv_estimate) * 1000;
+      if (Number.isFinite(t) && Number.isFinite(w) && t >= t0 && t <= t1) points.push([t, w]);
+    }
+    return points.sort((a, b) => a[0] - b[0]);
+  }
+
+  private _handleClick(): void {
+    const path = this._config?.navigation_path?.trim();
+    if (path) {
+      window.history.pushState(null, '', path);
+      window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+      return;
+    }
+    moreInfo(this, this._config?.battery?.soc);
+  }
+
+  public getCardSize(): number {
+    return 6;
+  }
+
+  public getGridOptions(): Record<string, unknown> {
+    return { columns: 12, rows: 6, min_rows: 5 };
+  }
+
+  public static async getConfigElement(): Promise<HTMLElement> {
+    return document.createElement('fve-flow-mini-card-editor');
+  }
+
+  public static getStubConfig(): Record<string, unknown> {
+    return {
+      title: 'FVE přehled',
+      battery: {
+        soc: 'sensor.pylontech_battery_id_512_nabijeni',
+        power: 'sensor.pylontech_battery_id_512_vykon',
+        runtime: 'sensor.baterie_odhadovana_vydrz_2',
+        time_to_full: 'sensor.baterie_doba_do_plneho_nabiti',
+      },
+      pv_power: 'sensor.smartsolar_mppt_ve_can_250_100_rev2_id_273_vynosovy_vykon_fotovoltaiky',
+      solcast_power_now: 'sensor.solcast_pv_forecast_power_now',
+      solcast_total_today: 'sensor.solcast_pv_forecast_forecast_today',
+      navigation_path: '/lovelace/fve-flow',
+    };
+  }
+
+  protected render(): TemplateResult {
+    const cfg = this._config;
+    if (!cfg) return html``;
+    if (!this.hass) return html`<ha-card></ha-card>`;
+
+    const b = cfg.battery ?? {};
+    const soc = toNum(this.hass, b.soc, 0);
+    const yellowFrom = b.yellow_from ?? 15;
+    const greenFrom = Math.max(b.green_from ?? 40, yellowFrom);
+    const socColor =
+      severityColor(soc, { yellow_from: yellowFrom, green_from: greenFrom, severity_invert: b.severity_invert }) ??
+      C_ACTUAL;
+
+    const rawBatP = toNum(this.hass, b.power);
+    const batP = b.invert ? -rawBatP : rawBatP;
+    const charging = batP >= 25;
+
+    const pvNow = toNum(this.hass, cfg.pv_power);
+    const solcastNow = toNum(this.hass, cfg.solcast_power_now);
+
+    const W = 400;
+    const H = 400;
+    const cx = W / 2;
+    const cy = 128;
+    const r = 84;
+
+    const infoLines: string[] = [];
+    if (b.runtime) infoLines.push(`Odhadovaná výdrž ${formatState(this.hass, b.runtime)}`);
+    if (charging && b.time_to_full) infoLines.push(`Do plného nabití ${formatState(this.hass, b.time_to_full)}`);
+
+    return html`
+      <ha-card @click=${() => this._handleClick()}>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">
+          ${cfg.title
+            ? svg`<text class="card-title" x="${cx}" y="20" text-anchor="middle">${cfg.title}</text>`
+            : nothing}
+
+          ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
+          <text class="gauge-value" x="${cx}" y="${cy + 38}" text-anchor="middle" style="fill: ${socColor}">
+            ${b.soc ? `${Math.round(soc)} %` : '—'}
+          </text>
+          <text class="gauge-label" x="${cx}" y="${cy + 62}" text-anchor="middle">
+            ${b.name || 'Stav baterie'}
+          </text>
+          ${infoLines.map(
+            (line, i) => svg`
+              <text class="info-line" x="${cx}" y="${cy + 86 + i * 20}" text-anchor="middle">${line}</text>
+            `,
+          )}
+
+          <line x1="24" y1="252" x2="${W - 24}" y2="252" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
+
+          <text class="headline-value" x="${W * 0.28}" y="286" text-anchor="middle" style="fill: ${C_ACTUAL}">
+            ${cfg.pv_power ? formatPower(pvNow) : '—'}
+          </text>
+          <text class="headline-label" x="${W * 0.28}" y="304" text-anchor="middle">Realita</text>
+
+          <text class="headline-value" x="${W * 0.72}" y="286" text-anchor="middle" style="fill: ${C_FORECAST}">
+            ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
+          </text>
+          <text class="headline-label" x="${W * 0.72}" y="304" text-anchor="middle">Predikce</text>
+
+          ${renderMiniChart(this._actual, this._forecastPoints(), 24, 318, W - 48, 54, {
+            actual: C_ACTUAL,
+            forecast: C_FORECAST,
+          })}
+        </svg>
+      </ha-card>
+    `;
+  }
+
+  static styles = css`
+    :host {
+      display: block;
+      height: 100%;
+    }
+    ha-card {
+      height: 100%;
+      overflow: hidden;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background:
+        radial-gradient(1100px 700px at 18% -10%, #122433 0%, transparent 60%),
+        radial-gradient(900px 600px at 95% 105%, #0d1d2e 0%, transparent 55%),
+        linear-gradient(160deg, #0b141d 0%, #070c12 100%);
+      border: 1px solid rgba(120, 180, 210, 0.08);
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Segoe UI', sans-serif);
+    }
+    text {
+      fill: rgba(226, 240, 248, 0.92);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      fill: rgba(226, 240, 248, 0.4);
+    }
+    .gauge-value {
+      font-size: 30px;
+      font-weight: 700;
+    }
+    .gauge-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      fill: rgba(226, 240, 248, 0.45);
+    }
+    .info-line {
+      font-size: 13px;
+      fill: rgba(226, 240, 248, 0.65);
+    }
+    .headline-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .headline-label {
+      font-size: 11.5px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      fill: rgba(226, 240, 248, 0.45);
+    }
+    .chart-axis {
+      font-size: 10px;
+      fill: rgba(226, 240, 248, 0.35);
+    }
+  `;
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'fve-flow-mini-card': FveFlowMiniCard;
+  }
+}
+
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'fve-flow-mini-card',
+  name: 'FVE Flow Mini Card',
+  description:
+    'Kompaktní karta: baterie jako gauge s výdrží, výroba FVE vs. Solcast predikce. Klik naviguje na velký FVE Flow dashboard.',
+  preview: false,
+  documentationURL: 'https://github.com/elvisek/fve-flow-card',
+});

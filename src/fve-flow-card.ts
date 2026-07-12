@@ -36,6 +36,7 @@ import {
 import { openHistoryDialog, type HistorySeries } from './history-dialog';
 import { fetchHistory, renderSparkline, type HistoryPoint } from './sparkline';
 import './editor';
+import './fve-flow-mini-card';
 
 const CARD_VERSION = '__CARD_VERSION__';
 

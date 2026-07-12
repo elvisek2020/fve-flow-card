@@ -200,3 +200,23 @@ export interface PhaseSpec {
   icon: string;
   label: string; // L1/L2/L3
 }
+
+/**
+ * Konfigurace kompaktní karty pro hlavní dashboard: baterie jako hlavní
+ * ukazatel (gauge + výdrž/doba do nabití) a graf výroby FVE vs. Solcast
+ * predikce za dnešek. Klik na kartu naviguje na velký `fve-flow-card`.
+ */
+export interface FveFlowMiniCardConfig {
+  type: string;
+  title?: string;
+  battery?: BatteryConfig;
+  /** Aktuální výkon FVE panelů (W) — zobrazí se jako „Realita" a v grafu. */
+  pv_power?: string;
+  /** Predikovaný výkon Solcast teď (W) — zobrazí se jako „Predikce". */
+  solcast_power_now?: string;
+  /** Entita s atributem `detailedForecast` — zdroj dnešní křivky predikce v grafu. */
+  solcast_total_today?: string;
+  /** Cesta pro navigaci po kliknutí na kartu, např. `/lovelace/fve-flow`. */
+  navigation_path?: string;
+  [key: string]: unknown;
+}

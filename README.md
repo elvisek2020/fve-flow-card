@@ -179,6 +179,46 @@ Poznámky:
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 
+## FVE Flow Mini Card
+
+Druhá karta ve stejném balíčku — kompaktní shrnutí pro hlavní dashboard
+(nahrazuje např. samostatnou kartu „Solární výroba" + „Stav baterie").
+Baterie je hlavní ukazatel jako půlkruhový gauge se semaforovými zónami,
+pod ním hlavičkové hodnoty „Realita" (aktuální výkon FVE) vs. „Predikce"
+(Solcast) a lehký graf dnešního dne. **Klik kamkoli na kartu** naviguje na
+velký `fve-flow-card` dashboard.
+
+```yaml
+type: custom:fve-flow-mini-card
+title: FVE přehled
+battery:
+  soc: sensor.baterie_nabijeni                 # povinné
+  power: sensor.baterie_vykon                  # kladné = nabíjení (Victron)
+  runtime: sensor.baterie_odhadovana_vydrz
+  time_to_full: sensor.baterie_doba_do_nabiti
+  invert: false
+  yellow_from: 15                              # default 15
+  green_from: 40                               # default 40
+  name: Baterie Pylontech
+pv_power: sensor.mppt_vykon_fotovoltaiky       # „Realita" + graf dnešní výroby
+solcast_power_now: sensor.solcast_power_now    # „Predikce"
+solcast_total_today: sensor.solcast_forecast_today  # zdroj detailedForecast pro graf
+navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
+```
+
+Poznámky:
+
+- **Bez `apexcharts-card`** — graf je vlastní lehký SVG (žádná externí závislost).
+- **Výdrž / doba do nabití**: `battery.runtime` se zobrazí vždy, `battery.time_to_full`
+  jen dokud baterie nabíjí — stejná logika jako u velké karty.
+- **Graf „dnes"** kombinuje historii `pv_power` od půlnoci (plná plocha, zelená)
+  a Solcast predikci z atributu `detailedForecast` (přerušovaná čára, žlutá),
+  se svislou značkou aktuálního času.
+- **Navigace**: bez `navigation_path` otevře klik jen nativní historii baterie
+  (fallback), jinak přepne na zadaný dashboard stejným mechanismem jako
+  tlačítko nastavení ve velké kartě.
+- Konfiguruje se stejně přes GUI editor karty (výběr **FVE Flow Mini Card**).
+
 ## Vývoj
 
 ```bash
