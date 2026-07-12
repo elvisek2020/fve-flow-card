@@ -13,13 +13,16 @@ import { renderFlow, type FlowOptions } from './flow';
 import { renderPhaseChips } from './phase-chips';
 import {
   iconBattery,
+  iconFan,
   iconHome,
   iconInverter,
   iconMppt,
+  iconPower,
   iconPylon,
   iconSolarPanel,
   iconSun,
 } from './icons';
+import { openConfirmDialog } from './confirm-dialog';
 import {
   formatEnergy,
   formatPower,
@@ -312,6 +315,64 @@ export class FveFlowCard extends LitElement {
     return out;
   }
 
+  private _switchOn(entityId: string): boolean {
+    return this.hass?.states[entityId]?.state === 'on';
+  }
+
+  private _toggleSwitch(entityId: string): void {
+    void this.hass?.callService?.(
+      'switch',
+      this._switchOn(entityId) ? 'turn_off' : 'turn_on',
+      { entity_id: entityId },
+    );
+  }
+
+  /** Přepnutí chráněné potvrzovacím dialogem (MPPT). */
+  private async _toggleSwitchConfirmed(entityId: string, name: string): Promise<void> {
+    const on = this._switchOn(entityId);
+    const confirmed = await openConfirmDialog({
+      title: on ? `Vypnout ${name}?` : `Zapnout ${name}?`,
+      message: on
+        ? `Regulátor se odpojí a přestane nabíjet z FVE. Opravdu chceš ${name} vypnout?`
+        : `Regulátor se připojí a začne nabíjet z FVE. Opravdu chceš ${name} zapnout?`,
+      confirmLabel: on ? 'Vypnout' : 'Zapnout',
+      accent: on ? C.warn : C.ok,
+    });
+    if (confirmed) this._toggleSwitch(entityId);
+  }
+
+  /**
+   * Malý ovládací chip (spínač) uvnitř panelu — ikona + Zapnout/Vypnout.
+   * Vykresluje se až po klikací ploše `_hit`, aby klik nepropadl do historie.
+   */
+  private _controlChip(
+    x: number,
+    y: number,
+    entityId: string,
+    label: string,
+    icon: (ix: number, iy: number, size: number, color: string, spin?: boolean) => TemplateResult,
+    onClick: () => void,
+  ): TemplateResult {
+    const w = 96;
+    const h = 30;
+    const on = this._switchOn(entityId);
+    const accent = on ? '#26c6da' : 'rgba(148,170,190,0.55)';
+    return svg`
+      <g class="ctrl-chip" @click=${(e: Event) => {
+        e.stopPropagation();
+        onClick();
+      }}>
+        <title>${label} · ${on ? 'zapnuto' : 'vypnuto'}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9"
+          fill="rgba(255,255,255,0.05)" stroke="${accent}" stroke-opacity="${on ? 0.7 : 0.35}"
+          stroke-width="1" style="${on ? `filter: drop-shadow(0 0 6px ${accent}60)` : ''}"/>
+        ${icon(x + 9, y + 8, 14, accent, on)}
+        <text class="ctrl-label" x="${x + 30}" y="${y + 19.5}" style="fill: ${on ? '#bfeef5' : 'rgba(226,240,248,0.6)'}">
+          ${on ? 'Vypnout' : 'Zapnout'}
+        </text>
+      </g>`;
+  }
+
   private _floorGridPower(f: FloorConfig): number {
     if (f.grid_power && hasNum(this.hass, f.grid_power)) return toNum(this.hass, f.grid_power);
     return this._phases(f).reduce((sum, p) => sum + toNum(this.hass, p.entity), 0);
@@ -479,6 +540,10 @@ export class FveFlowCard extends LitElement {
           ? () => moreInfo(this, pv.mppt_state ?? pv.voltage)
           : undefined,
       )}
+      ${pv.mppt_switch
+        ? this._controlChip(r.x + r.w - 110, r.y + 12, pv.mppt_switch, pv.mppt_name || 'MPPT regulátor', iconPower, () =>
+            void this._toggleSwitchConfirmed(pv.mppt_switch!, pv.mppt_name || 'MPPT regulátor'))
+        : nothing}
     `;
   }
 
@@ -577,6 +642,10 @@ export class FveFlowCard extends LitElement {
           ? () => this._openEntity(inv.power ?? inv.load_power, inv.name || 'Měnič MultiPlus-II', accent)
           : undefined,
       )}
+      ${inv.fan_switch
+        ? this._controlChip(r.x + r.w - 110, r.y + r.h - 52, inv.fan_switch, 'Chlazení', iconFan, () =>
+            this._toggleSwitch(inv.fan_switch!))
+        : nothing}
     `;
   }
 
@@ -663,12 +732,43 @@ export class FveFlowCard extends LitElement {
     const phases = this._phases(f);
     const active = Math.abs(gridP) >= this._flowBase().deadband || (hasIsland && Math.abs(islandP) >= this._flowBase().deadband);
     const accent = hasIsland && islandP > gridP ? C.island : C.grid;
-    // FVE je u nás jednofázová, proto je to jeden chip vedle fází gridu —
-    // všechny chipy patra jsou v jediné řadě (1 až 4 položky).
-    const islandChip: PhaseSpec | null = hasIsland
-      ? { entity: f.island_power!, name: 'FVE výroba', icon: 'mdi:solar-power', label: 'FVE' }
-      : null;
-    const chips: PhaseSpec[] = islandChip ? [islandChip, ...phases] : phases;
+    // FVE chip(y) vlevo (kudy vstupuje zelený tok z měniče), grid fáze
+    // vpravo (kudy vstupuje modrý tok ze sítě). Připraveno i na 3f FVE.
+    const fveChips: PhaseSpec[] = hasIsland
+      ? [{ entity: f.island_power!, name: 'FVE výroba', icon: 'mdi:solar-power', label: 'FVE' }]
+      : [];
+    const gridChips = phases;
+
+    const openChip = (id: string, isFve: boolean) => {
+      const chip = [...fveChips, ...gridChips].find((item) => item.entity === id);
+      this._openEntity(
+        id,
+        chip ? `${f.name || 'Patro'} · ${chip.name}` : this._entityName(id),
+        isFve ? C.island : chip ? PHASE_STYLE[chip.label]?.color ?? C.grid : C.grid,
+      );
+    };
+    const fveStyle = { icon: iconSun, iconColor: C.island, borderColor: 'rgba(0,230,118,0.22)' };
+    const gridStyle = (ph: PhaseSpec) => ({
+      iconColor: PHASE_STYLE[ph.label]?.color ?? C.grid,
+      borderColor: PHASE_STYLE[ph.label]?.border,
+    });
+
+    // Šířky zón proporcionálně podle počtu chipů (1 FVE + 3 grid = 1:3).
+    const pad = 14;
+    const split = fveChips.length > 0 && gridChips.length > 0;
+    const dividerSpace = 24;
+    const innerW = r.w - pad * 2;
+    const availW = innerW - (split ? dividerSpace : 0);
+    const totalChips = fveChips.length + gridChips.length;
+    const fveW = split ? (availW * fveChips.length) / totalChips : availW;
+    const fveZone = { x: r.x + pad, w: fveW };
+    const gridZone = split
+      ? { x: r.x + pad + fveW + dividerSpace, w: availW - fveW }
+      : { x: r.x + pad, w: availW };
+    // Svislá dělicí linka přes výšku řady chipů (viz geometrie v phase-chips.ts).
+    const chipTop = r.y + r.h - 72 - 24;
+    const dividerX = r.x + pad + fveW + dividerSpace / 2;
+
     return svg`
       ${this._panel(r, accent, active)}
       ${iconHome(r.x + 16, r.y + 12, 30, accent)}
@@ -686,26 +786,20 @@ export class FveFlowCard extends LitElement {
           ? () => this._openFloorHistory(f, phases)
           : undefined,
       )}
-      ${chips.length
-        ? renderPhaseChips(r, chips, this.hass, (id) => {
-            const chip = chips.find((item) => item.entity === id);
-            this._openEntity(
-              id,
-              chip ? `${f.name || 'Patro'} · ${chip.name}` : this._entityName(id),
-              chip === islandChip
-                ? C.island
-                : chip
-                  ? PHASE_STYLE[chip.label]?.color ?? C.grid
-                  : C.grid,
-            );
-          }, {
-            itemStyle: (ph) =>
-              ph === islandChip
-                ? { icon: iconSun, iconColor: C.island, borderColor: 'rgba(0,230,118,0.22)' }
-                : {
-                    iconColor: PHASE_STYLE[ph.label]?.color ?? C.grid,
-                    borderColor: PHASE_STYLE[ph.label]?.border,
-                  },
+      ${split
+        ? svg`<line x1="${dividerX}" y1="${chipTop - 4}" x2="${dividerX}" y2="${chipTop + 76}"
+            stroke="rgba(148,170,190,0.18)" stroke-width="1"/>`
+        : nothing}
+      ${fveChips.length
+        ? renderPhaseChips(r, fveChips, this.hass, (id) => openChip(id, true), {
+            itemStyle: () => fveStyle,
+            zone: fveZone,
+          })
+        : nothing}
+      ${gridChips.length
+        ? renderPhaseChips(r, gridChips, this.hass, (id) => openChip(id, false), {
+            itemStyle: gridStyle,
+            zone: gridZone,
           })
         : nothing}
     `;
@@ -821,6 +915,31 @@ export class FveFlowCard extends LitElement {
     .chip-name {
       font-size: 10px;
       fill: rgba(226, 240, 248, 0.5);
+    }
+    .ctrl-chip {
+      cursor: pointer;
+    }
+    .ctrl-chip rect {
+      transition: fill 0.15s ease, stroke 0.15s ease;
+    }
+    .ctrl-chip:hover rect {
+      fill: rgba(255, 255, 255, 0.1);
+    }
+    .ctrl-label {
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+    }
+    /* Rotace lopatek ventilátoru, když je chlazení zapnuté. */
+    .spin {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: fve-fan-spin 2.2s linear infinite;
+    }
+    @keyframes fve-fan-spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   `;
 }

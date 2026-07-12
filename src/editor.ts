@@ -4,6 +4,7 @@ import type { FloorConfig, FveFlowCardConfig, HomeAssistant } from './types';
 import { fireEvent } from './utils';
 
 const ENTITY = { entity: { domain: 'sensor' } };
+const SWITCH = { entity: { domain: 'switch' } };
 const TEXT = { text: {} };
 const ICON = { icon: {} };
 const BOOL = { boolean: {} };
@@ -29,43 +30,34 @@ const SEVERITY_PCT = [
 const SCHEMA = [
   { name: 'title', selector: TEXT },
   {
-    // Data zůstávají plochá v cfg.pv (žádná migrace configu), jen se
-    // v editoru vizuálně rozdělí na dvě samostatné podsekce — stejný
-    // princip jako u sekcí Grid/FVE u patra.
+    // FVE panely a MPPT jsou v UI dvě samostatné sekce první úrovně,
+    // ale obě mají name: 'pv' — data tak zůstávají plochá v cfg.pv
+    // (žádná migrace configu). Vnořený formulář dostává celý objekt pv,
+    // takže změna v jedné sekci nepřepíše pole té druhé.
     name: 'pv',
     type: 'expandable',
+    title: 'FVE panely',
     icon: 'mdi:solar-power',
     schema: [
-      {
-        name: 'pv_panels',
-        type: 'expandable',
-        flatten: true,
-        expanded: true,
-        title: 'FVE panely',
-        icon: 'mdi:solar-power',
-        schema: [
-          { name: 'power', required: true, selector: ENTITY },
-          { name: 'energy_today', selector: ENTITY },
-          { name: 'energy_total', selector: ENTITY },
-          { name: 'max_power_today', selector: ENTITY },
-          { name: 'name', selector: TEXT, custom_label: 'Vlastní název FVE panelů' },
-          ...SEVERITY_W,
-        ],
-      },
-      {
-        name: 'pv_mppt',
-        type: 'expandable',
-        flatten: true,
-        expanded: true,
-        title: 'MPPT regulátor',
-        icon: 'mdi:current-dc',
-        schema: [
-          { name: 'voltage', selector: ENTITY },
-          { name: 'current', selector: ENTITY },
-          { name: 'mppt_state', selector: ENTITY },
-          { name: 'mppt_name', selector: TEXT, custom_label: 'Vlastní název MPPT regulátoru' },
-        ],
-      },
+      { name: 'power', required: true, selector: ENTITY },
+      { name: 'energy_today', selector: ENTITY },
+      { name: 'energy_total', selector: ENTITY },
+      { name: 'max_power_today', selector: ENTITY },
+      { name: 'name', selector: TEXT, custom_label: 'Vlastní název FVE panelů' },
+      ...SEVERITY_W,
+    ],
+  },
+  {
+    name: 'pv',
+    type: 'expandable',
+    title: 'MPPT regulátor',
+    icon: 'mdi:current-dc',
+    schema: [
+      { name: 'voltage', selector: ENTITY },
+      { name: 'current', selector: ENTITY },
+      { name: 'mppt_state', selector: ENTITY },
+      { name: 'mppt_switch', selector: SWITCH },
+      { name: 'mppt_name', selector: TEXT, custom_label: 'Vlastní název MPPT regulátoru' },
     ],
   },
   {
@@ -99,6 +91,7 @@ const SCHEMA = [
       { name: 'current', selector: ENTITY },
       { name: 'load_power', selector: ENTITY },
       { name: 'days_in_service', selector: ENTITY },
+      { name: 'fan_switch', selector: SWITCH },
       { name: 'name', selector: TEXT, custom_label: 'Vlastní název měniče' },
       ...SEVERITY_W,
     ],
@@ -191,6 +184,8 @@ const FLOOR_SCHEMA = [
 const LABELS: Record<string, string> = {
   title: 'Titulek karty',
   pv: 'FVE / MPPT',
+  mppt_switch: 'Spínač MPPT (switch) — ovládací tlačítko',
+  fan_switch: 'Spínač chlazení měniče (switch) — ovládací tlačítko',
   battery: 'Baterie',
   inverter: 'Měnič',
   grid: 'Síť (grid)',
@@ -253,6 +248,8 @@ const LABELS: Record<string, string> = {
  * sami o sobě nejsou úplně samovysvětlující.
  */
 const HELPERS: Record<string, string> = {
+  mppt_switch: 'Když je vyplněno, zobrazí se v panelu MPPT tlačítko Zapnout/Vypnout. Přepnutí je chráněné potvrzovacím dialogem.',
+  fan_switch: 'Když je vyplněno, zobrazí se v panelu měniče tlačítko Zapnout/Vypnout chlazení (např. chytrá zásuvka s ventilátorem). Přepíná se okamžitě bez potvrzení.',
   max_flow_w: 'Výkon, při kterém pulzy na lince běží nejrychleji (rychlost je od "mrtvé zóny" po tuto hodnotu plynulá). Nastav podle reálné špičky tvého systému, např. 5000 W pro měnič 5 kW.',
   deadband_w: 'Pod touto hodnotou je tok energie tak malý, že se linka vykreslí jako klidná/šedá bez pulzů — potlačí to "věčné" mihotání kvůli šumu měření.',
   dots: 'Kolik světelných teček se najednou pohybuje po jedné aktivní lince. Víc teček = hustší, "plnější" tok při vysokém výkonu.',

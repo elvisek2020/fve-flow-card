@@ -11,6 +11,12 @@ export interface HomeAssistant {
   locale?: { language?: string };
   /** HA API — vrátí lokalizovaný stav entity (např. „Vypnuto" místo „off"). */
   formatEntityState?: (stateObj: HassEntity) => string;
+  /** HA API — volání služby (např. switch.turn_on). */
+  callService?: (
+    domain: string,
+    service: string,
+    serviceData?: Record<string, unknown>,
+  ) => Promise<unknown>;
 }
 
 /** Minimální rozhraní dynamicky vytvořené Lovelace karty. */
@@ -48,6 +54,8 @@ export interface PvConfig extends SeverityFields {
   current?: string;
   /** Provozní režim MPPT. */
   mppt_state?: string;
+  /** Spínač MPPT (switch.*) — zobrazí ovládací tlačítko s potvrzením. */
+  mppt_switch?: string;
   /** Zobrazovaný název panelu FVE, default "FVE panely". */
   name?: string;
   /** Zobrazovaný název MPPT regulátoru, default "MPPT regulátor". */
@@ -93,6 +101,8 @@ export interface InverterConfig extends SeverityFields {
   current?: string;
   /** Počet dní v provozu — informační řádek. */
   days_in_service?: string;
+  /** Spínač externího chlazení (switch.*) — zobrazí ovládací tlačítko. */
+  fan_switch?: string;
   /** Zobrazovaný název, default "MultiPlus-II". */
   name?: string;
 }

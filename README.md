@@ -65,6 +65,7 @@ pv:
   voltage: sensor.mppt_napeti_fv
   current: sensor.mppt_proud_dc
   mppt_state: sensor.mppt_rezim
+  mppt_switch: switch.mppt                     # ovládací tlačítko (s potvrzením)
   name: FVE panely                             # vlastní název panelu
   mppt_name: MPPT regulátor                    # vlastní název MPPT uzlu
 battery:
@@ -87,6 +88,7 @@ inverter:
   current: sensor.multiplus_vystupni_proud
   load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba
   days_in_service: sensor.fve_pocet_dni        # informační řádek
+  fan_switch: switch.chlazeni_menice           # ovládací tlačítko ventilátoru
   name: MultiPlus-II
 grid:
   power: sensor.grid_ac_in_vykon               # když chybí, sečtou se patra
@@ -161,7 +163,15 @@ Poznámky:
 - **Patra** jsou dynamický seznam — nové patro (např. 2NP, 1f) přidáš v editoru
   bez zásahu do kódu. Dokud patro nemá `island_power`, ostrovní tok se zobrazuje
   jen souhrnně z měniče a patrové ostrovní číslo je skryté.
+- **Rozdělení patra**: pokud má patro `island_power`, box se svislou linkou
+  rozdělí na levou FVE zónu a pravou grid zónu; šířky zón odpovídají počtu
+  chipů na každé straně (1 FVE + 3 grid = 1:3). Bez FVE zabírají grid fáze
+  celou šířku — jednofázové patro tak má jeden chip přes celý box.
 - **Fáze bez vlastního názvu** se zobrazí jako L1/L2/L3 s ikonou `mdi:flash`.
+- **Ovládací tlačítka**: `inverter.fan_switch` zobrazí v panelu měniče chip
+  Zapnout/Vypnout externí chlazení (přepíná rovnou, běžící ventilátor se točí),
+  `pv.mppt_switch` zobrazí v panelu MPPT stejný chip chráněný potvrzovacím
+  dialogem. Bez nakonfigurované switch entity se tlačítka nevykreslí.
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

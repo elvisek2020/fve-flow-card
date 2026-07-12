@@ -18,6 +18,12 @@ export interface PhaseChipsOptions extends ChipStyle {
    * položka (např. FVE výroba) potřebuje jinou ikonu/barvu než ostatní.
    */
   itemStyle?: (ph: PhaseSpec, index: number) => ChipStyle | undefined;
+  /**
+   * Vodorovná zóna, do které se chipy vykreslí (absolutní x + šířka).
+   * Bez ní se použije celá šířka panelu s vnitřním odsazením — zóna
+   * umožňuje rozdělit box patra na levou FVE a pravou grid část.
+   */
+  zone?: { x: number; w: number };
 }
 
 /**
@@ -38,7 +44,8 @@ export function renderPhaseChips(
   // 24 px od spodní hrany: 4 px bar + mezera, aby chipy neseděly na progress baru.
   const chipY = r.y + r.h - chipH - 24 - row * (chipH + rowGap);
   const gap = 8;
-  const totalW = r.w - pad * 2;
+  const zoneX = opts?.zone ? opts.zone.x : r.x + pad;
+  const totalW = opts?.zone ? opts.zone.w : r.w - pad * 2;
   const chipW = (totalW - gap * Math.max(0, phases.length - 1)) / phases.length;
 
   return svg`${phases.map((ph, i) => {
@@ -46,7 +53,7 @@ export function renderPhaseChips(
     const drawIcon = style?.icon ?? opts?.icon ?? iconBolt;
     const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
     const borderColor = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
-    const x = r.x + pad + i * (chipW + gap);
+    const x = zoneX + i * (chipW + gap);
     const cx = x + chipW / 2;
     const power = formatPower(toNum(hass, ph.entity));
     const iconSize = 14;
