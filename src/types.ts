@@ -17,6 +17,8 @@ export interface HomeAssistant {
     service: string,
     serviceData?: Record<string, unknown>,
   ) => Promise<unknown>;
+  /** HA API — obecné REST volání (např. history/period pro sparkliny). */
+  callApi?: (method: string, path: string) => Promise<unknown>;
 }
 
 /** Minimální rozhraní dynamicky vytvořené Lovelace karty. */
@@ -174,6 +176,8 @@ export interface OptionsConfig {
   max_duration?: number;
   /** Vypnout animace úplně. */
   animation?: boolean;
+  /** Mini trendové křivky (poslední hodina) v rozích uzlů FVE/baterie/měnič/síť. Default zapnuto. */
+  sparklines?: boolean;
 }
 
 export interface FveFlowCardConfig {

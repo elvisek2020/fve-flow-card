@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, css, svg, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type {
   FloorConfig,
@@ -8,7 +8,7 @@ import type {
   PhaseSpec,
   SolcastConfig,
 } from './types';
-import { computeLayout, type Layout, type Rect } from './layout';
+import { computeLayout, computeMobileLayout, type Layout, type Rect } from './layout';
 import { renderFlow, type FlowOptions } from './flow';
 import { renderPhaseChips } from './phase-chips';
 import {
@@ -34,6 +34,7 @@ import {
   toNum,
 } from './utils';
 import { openHistoryDialog, type HistorySeries } from './history-dialog';
+import { fetchHistory, renderSparkline, type HistoryPoint } from './sparkline';
 import './editor';
 
 const CARD_VERSION = '__CARD_VERSION__';
@@ -77,9 +78,86 @@ export class FveFlowCard extends LitElement {
 
   @state() private _config?: FveFlowCardConfig;
 
+  /** Historie za poslední hodinu pro sparkliny, klíč = entity_id. */
+  @state() private _spark: Map<string, HistoryPoint[]> = new Map();
+  private _sparkEntities: string[] = [];
+  private _sparkTimer?: number;
+
+  /** Vertikální mobilní layout pod breakpointem šířky karty (ne viewportu). */
+  @state() private _narrow = false;
+  private _resizeObserver?: ResizeObserver;
+  private static readonly NARROW_BREAKPOINT = 640;
+
   public setConfig(config: FveFlowCardConfig): void {
     if (!config) throw new Error('Chybí konfigurace');
     this._config = config;
+  }
+
+  public connectedCallback(): void {
+    super.connectedCallback();
+    // Periodické obnovení sparklin — nezávislé na `hass` update cyklu,
+    // aby se historie netahala při každé změně stavu entit (1×/s).
+    this._sparkTimer = window.setInterval(() => void this._refreshSparklines(), 5 * 60 * 1000);
+    this._resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width !== undefined) this._narrow = width < FveFlowCard.NARROW_BREAKPOINT;
+    });
+    this._resizeObserver.observe(this);
+  }
+
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._sparkTimer !== undefined) {
+      window.clearInterval(this._sparkTimer);
+      this._sparkTimer = undefined;
+    }
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
+  }
+
+  protected updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    this.toggleAttribute('narrow', this._narrow);
+    if (!this.hass || !this._config) return;
+    const entities = this._sparklineEntities();
+    const same =
+      entities.length === this._sparkEntities.length &&
+      entities.every((e, i) => e === this._sparkEntities[i]);
+    if (!same) {
+      this._sparkEntities = entities;
+      void this._refreshSparklines();
+    }
+  }
+
+  /** Entity sledované sparklinami — jen nakonfigurované, když je funkce zapnutá. */
+  private _sparklineEntities(): string[] {
+    const cfg = this._config;
+    if (!cfg || cfg.options?.sparklines === false) return [];
+    return [cfg.pv?.power, cfg.battery?.soc, cfg.inverter?.power, cfg.grid?.power].filter(
+      (e): e is string => !!e,
+    );
+  }
+
+  private async _refreshSparklines(): Promise<void> {
+    if (!this.hass) return;
+    const entities = this._sparklineEntities();
+    if (!entities.length) {
+      if (this._spark.size) this._spark = new Map();
+      return;
+    }
+    const hass = this.hass;
+    const results = await Promise.all(entities.map((e) => fetchHistory(hass, e)));
+    const next = new Map<string, HistoryPoint[]>();
+    entities.forEach((e, i) => next.set(e, results[i]));
+    this._spark = next;
+  }
+
+  /** Mini trend v pravém horním rohu uzlu, pod titulkem. Bez dat se nevykreslí. */
+  private _sparklineNode(entityId: string | undefined, r: Rect, color: string): TemplateResult | typeof nothing {
+    if (!entityId) return nothing;
+    const points = this._spark.get(entityId);
+    if (!points?.length) return nothing;
+    return renderSparkline(points, r.x + r.w - 104, r.y + 34, 90, 20, color);
   }
 
   public getCardSize(): number {
@@ -397,7 +475,9 @@ export class FveFlowCard extends LitElement {
     if (!this.hass) return html`<ha-card></ha-card>`;
 
     const floors = cfg.floors ?? [];
-    const layout = computeLayout(Math.max(1, floors.length));
+    const layout = this._narrow
+      ? computeMobileLayout(Math.max(1, floors.length))
+      : computeLayout(Math.max(1, floors.length));
     const base = this._flowBase();
 
     const pvP = toNum(this.hass, cfg.pv?.power);
@@ -518,6 +598,7 @@ export class FveFlowCard extends LitElement {
     return svg`
       ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${pv.name || 'FVE panely'}</text>
+      ${this._sparklineNode(pv.power, r, accent)}
       ${iconSolarPanel(r.x + 18, r.y + 46, 60, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${pv.power ? formatPower(p) : '—'}</text>
       ${sev ? this._bar(r, p, pv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
@@ -587,6 +668,7 @@ export class FveFlowCard extends LitElement {
     return svg`
       ${this._panel(r, socColor, true)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${b.name || 'Baterie Pylontech'}</text>
+      ${this._sparklineNode(b.soc, r, socColor)}
       ${iconBattery(r.x + 30, r.y + 62, 58, 168, soc, socColor)}
       <text class="tiny" x="${r.x + 59}" y="${r.y + 252}" text-anchor="middle">
         ${b.capacity ? formatState(this.hass, b.capacity) : ''}
@@ -633,6 +715,7 @@ export class FveFlowCard extends LitElement {
     return svg`
       ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${inv.name || 'Měnič MultiPlus-II'}</text>
+      ${this._sparklineNode(inv.power, r, accent)}
       ${iconInverter(r.x + 18, r.y + 46, 56, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(p)}</text>
       <circle cx="${r.x + 96}" cy="${r.y + 106}" r="4" fill="${state !== '—' ? C.ok : 'rgba(148,170,190,0.4)'}"/>
@@ -712,6 +795,7 @@ export class FveFlowCard extends LitElement {
     return svg`
       ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${g.name || 'Síť ČEZ'}</text>
+      ${this._sparklineNode(g.power, r, accent)}
       ${iconPylon(r.x + 16, r.y + 44, 52, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
@@ -832,6 +916,13 @@ export class FveFlowCard extends LitElement {
       display: block;
       height: 100%;
     }
+    /* Úzká karta (mobil): scéna je vertikální a delší než okno, takže se
+       nechá stránku rolovat místo vnucování max-height clampu.
+       !important — HA grid/masonry wrapper okolo karty někdy vnucuje
+       vlastní výšku podle počtu řádků, tady musí vyhrát obsah. */
+    :host([narrow]) {
+      height: auto !important;
+    }
     ha-card {
       height: 100%;
       overflow: hidden;
@@ -845,6 +936,11 @@ export class FveFlowCard extends LitElement {
         linear-gradient(160deg, #0b141d 0%, #070c12 100%);
       border: 1px solid rgba(120, 180, 210, 0.08);
     }
+    :host([narrow]) ha-card {
+      height: auto !important;
+      overflow: visible;
+      align-items: flex-start;
+    }
     svg {
       display: block;
       width: 100%;
@@ -853,6 +949,9 @@ export class FveFlowCard extends LitElement {
          SVG drží poměr stran (viewBox + meet), takže se jen zmenší a vycentruje. */
       max-height: calc(100vh - var(--header-height, 56px) - 24px);
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Segoe UI', sans-serif);
+    }
+    :host([narrow]) svg {
+      max-height: none;
     }
     text {
       fill: rgba(226, 240, 248, 0.92);

@@ -134,6 +134,7 @@ const SCHEMA = [
       { name: 'min_duration', selector: numBox(0.5, 10, 0.1) },
       { name: 'max_duration', selector: numBox(1, 20, 0.5) },
       { name: 'animation', selector: BOOL },
+      { name: 'sparklines', selector: BOOL },
     ],
   },
 ];
@@ -232,6 +233,7 @@ const LABELS: Record<string, string> = {
   min_duration: 'Nejrychlejší oběh tečky — při max. výkonu (s)',
   max_duration: 'Nejpomalejší oběh tečky — těsně nad mrtvou zónou (s)',
   animation: 'Animace pulzujících teček zapnuté',
+  sparklines: 'Mini trendové křivky v rozích uzlů',
   yellow_from: 'Žlutá od hodnoty (pod ní červená)',
   green_from: 'Zelená od hodnoty',
   bar_max: 'Rozsah progress baru (max)',
@@ -256,6 +258,7 @@ const HELPERS: Record<string, string> = {
   min_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon na hraně `max_flow_w` (nejrychlejší možný pohyb).',
   max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
+  sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
 };
 
 @customElement('fve-flow-card-editor')

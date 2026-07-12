@@ -109,3 +109,92 @@ export function computeLayout(floorCount: number): Layout {
     paths,
   };
 }
+
+// Mobilní (úzký) layout — jeden sloupec, uzly pod sebou. Šířka boxu i výšky
+// jednotlivých uzlů kopírují desktop verzi (stejný obsah = stejná potřebná
+// výška), jen jsou poskládané svisle místo do širokého schématu.
+const MOBILE_WIDTH = 520;
+const MOBILE_NODE_W = 480;
+const MOBILE_X = (MOBILE_WIDTH - MOBILE_NODE_W) / 2;
+const MOBILE_GAP = 26;
+// Trunky pro toky do pater vedou v okrajích mimo box, aby nekřížily obsah:
+// ostrovní (FVE) vlevo, gridový vpravo — patra tak zachovají stejné
+// rozložení zón (FVE vlevo / grid vpravo) jako v širokém layoutu.
+const MOBILE_ISLAND_TRUNK_X = MOBILE_X - 10;
+const MOBILE_GRID_TRUNK_X = MOBILE_X + MOBILE_NODE_W + 10;
+
+/**
+ * Vertikální layout pro úzké obrazovky (< 640 px). Pořadí shora:
+ * FVE → Solcast → MPPT → Baterie → Měnič → Síť (AC-IN) → patra.
+ * Toky mezi uzly, které nejsou v pořadí bezprostředně za sebou
+ * (FVE→MPPT přeskakuje Solcast, MPPT→Měnič přeskakuje Baterii), obchází
+ * mezilehlý box krátkou odbočkou k pravému okraji scény.
+ */
+export function computeMobileLayout(floorCount: number): Layout {
+  const n = Math.max(1, floorCount);
+  const x = MOBILE_X;
+  const w = MOBILE_NODE_W;
+  let y = 40;
+
+  const pv: Rect = { x, y, w, h: 190 };
+  y += pv.h + MOBILE_GAP;
+  const solcast: Rect = { x, y, w, h: 190 };
+  y += solcast.h + MOBILE_GAP;
+  const mppt: Rect = { x, y, w, h: 150 };
+  y += mppt.h + MOBILE_GAP;
+  const battery: Rect = { x, y, w, h: 320 };
+  y += battery.h + MOBILE_GAP;
+  const inverter: Rect = { x, y, w, h: 260 };
+  y += inverter.h + MOBILE_GAP;
+  const grid: Rect = { x, y, w, h: 210 };
+  y += grid.h + MOBILE_GAP;
+
+  const floorTop = y;
+  const floorH = 170;
+  const floors: Rect[] = [];
+  for (let i = 0; i < n; i++) {
+    floors.push({ x, y: floorTop + i * (floorH + MOBILE_GAP), w, h: floorH });
+  }
+  const floorsBottom = floors[floors.length - 1].y + floorH;
+
+  // FVE ↔ Solcast jsou v pořadí hned za sebou — krátká svislá spojka.
+  const pvSolcast = `M ${pv.x + pv.w / 2} ${pv.y + pv.h} L ${solcast.x + solcast.w / 2} ${solcast.y}`;
+
+  // FVE → MPPT obchází box Solcastu odbočkou k pravému okraji.
+  const pvOutY = pv.y + pv.h * 0.65;
+  const mpptInY = mppt.y + mppt.h * 0.35;
+  const pvMppt = `M ${pv.x + pv.w} ${pvOutY} H ${MOBILE_GRID_TRUNK_X} V ${mpptInY} H ${mppt.x + mppt.w}`;
+
+  // MPPT → Měnič obchází box Baterie stejnou odbočkou.
+  const mpptOutY = mppt.y + mppt.h * 0.65;
+  const invInY = inverter.y + inverter.h * 0.3;
+  const mpptInv = `M ${mppt.x + mppt.w} ${mpptOutY} H ${MOBILE_GRID_TRUNK_X} V ${invInY} H ${inverter.x + inverter.w}`;
+
+  // Baterie ↔ Měnič jsou přímí sousedi — přímá svislá spojka.
+  const batInv = `M ${battery.x + battery.w / 2} ${battery.y + battery.h} L ${inverter.x + inverter.w / 2} ${inverter.y}`;
+
+  const invPortY = inverter.y + inverter.h - 24;
+  const gridPortY = grid.y + grid.h / 2;
+
+  const islandTaps = floors.map((f) => {
+    const fy = f.y + f.h / 2;
+    return `M ${inverter.x} ${invPortY} H ${MOBILE_ISLAND_TRUNK_X} V ${fy} H ${f.x}`;
+  });
+  const gridTaps = floors.map((f) => {
+    const fy = f.y + f.h / 2;
+    return `M ${grid.x + grid.w} ${gridPortY} H ${MOBILE_GRID_TRUNK_X} V ${fy} H ${f.x + f.w}`;
+  });
+
+  return {
+    width: MOBILE_WIDTH,
+    height: Math.max(600, floorsBottom + 40),
+    pv,
+    mppt,
+    battery,
+    inverter,
+    solcast,
+    grid,
+    floors,
+    paths: { pvMppt, mpptInv, batInv, pvSolcast, islandTaps, gridTaps },
+  };
+}
