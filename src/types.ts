@@ -87,6 +87,11 @@ export interface BatteryConfig extends SeverityFields {
   invert?: boolean;
   /** Zobrazovaný název, default "Baterie Pylontech". */
   name?: string;
+  /**
+   * Práh výkonu (W), od kterého se bere jako „nabíjí" — u mini karty
+   * ovlivňuje zobrazení řádku „Do plného nabití". Default 25 W.
+   */
+  charge_threshold_w?: number;
 }
 
 /** Konfigurace měniče (ostrovní strana). */
@@ -216,6 +221,11 @@ export interface FveFlowMiniCardConfig {
   solcast_power_now?: string;
   /** Entita s atributem `detailedForecast` — zdroj dnešní křivky predikce v grafu. */
   solcast_total_today?: string;
+  /**
+   * Minimální dnešní špička výkonu (W) mezi realitou a predikcí, od které
+   * se místo prázdného/plochého grafu zobrazí graf vůbec. Default 50 W.
+   */
+  chart_min_power_w?: number;
   /** Cesta pro navigaci po kliknutí na kartu, např. `/lovelace/fve-flow`. */
   navigation_path?: string;
   [key: string]: unknown;

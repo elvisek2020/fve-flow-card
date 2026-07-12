@@ -188,6 +188,8 @@ pod ním hlavičkové hodnoty „Realita" (aktuální výkon FVE) vs. „Predikc
 (Solcast) a lehký graf dnešního dne. **Klik kamkoli na kartu** naviguje na
 velký `fve-flow-card` dashboard.
 
+![FVE Flow Mini Card — náhled](docs/preview-mini.png)
+
 ```yaml
 type: custom:fve-flow-mini-card
 title: FVE přehled
@@ -197,20 +199,29 @@ battery:
   runtime: sensor.baterie_odhadovana_vydrz
   time_to_full: sensor.baterie_doba_do_nabiti
   invert: false
+  charge_threshold_w: 25                       # default 25 — od kolika W se počítá "nabíjí"
   yellow_from: 15                              # default 15
   green_from: 40                               # default 40
   name: Baterie Pylontech
 pv_power: sensor.mppt_vykon_fotovoltaiky       # „Realita" + graf dnešní výroby
 solcast_power_now: sensor.solcast_power_now    # „Predikce"
 solcast_total_today: sensor.solcast_forecast_today  # zdroj detailedForecast pro graf
+chart_min_power_w: 50                          # default 50 — pod touto špičkou se graf nezobrazí
 navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
 ```
 
 Poznámky:
 
 - **Bez `apexcharts-card`** — graf je vlastní lehký SVG (žádná externí závislost).
+- **Stav baterie**: pokud je vyplněné `battery.power`, zobrazí se pod názvem řádek
+  „Nabíjení …" / „Vybíjení …" / „Klidový stav" s vektorovou šipkou nahoru/dolů
+  (stejný styl jako nativní `mdi:arrow-up-bold` / `mdi:arrow-down-bold` v HA) —
+  prahy řídí `battery.charge_threshold_w`.
 - **Výdrž / doba do nabití**: `battery.runtime` se zobrazí vždy, `battery.time_to_full`
-  jen dokud baterie nabíjí — stejná logika jako u velké karty.
+  jen dokud baterie nabíjí (výkon ≥ `battery.charge_threshold_w`, default 25 W — sniž,
+  pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
+- **Graf pro dny bez výroby**: pokud dnešní špička (realita i predikce) nedosáhne
+  `chart_min_power_w` (default 50 W), graf se vůbec nezobrazí (žádný placeholder text).
 - **Graf „dnes"** kombinuje historii `pv_power` od půlnoci (plná plocha, zelená)
   a Solcast predikci z atributu `detailedForecast` (přerušovaná čára, žlutá),
   se svislou značkou aktuálního času.

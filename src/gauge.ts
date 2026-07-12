@@ -37,8 +37,8 @@ const GRADIENT_ID = 'fve-gauge-gradient';
  * „kolečka" na hranicích zón, jak by vznikly při skládání z několika
  * samostatných segmentů se `stroke-linecap="round"`. Přechody jsou jemné,
  * ale úzké (`BLEND`), takže barva stále zůstává v okolí reálného prahu.
- * Aktuální hodnota je jen malý svítící bod přímo na obloučku (vzor
- * nativní HA gauge karty — žádná ručička do středu).
+ * Aktuální hodnota je vyznačená malou svítící šipkou přímo na obloučku,
+ * mířící ven ve směru poloměru — žádná ručička do středu.
  */
 export function renderArcGauge(
   cx: number,
@@ -55,7 +55,16 @@ export function renderArcGauge(
   const angleFor = (v: number) => 180 + ((Math.max(min, Math.min(max, v)) - min) / span) * 180;
   const yellowAngle = angleFor(thresholds.yellowFrom);
   const greenAngle = Math.max(angleFor(thresholds.greenFrom), yellowAngle);
-  const marker = polar(cx, cy, r, angleFor(value));
+  const markerAngle = angleFor(value);
+
+  // Šipka (dart) mířící radiálně ven — hrot jen nepatrně za obloučkem
+  // (aby nepůsobil jako samostatný "ocásek"), základna kousek před ním,
+  // mírně rozevřená do stran, aby byl tvar čitelný jako šipka.
+  const spread = 5;
+  const tip = polar(cx, cy, r + strokeWidth / 2 + 2, markerAngle);
+  const baseL = polar(cx, cy, r - 8, markerAngle - spread);
+  const baseR = polar(cx, cy, r - 8, markerAngle + spread);
+  const markerPath = `M ${tip.x.toFixed(2)} ${tip.y.toFixed(2)} L ${baseL.x.toFixed(2)} ${baseL.y.toFixed(2)} L ${baseR.x.toFixed(2)} ${baseR.y.toFixed(2)} Z`;
 
   const BLEND = 0.05;
   const yFrac = fracForAngle(yellowAngle);
@@ -83,7 +92,6 @@ export function renderArcGauge(
     </defs>
     <path d="${arcPath(cx, cy, r, 180, 360)}" fill="none" stroke="url(#${GRADIENT_ID})"
       stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
-    <circle cx="${marker.x.toFixed(2)}" cy="${marker.y.toFixed(2)}" r="${strokeWidth / 2 + 3}"
-      fill="${color}" stroke="rgba(8,14,20,0.9)" stroke-width="2.5"
-      style="filter: drop-shadow(0 0 7px ${color})"/>`;
+    <path d="${markerPath}" fill="${color}" stroke="rgba(8,14,20,0.9)" stroke-width="1.5"
+      stroke-linejoin="round" style="filter: drop-shadow(0 0 7px ${color})"/>`;
 }

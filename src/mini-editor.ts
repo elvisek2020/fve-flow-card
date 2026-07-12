@@ -22,6 +22,7 @@ const SCHEMA = [
       { name: 'runtime', selector: ENTITY },
       { name: 'time_to_full', selector: ENTITY },
       { name: 'invert', selector: BOOL },
+      { name: 'charge_threshold_w', selector: numBox(0, 500, 5) },
       { name: 'yellow_from', selector: numBox(0, 100, 1) },
       { name: 'green_from', selector: numBox(0, 100, 1) },
       { name: 'name', selector: TEXT, custom_label: 'Vlastní název baterie' },
@@ -48,6 +49,7 @@ const SCHEMA = [
         selector: ENTITY,
         custom_label: 'Entita s dnešní Solcast predikcí (zdroj grafu)',
       },
+      { name: 'chart_min_power_w', selector: numBox(0, 2000, 10) },
     ],
   },
   {
@@ -68,17 +70,23 @@ const LABELS: Record<string, string> = {
   runtime: 'Odhadovaná výdrž',
   time_to_full: 'Doba do plného nabití',
   invert: 'Obrátit znaménko výkonu baterie',
+  charge_threshold_w: 'Práh pro "nabíjí" (W)',
   yellow_from: 'Žlutá od hodnoty (pod ní červená)',
   green_from: 'Zelená od hodnoty',
   name: 'Vlastní název',
+  chart_min_power_w: 'Minimální dnešní špička pro zobrazení grafu (W)',
 };
 
 const HELPERS: Record<string, string> = {
   yellow_from: 'Výchozí 15 % — pod touto hranicí je gauge červený.',
   green_from: 'Výchozí 40 % — od této hranice je gauge zelený.',
   invert: 'Zapni, pokud tvá baterie hlásí kladný výkon při vybíjení (obrácená konvence než Victron).',
+  charge_threshold_w:
+    'Od jakého výkonu (W) se baterie počítá jako "nabíjí" — ovlivňuje, kdy se zobrazí řádek "Do plného nabití". Výchozí 25 W potlačí šum kolem nuly; sniž, pokud chceš vidět dobu do nabití i při velmi slabém nabíjení.',
   solcast_total_today:
     'Stejná entita jako u velké karty ("Dnes celkem") — karta si z jejího atributu detailedForecast sama vybere dnešní hodiny pro graf.',
+  chart_min_power_w:
+    'Pokud dnešní špička (realita i predikce) nedosáhne této hodnoty, karta místo téměř neviditelné ploché čáry u dna zobrazí text "Dnes bez výraznější výroby". Výchozí 50 W.',
   navigation_path:
     'Cesta velkého FVE Flow dashboardu, např. /lovelace/fve-flow — najdeš ji v adresním řádku prohlížeče, když máš velkou kartu otevřenou. Bez vyplnění klik na kartu otevře jen historii baterie.',
 };

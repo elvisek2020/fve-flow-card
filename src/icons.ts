@@ -151,6 +151,18 @@ export function iconGear(x: number, y: number, size: number, color: string): Tem
     </g>`;
 }
 
+/** Šipka nahoru/dolů (mdi:arrow-up-bold / arrow-down-bold, box 24) — směr toku energie. */
+export function iconArrow(x: number, y: number, size: number, color: string, direction: 'up' | 'down'): TemplateResult {
+  const s = size / 24;
+  const path =
+    direction === 'up' ? 'M15,20H9V12H4.16L12,4.16L19.84,12H15V20Z' : 'M9,4H15V12H19.84L12,19.84L4.16,12H9V4Z';
+  return svg`
+    <g transform="translate(${x},${y}) scale(${s})" fill="${color}"
+       style="filter: drop-shadow(0 0 4px ${color})">
+      <path d="${path}"/>
+    </g>`;
+}
+
 /** Vypínač (mdi:power, box 24) pro ovládací tlačítko MPPT. */
 export function iconPower(x: number, y: number, size: number, color: string): TemplateResult {
   const s = size / 24;

@@ -5,6 +5,7 @@ import { formatPower, formatState, moreInfo, severityColor, toNum } from './util
 import { fetchHistory, type HistoryPoint } from './sparkline';
 import { renderArcGauge } from './gauge';
 import { renderMiniChart } from './mini-chart';
+import { iconArrow } from './icons';
 import './mini-editor';
 
 const C_ACTUAL = '#00e676';
@@ -149,20 +150,37 @@ export class FveFlowMiniCard extends LitElement {
 
     const rawBatP = toNum(this.hass, b.power);
     const batP = b.invert ? -rawBatP : rawBatP;
-    const charging = batP >= 25;
+    const chargeThreshold = b.charge_threshold_w ?? 25;
+    const charging = batP >= chargeThreshold;
+    const discharging = batP <= -chargeThreshold;
+    const stateText = charging
+      ? `Nabíjení ${formatPower(Math.abs(batP))}`
+      : discharging
+        ? `Vybíjení ${formatPower(Math.abs(batP))}`
+        : 'Klidový stav';
+    const stateColor = charging ? '#e040fb' : discharging ? '#ffb74d' : 'rgba(220,235,245,0.55)';
+    const stateArrow = charging ? 'up' : discharging ? 'down' : undefined;
 
     const pvNow = toNum(this.hass, cfg.pv_power);
     const solcastNow = toNum(this.hass, cfg.solcast_power_now);
 
+    const forecastPoints = this._forecastPoints();
+    const chartMinPower = cfg.chart_min_power_w ?? 50;
+    const chartPeak = Math.max(0, ...this._actual.map(([, v]) => v), ...forecastPoints.map(([, v]) => v));
+    const hasChartSignal = chartPeak >= chartMinPower;
+
     const W = 400;
-    const H = 344;
+    const H = 368;
     const cx = W / 2;
     const cy = 114;
     const r = 74;
 
-    const infoLines: string[] = [];
-    if (b.runtime) infoLines.push(`Odhadovaná výdrž ${formatState(this.hass, b.runtime)}`);
-    if (charging && b.time_to_full) infoLines.push(`Do plného nabití ${formatState(this.hass, b.time_to_full)}`);
+    const infoLines: Array<{ text: string; color?: string; arrow?: 'up' | 'down' }> = [];
+    if (b.power) infoLines.push({ text: stateText, color: stateColor, arrow: stateArrow });
+    if (b.runtime) infoLines.push({ text: `Odhadovaná výdrž ${formatState(this.hass, b.runtime)}` });
+    if (charging && b.time_to_full) {
+      infoLines.push({ text: `Do plného nabití ${formatState(this.hass, b.time_to_full)}` });
+    }
 
     return html`
       <ha-card @click=${() => this._handleClick()}>
@@ -178,28 +196,33 @@ export class FveFlowMiniCard extends LitElement {
           <text class="gauge-label" x="${cx}" y="${cy + 30}" text-anchor="middle">
             ${b.name || 'Stav baterie'}
           </text>
-          ${infoLines.map(
-            (line, i) => svg`
-              <text class="info-line" x="${cx}" y="${cy + 52 + i * 18}" text-anchor="middle">${line}</text>
-            `,
-          )}
+          ${infoLines.map((line, i) => {
+            const lineY = cy + 50 + i * 18;
+            return svg`
+              ${line.arrow ? iconArrow(cx - 78, lineY - 13, 16, line.color ?? 'currentColor', line.arrow) : nothing}
+              <text class="info-line" x="${cx}" y="${lineY}" text-anchor="middle"
+                style="${line.color ? `fill: ${line.color}` : ''}">${line.text}</text>
+            `;
+          })}
 
-          <line x1="24" y1="202" x2="${W - 24}" y2="202" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
+          <line x1="24" y1="220" x2="${W - 24}" y2="220" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
 
-          <text class="headline-value" x="${W * 0.28}" y="234" text-anchor="middle" style="fill: ${C_ACTUAL}">
+          <text class="headline-value" x="${W * 0.28}" y="252" text-anchor="middle" style="fill: ${C_ACTUAL}">
             ${cfg.pv_power ? formatPower(pvNow) : '—'}
           </text>
-          <text class="headline-label" x="${W * 0.28}" y="252" text-anchor="middle">Realita</text>
+          <text class="headline-label" x="${W * 0.28}" y="270" text-anchor="middle">Realita</text>
 
-          <text class="headline-value" x="${W * 0.72}" y="234" text-anchor="middle" style="fill: ${C_FORECAST}">
+          <text class="headline-value" x="${W * 0.72}" y="252" text-anchor="middle" style="fill: ${C_FORECAST}">
             ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
           </text>
-          <text class="headline-label" x="${W * 0.72}" y="252" text-anchor="middle">Predikce</text>
+          <text class="headline-label" x="${W * 0.72}" y="270" text-anchor="middle">Predikce</text>
 
-          ${renderMiniChart(this._actual, this._forecastPoints(), 24, 266, W - 48, 56, {
-            actual: C_ACTUAL,
-            forecast: C_FORECAST,
-          })}
+          ${hasChartSignal
+            ? renderMiniChart(this._actual, forecastPoints, 24, 284, W - 48, 56, {
+                actual: C_ACTUAL,
+                forecast: C_FORECAST,
+              })
+            : nothing}
         </svg>
       </ha-card>
     `;
