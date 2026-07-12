@@ -224,8 +224,11 @@ Poznámky:
   vidět jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň `chart_min_power_w`
   (default 50 W) — v noci nebo při zanedbatelné výrobě se úplně skryje (žádný
   placeholder text, žádné osamocené „0 W"), jakmile výroba znovu naběhne, sekce se
-  zase objeví. Když je sekce skrytá, zbytek karty (nadpis, gauge, info řádky) se
-  automaticky svisle vycentruje, aby dole nezbylo prázdné místo.
+  zase objeví. Když je sekce skrytá, **celá karta se reálně zmenší** (ne jen
+  posune obsah) — v masonry pohledu to funguje automaticky, v „sections"
+  pohledu je potřeba mít u karty v editoru rozvržení výšku nastavenou na
+  „Automaticky" (YAML: `grid_options: { rows: auto }`), jinak HA výšku karty
+  natvrdo vynutí a prostor se neuvolní.
 - **Graf „dnes"** kombinuje historii `pv_power` od půlnoci (plná plocha, zelená)
   a Solcast predikci z atributu `detailedForecast` (přerušovaná čára, žlutá),
   se svislou značkou aktuálního času.

@@ -112,7 +112,13 @@ export class FveFlowMiniCard extends LitElement {
   }
 
   public getGridOptions(): Record<string, unknown> {
-    return { columns: 6, rows: 5, min_rows: 4 };
+    // "auto" = výška sekce se přizpůsobí skutečnému obsahu karty (viz
+    // dynamické "H" v render() a `svg { height: auto }` ve stylech) —
+    // karta se tak zmenší, když zmizí spodní sekce s grafem, a zase
+    // zvětší, jakmile se objeví. Pokud kartu už máte na dashboardu se
+    // starším nastavením (pevné `rows`), přepněte jí v editoru rozvržení
+    // výšku na „Automaticky", ať se toto chování uplatní.
+    return { columns: 6, rows: 'auto' };
   }
 
   public static async getConfigElement(): Promise<HTMLElement> {
@@ -172,9 +178,8 @@ export class FveFlowMiniCard extends LitElement {
     const hasChartSignal = pvNow >= chartMinPower;
 
     const W = 400;
-    const H = 368;
     const cx = W / 2;
-    const baseCy = 114;
+    const cy = 114;
     const r = 74;
 
     const infoLines: Array<{ text: string; color?: string; arrow?: 'up' | 'down' }> = [];
@@ -184,20 +189,19 @@ export class FveFlowMiniCard extends LitElement {
       infoLines.push({ text: `Do plného nabití ${formatState(this.hass, b.time_to_full)}` });
     }
 
-    // Bez spodní sekce (Realita/Predikce + graf) by gauge s textem osaměl
-    // v horní polovině karty a dole zbylo prázdné místo — proto se v tom
-    // případě celý blok (nadpis + gauge + info řádky) posune tak, aby byl
-    // svisle vycentrovaný v celé výšce karty.
-    const contentBottom = baseCy + 50 + Math.max(0, infoLines.length - 1) * 18;
-    const yShift = hasChartSignal ? 0 : Math.max(0, Math.round((H - 20 - contentBottom) / 2));
-    const titleY = 20 + yShift;
-    const cy = baseCy + yShift;
+    // Bez spodní sekce (Realita/Predikce + graf) karta nepotřebuje celou
+    // výšku — "H" (výška viewBoxu) se zkrátí přesně na to, co reálně
+    // zobrazujeme (nadpis + gauge + info řádky), a díky `svg { height: auto }`
+    // se tak zmenší i skutečná výška celé karty, ne jen posune obsah v rámci
+    // pořád stejně velkého boxu.
+    const noChartBottom = cy + 50 + Math.max(0, infoLines.length - 1) * 18 + 20;
+    const H = hasChartSignal ? 368 : noChartBottom;
 
     return html`
       <ha-card @click=${() => this._handleClick()}>
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">
           ${cfg.title
-            ? svg`<text class="card-title" x="${cx}" y="${titleY}" text-anchor="middle">${cfg.title}</text>`
+            ? svg`<text class="card-title" x="${cx}" y="20" text-anchor="middle">${cfg.title}</text>`
             : nothing}
 
           ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
@@ -244,10 +248,13 @@ export class FveFlowMiniCard extends LitElement {
   static styles = css`
     :host {
       display: block;
-      height: 100%;
     }
     ha-card {
-      height: 100%;
+      /* Žádná pevná výška — karta se skutečně zmenší/zvětší podle obsahu
+         (viz dynamické "H" ve viewBoxu SVG níže), místo aby jen vyplnila
+         napevno danou plochu a přebytek nechala jako prázdné místo.
+         V "sections" pohledu HA k tomu potřebuje grid_options.rows: auto
+         na kartě (v masonry pohledu funguje automaticky). */
       overflow: hidden;
       padding: 4px;
       cursor: pointer;
@@ -259,11 +266,11 @@ export class FveFlowMiniCard extends LitElement {
     }
     svg {
       display: block;
-      /* Vyplní přesně tolik místa, kolik dá HA grid — obsah (viewBox)
-         se pak jen přiměřeně zmenší/zvětší (preserveAspectRatio="meet"
-         v render()), takže se nikdy neuseká spodek karty. */
+      /* Výška se dopočítá z poměru stran viewBoxu (šířka/H) — díky tomu
+         "auto" skutečně respektuje aktuální "H" nastavené v render() a
+         karta se opravdu zmenší, když zmizí spodní sekce s grafem. */
       width: 100%;
-      height: 100%;
+      height: auto;
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Segoe UI', sans-serif);
     }
     text {
