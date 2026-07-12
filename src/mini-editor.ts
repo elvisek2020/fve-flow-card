@@ -74,7 +74,7 @@ const LABELS: Record<string, string> = {
   yellow_from: 'Žlutá od hodnoty (pod ní červená)',
   green_from: 'Zelená od hodnoty',
   name: 'Vlastní název',
-  chart_min_power_w: 'Minimální dnešní špička pro zobrazení grafu (W)',
+  chart_min_power_w: 'Minimální aktuální výkon FVE pro zobrazení grafu (W)',
 };
 
 const HELPERS: Record<string, string> = {
@@ -86,7 +86,7 @@ const HELPERS: Record<string, string> = {
   solcast_total_today:
     'Stejná entita jako u velké karty ("Dnes celkem") — karta si z jejího atributu detailedForecast sama vybere dnešní hodiny pro graf.',
   chart_min_power_w:
-    'Pokud dnešní špička (realita i predikce) nedosáhne této hodnoty, karta místo téměř neviditelné ploché čáry u dna zobrazí text "Dnes bez výraznější výroby". Výchozí 50 W.',
+    'Graf se zobrazí jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň této hodnoty — v noci nebo při velmi slabé výrobě tak zmizí úplně (žádný placeholder text). Výchozí 50 W.',
   navigation_path:
     'Cesta velkého FVE Flow dashboardu, např. /lovelace/fve-flow — najdeš ji v adresním řádku prohlížeče, když máš velkou kartu otevřenou. Bez vyplnění klik na kartu otevře jen historii baterie.',
 };

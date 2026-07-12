@@ -206,7 +206,7 @@ battery:
 pv_power: sensor.mppt_vykon_fotovoltaiky       # „Realita" + graf dnešní výroby
 solcast_power_now: sensor.solcast_power_now    # „Predikce"
 solcast_total_today: sensor.solcast_forecast_today  # zdroj detailedForecast pro graf
-chart_min_power_w: 50                          # default 50 — pod touto špičkou se graf nezobrazí
+chart_min_power_w: 50                          # default 50 — pod touto hodnotou aktuální výroby se graf skryje
 navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
 ```
 
@@ -220,8 +220,10 @@ Poznámky:
 - **Výdrž / doba do nabití**: `battery.runtime` se zobrazí vždy, `battery.time_to_full`
   jen dokud baterie nabíjí (výkon ≥ `battery.charge_threshold_w`, default 25 W — sniž,
   pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
-- **Graf pro dny bez výroby**: pokud dnešní špička (realita i predikce) nedosáhne
-  `chart_min_power_w` (default 50 W), graf se vůbec nezobrazí (žádný placeholder text).
+- **Graf jen při výrobě**: graf je vidět, jen dokud aktuální výkon FVE ("Realita")
+  dosahuje alespoň `chart_min_power_w` (default 50 W) — v noci nebo při zanedbatelné
+  výrobě se úplně skryje (žádný placeholder text), jakmile výroba znovu naběhne, graf
+  se zase objeví.
 - **Graf „dnes"** kombinuje historii `pv_power` od půlnoci (plná plocha, zelená)
   a Solcast predikci z atributu `detailedForecast` (přerušovaná čára, žlutá),
   se svislou značkou aktuálního času.

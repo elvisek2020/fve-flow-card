@@ -166,8 +166,10 @@ export class FveFlowMiniCard extends LitElement {
 
     const forecastPoints = this._forecastPoints();
     const chartMinPower = cfg.chart_min_power_w ?? 50;
-    const chartPeak = Math.max(0, ...this._actual.map(([, v]) => v), ...forecastPoints.map(([, v]) => v));
-    const hasChartSignal = chartPeak >= chartMinPower;
+    // Podle aktuálního výkonu FVE ("Realita"), ne podle špičky celého dne —
+    // graf tak zmizí, jakmile výroba klesne pod limit (typicky v noci),
+    // a znovu se objeví, jakmile FVE zase vyrábí nad limit.
+    const hasChartSignal = pvNow >= chartMinPower;
 
     const W = 400;
     const H = 368;

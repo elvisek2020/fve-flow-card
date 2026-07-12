@@ -30,6 +30,10 @@ const fracForAngle = (deg: number): number => (Math.cos(toRad(deg)) + 1) / 2;
 
 const GRADIENT_ID = 'fve-gauge-gradient';
 
+/** mdi:arrow-up-bold (24×24 box), vizuální střed ~(12, 11) — stejná ikona jako
+ * u textového ukazatele nabíjení/vybíjení, jen otočená do směru poloměru. */
+const ARROW_PATH = 'M15,20H9V12H4.16L12,4.16L19.84,12H15V20Z';
+
 /**
  * Půlkruhový (180°) gauge s plynulým semaforovým přechodem
  * červená → žlutá → zelená. Track je jediný souvislý `<path>` barvený
@@ -37,8 +41,9 @@ const GRADIENT_ID = 'fve-gauge-gradient';
  * „kolečka" na hranicích zón, jak by vznikly při skládání z několika
  * samostatných segmentů se `stroke-linecap="round"`. Přechody jsou jemné,
  * ale úzké (`BLEND`), takže barva stále zůstává v okolí reálného prahu.
- * Aktuální hodnota je vyznačená malou svítící šipkou přímo na obloučku,
- * mířící ven ve směru poloměru — žádná ručička do středu.
+ * Aktuální hodnota je vyznačená stejnou plnou šipkou (mdi:arrow-up-bold)
+ * jako jinde v kartě — jen otočenou tak, aby mířila ven ve směru poloměru
+ * přímo z místa na obloučku. Žádná ručička do středu.
  */
 export function renderArcGauge(
   cx: number,
@@ -57,14 +62,15 @@ export function renderArcGauge(
   const greenAngle = Math.max(angleFor(thresholds.greenFrom), yellowAngle);
   const markerAngle = angleFor(value);
 
-  // Šipka (dart) mířící radiálně ven — hrot jen nepatrně za obloučkem
-  // (aby nepůsobil jako samostatný "ocásek"), základna kousek před ním,
-  // mírně rozevřená do stran, aby byl tvar čitelný jako šipka.
-  const spread = 5;
-  const tip = polar(cx, cy, r + strokeWidth / 2 + 2, markerAngle);
-  const baseL = polar(cx, cy, r - 8, markerAngle - spread);
-  const baseR = polar(cx, cy, r - 8, markerAngle + spread);
-  const markerPath = `M ${tip.x.toFixed(2)} ${tip.y.toFixed(2)} L ${baseL.x.toFixed(2)} ${baseL.y.toFixed(2)} L ${baseR.x.toFixed(2)} ${baseR.y.toFixed(2)} Z`;
+  // Ikona (mdi:arrow-up-bold) v klidu míří „nahoru", což v naší úhlové
+  // konvenci (0°=vpravo, 90°=dolů, 180°=vlevo, 270°=nahoru) odpovídá 270°.
+  // Pro nasměrování ven ve směru poloměru proto stačí pootočit o rozdíl
+  // od 270° — díky tomu je ukazatel na první pohled čitelný jako šipka
+  // (stejný tvar jako u řádku „Nabíjení/Vybíjení").
+  const markerPos = polar(cx, cy, r, markerAngle);
+  const markerRotation = markerAngle - 270;
+  const markerSize = 24;
+  const markerScale = markerSize / 24;
 
   const BLEND = 0.05;
   const yFrac = fracForAngle(yellowAngle);
@@ -92,6 +98,10 @@ export function renderArcGauge(
     </defs>
     <path d="${arcPath(cx, cy, r, 180, 360)}" fill="none" stroke="url(#${GRADIENT_ID})"
       stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
-    <path d="${markerPath}" fill="${color}" stroke="rgba(8,14,20,0.9)" stroke-width="1.5"
-      stroke-linejoin="round" style="filter: drop-shadow(0 0 7px ${color})"/>`;
+    <g transform="translate(${markerPos.x.toFixed(2)},${markerPos.y.toFixed(2)})
+        rotate(${markerRotation.toFixed(2)}) scale(${markerScale}) translate(-12,-11)"
+      fill="${color}" stroke="rgba(8,14,20,0.85)" stroke-width="0.8"
+      style="filter: drop-shadow(0 0 3px ${color})">
+      <path d="${ARROW_PATH}"/>
+    </g>`;
 }
