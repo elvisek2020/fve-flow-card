@@ -174,7 +174,7 @@ export class FveFlowMiniCard extends LitElement {
     const W = 400;
     const H = 368;
     const cx = W / 2;
-    const cy = 114;
+    const baseCy = 114;
     const r = 74;
 
     const infoLines: Array<{ text: string; color?: string; arrow?: 'up' | 'down' }> = [];
@@ -184,11 +184,20 @@ export class FveFlowMiniCard extends LitElement {
       infoLines.push({ text: `Do plného nabití ${formatState(this.hass, b.time_to_full)}` });
     }
 
+    // Bez spodní sekce (Realita/Predikce + graf) by gauge s textem osaměl
+    // v horní polovině karty a dole zbylo prázdné místo — proto se v tom
+    // případě celý blok (nadpis + gauge + info řádky) posune tak, aby byl
+    // svisle vycentrovaný v celé výšce karty.
+    const contentBottom = baseCy + 50 + Math.max(0, infoLines.length - 1) * 18;
+    const yShift = hasChartSignal ? 0 : Math.max(0, Math.round((H - 20 - contentBottom) / 2));
+    const titleY = 20 + yShift;
+    const cy = baseCy + yShift;
+
     return html`
       <ha-card @click=${() => this._handleClick()}>
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">
           ${cfg.title
-            ? svg`<text class="card-title" x="${cx}" y="20" text-anchor="middle">${cfg.title}</text>`
+            ? svg`<text class="card-title" x="${cx}" y="${titleY}" text-anchor="middle">${cfg.title}</text>`
             : nothing}
 
           ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
