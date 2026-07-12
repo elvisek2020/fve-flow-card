@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Attach dist to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/fve-flow-card.js
           generate_release_notes: true
