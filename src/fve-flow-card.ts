@@ -852,9 +852,11 @@ export class FveFlowCard extends LitElement {
     const accent = hasIsland && islandP > gridP ? C.island : C.grid;
     // FVE chip(y) vlevo (kudy vstupuje zelený tok z měniče), grid fáze
     // vpravo (kudy vstupuje modrý tok ze sítě). Připraveno i na 3f FVE.
-    const fveLabel = f.island_name || 'FVE';
+    // Vlastní název z nastavení platí jen pro chip; popisky „síť / FVE"
+    // a řádek energie zůstávají se statickým „FVE".
+    const fveChipName = f.island_name || 'FVE';
     const fveChips: PhaseSpec[] = hasIsland
-      ? [{ entity: f.island_power!, name: fveLabel, icon: 'mdi:solar-power', label: 'FVE' }]
+      ? [{ entity: f.island_power!, name: fveChipName, icon: 'mdi:solar-power', label: 'FVE' }]
       : [];
     const gridChips = phases;
 
@@ -890,11 +892,11 @@ export class FveFlowCard extends LitElement {
 
     let energyLine = '';
     if (f.grid_energy && f.island_energy) {
-      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))} · z ${fveLabel} ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))} · z FVE ${formatEnergy(toNum(this.hass, f.island_energy))}`;
     } else if (f.grid_energy) {
       energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
     } else if (f.island_energy) {
-      energyLine = `Celkem z ${fveLabel} ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+      energyLine = `Celkem z FVE ${formatEnergy(toNum(this.hass, f.island_energy))}`;
     }
 
     const canOpenHistory = !!(f.grid_power || f.island_power || phases.some((p) => p.entity));
@@ -911,7 +913,7 @@ export class FveFlowCard extends LitElement {
               : nothing}
             ${hasGridSource && hasIsland ? svg`<tspan class="dim"> · </tspan>` : nothing}
             ${hasIsland
-              ? svg`<tspan class="dim">${fveLabel} </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>`
+              ? svg`<tspan class="dim">FVE </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>`
               : nothing}
           </text>
         `
