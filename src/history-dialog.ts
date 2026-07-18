@@ -21,9 +21,102 @@ export interface HistoryDialogOptions {
 
 const DIALOG_TAG = 'fve-flow-history-dialog';
 
+/** Hledá element i uvnitř shadow DOM (apexcharts-card je Lit komponenta). */
+function queryDeep(root: ParentNode, selector: string): Element | null {
+  const direct = (root as ParentNode & { querySelector: (s: string) => Element | null }).querySelector(
+    selector,
+  );
+  if (direct) return direct;
+  const nodes = (root as ParentNode & { querySelectorAll: (s: string) => NodeListOf<Element> }).querySelectorAll(
+    '*',
+  );
+  for (const el of nodes) {
+    if (el.shadowRoot) {
+      const found = queryDeep(el.shadowRoot, selector);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Simuluje hover na dané frakci šířky plotu (0.5 = −24 h u 48h historie
+ * končící teď). ApexCharts nemá veřejné API pro tooltip na timestamp,
+ * takže posíláme syntetický mousemove.
+ */
+function primeHoverAtFraction(root: HTMLElement, fractionX: number): boolean {
+  const grid =
+    queryDeep(root, '.apexcharts-grid') ||
+    queryDeep(root, '.apexcharts-inner') ||
+    queryDeep(root, '.apexcharts-svg');
+  if (!grid) return false;
+  const rect = grid.getBoundingClientRect();
+  if (rect.width < 20 || rect.height < 20) return false;
+  const clientX = rect.left + rect.width * fractionX;
+  const clientY = rect.top + rect.height * 0.35;
+  const common: MouseEventInit = {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX,
+    clientY,
+    screenX: clientX,
+    screenY: clientY,
+  };
+  const canvas = queryDeep(root, '.apexcharts-canvas') || grid;
+  canvas.dispatchEvent(new MouseEvent('mousemove', common));
+  grid.dispatchEvent(new MouseEvent('mousemove', common));
+  return true;
+}
+
+/**
+ * Drží tooltip na značce −24 h, dokud uživatel nepohne myší nad grafem
+ * (trusted event). Při zavření dialogu volat vrácený cleanup.
+ */
+function startStickyHoverAtFraction(root: HTMLElement, fractionX: number): () => void {
+  let active = true;
+  let intervalId = 0;
+  let delayId = 0;
+  let maxId = 0;
+
+  const stop = () => {
+    if (!active && !intervalId && !delayId && !maxId) return;
+    active = false;
+    if (intervalId) window.clearInterval(intervalId);
+    if (delayId) window.clearTimeout(delayId);
+    if (maxId) window.clearTimeout(maxId);
+    intervalId = 0;
+    delayId = 0;
+    maxId = 0;
+    root.removeEventListener('pointermove', onUserMove, true);
+  };
+
+  const onUserMove = (ev: PointerEvent) => {
+    if (!ev.isTrusted) return;
+    stop();
+  };
+
+  const tick = () => {
+    if (!active) return;
+    primeHoverAtFraction(root, fractionX);
+  };
+
+  root.addEventListener('pointermove', onUserMove, true);
+  // Počkej na vykreslení historie, pak drž tooltip opakováním mousemove.
+  delayId = window.setTimeout(() => {
+    tick();
+    intervalId = window.setInterval(tick, 200);
+  }, 400);
+  // Pojistka — sticky max 30 s (kdyby uživatel nepřijel myší).
+  maxId = window.setTimeout(() => stop(), 30000);
+
+  return stop;
+}
+
 class FveFlowHistoryDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
   private readonly _chartHost: HTMLDivElement;
+  private _cleanupSticky?: () => void;
 
   public constructor() {
     super();
@@ -154,15 +247,30 @@ class FveFlowHistoryDialog extends HTMLElement {
     this._dialog.addEventListener('click', (event) => {
       if (event.target === this._dialog) this._dialog.close();
     });
-    this._dialog.addEventListener('close', () => this.remove());
+    this._dialog.addEventListener('close', () => {
+      this._cleanupSticky?.();
+      this._cleanupSticky = undefined;
+      this.remove();
+    });
   }
 
-  public show(title: string, rangeLabel: string, accent: string, card: LovelaceCard): void {
+  public show(
+    title: string,
+    rangeLabel: string,
+    accent: string,
+    card: LovelaceCard,
+    opts?: { stickyHoverFractionX?: number },
+  ): void {
     this.shadowRoot!.querySelector('h2')!.textContent = title;
     this.shadowRoot!.querySelector('.range')!.textContent = rangeLabel;
     this.style.setProperty('--dialog-accent', accent);
+    this._cleanupSticky?.();
+    this._cleanupSticky = undefined;
     this._chartHost.replaceChildren(card);
     this._dialog.showModal();
+    if (opts?.stickyHoverFractionX != null) {
+      this._cleanupSticky = startStickyHoverAtFraction(card, opts.stickyHoverFractionX);
+    }
   }
 }
 
@@ -191,6 +299,11 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
       return false;
     }
 
+    const mark24hAgo = Date.now() - 24 * 60 * 60 * 1000;
+    // U Solcastu (spanOffset +24h) je uprostřed okna už „Nyní" —
+    // značka −24 h dává smysl jen u čisté 48h historie končící teď.
+    const showMinus24h = !options.spanOffset;
+
     const config: Record<string, unknown> = {
       type: 'custom:apexcharts-card',
       graph_span: '48h',
@@ -211,6 +324,31 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
         },
         grid: { borderColor: 'rgba(148, 170, 190, 0.12)' },
         tooltip: { shared: true, intersect: false },
+        ...(showMinus24h
+          ? {
+              annotations: {
+                xaxis: [
+                  {
+                    x: mark24hAgo,
+                    borderColor: 'rgba(226, 240, 248, 0.55)',
+                    strokeDashArray: 4,
+                    label: {
+                      text: '−24 h',
+                      borderColor: 'transparent',
+                      orientation: 'horizontal',
+                      offsetY: 0,
+                      style: {
+                        color: 'rgba(226, 240, 248, 0.85)',
+                        background: 'rgba(7, 16, 25, 0.85)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                      },
+                    },
+                  },
+                ],
+              },
+            }
+          : {}),
       },
       series: options.series.map((series) => ({
         entity: series.entity,
@@ -258,6 +396,7 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
       options.rangeLabel || 'posledních 48 hodin',
       options.series[0].color,
       card,
+      showMinus24h ? { stickyHoverFractionX: 0.5 } : undefined,
     );
     return true;
   } catch (error) {

@@ -177,6 +177,8 @@ export class FveFlowMiniCard extends LitElement {
     const gridLoad = toNum(this.hass, cfg.grid_power);
     const showFveLoad = !!cfg.fve_load;
     const showGridLoad = !!cfg.grid_power;
+    const fveLoadLabel = cfg.fve_load_name || 'FVE';
+    const gridLabel = cfg.grid_name || 'síť';
 
     const forecastPoints = this._forecastPoints();
     const chartMinPower = cfg.chart_min_power_w ?? 50;
@@ -221,14 +223,14 @@ export class FveFlowMiniCard extends LitElement {
             ? svg`
               <text class="side-value" x="${sideXLeft}" y="${sideValueY}" text-anchor="middle"
                 style="fill: ${C_FVE_LOAD}">${formatPower(fveLoad)}</text>
-              <text class="side-label" x="${sideXLeft}" y="${sideLabelY}" text-anchor="middle">FVE</text>
+              <text class="side-label" x="${sideXLeft}" y="${sideLabelY}" text-anchor="middle">${fveLoadLabel}</text>
             `
             : nothing}
           ${showGridLoad
             ? svg`
               <text class="side-value" x="${sideXRight}" y="${sideValueY}" text-anchor="middle"
                 style="fill: ${C_GRID}">${formatPower(gridLoad)}</text>
-              <text class="side-label" x="${sideXRight}" y="${sideLabelY}" text-anchor="middle">síť</text>
+              <text class="side-label" x="${sideXRight}" y="${sideLabelY}" text-anchor="middle">${gridLabel}</text>
             `
             : nothing}
 

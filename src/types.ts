@@ -226,8 +226,12 @@ export interface FveFlowMiniCardConfig {
   battery?: BatteryConfig;
   /** Spotřeba z FVE / ostrova (W) — vlevo vedle gauge. */
   fve_load?: string;
+  /** Vlastní popisek vlevo (default „FVE"). */
+  fve_load_name?: string;
   /** Spotřeba ze sítě (W) — vpravo vedle gauge. */
   grid_power?: string;
+  /** Vlastní popisek vpravo (default „síť"). */
+  grid_name?: string;
   /** Aktuální výkon FVE panelů (W) — zobrazí se jako „Realita" a v grafu. */
   pv_power?: string;
   /** Predikovaný výkon Solcast teď (W) — zobrazí se jako „Predikce". */

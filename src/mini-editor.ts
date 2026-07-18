@@ -41,9 +41,19 @@ const SCHEMA = [
         custom_label: 'Spotřeba z FVE (W) — vlevo u baterie',
       },
       {
+        name: 'fve_load_name',
+        selector: TEXT,
+        custom_label: 'Vlastní název FVE (vlevo)',
+      },
+      {
         name: 'grid_power',
         selector: ENTITY,
         custom_label: 'Spotřeba ze sítě (W) — vpravo u baterie',
+      },
+      {
+        name: 'grid_name',
+        selector: TEXT,
+        custom_label: 'Vlastní název sítě (vpravo)',
       },
     ],
   },
@@ -103,9 +113,11 @@ const HELPERS: Record<string, string> = {
   charge_threshold_w:
     'Od jakého výkonu (W) se baterie počítá jako "nabíjí" — ovlivňuje, kdy se zobrazí řádek "Do plného nabití". Výchozí 25 W potlačí šum kolem nuly; sniž, pokud chceš vidět dobu do nabití i při velmi slabém nabíjení.',
   fve_load:
-    'Typicky kritické zátěže / výstup měniče (ostrovní spotřeba). Zobrazí se vlevo vedle gauge jako „FVE". Bez entity se levá strana nevykreslí.',
+    'Typicky kritické zátěže / výstup měniče (ostrovní spotřeba). Zobrazí se vlevo vedle gauge. Bez entity se levá strana nevykreslí.',
+  fve_load_name: 'Popisek pod výkonem vlevo. Výchozí „FVE".',
   grid_power:
-    'Typicky AC-IN ze Shelly. Zobrazí se vpravo vedle gauge jako „síť". Bez entity se pravá strana nevykreslí.',
+    'Typicky AC-IN ze Shelly. Zobrazí se vpravo vedle gauge. Bez entity se pravá strana nevykreslí.',
+  grid_name: 'Popisek pod výkonem vpravo. Výchozí „síť".',
   solcast_total_today:
     'Stejná entita jako u velké karty ("Dnes celkem") — karta si z jejího atributu detailedForecast sama vybere dnešní hodiny pro graf.',
   chart_min_power_w:

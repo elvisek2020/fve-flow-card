@@ -207,7 +207,9 @@ battery:
   green_from: 40                               # default 40
   name: Baterie Pylontech
 fve_load: sensor.gx_kriticke_zateze            # spotřeba z FVE — vlevo u gauge
+fve_load_name: FVE                             # vlastní popisek vlevo (default FVE)
 grid_power: sensor.grid_ac_in_vykon            # spotřeba ze sítě — vpravo u gauge
+grid_name: síť                                 # vlastní popisek vpravo (default síť)
 pv_power: sensor.mppt_vykon_fotovoltaiky       # „Realita" + graf dnešní výroby
 solcast_power_now: sensor.solcast_power_now    # „Predikce"
 solcast_total_today: sensor.solcast_forecast_today  # zdroj detailedForecast pro graf
@@ -218,8 +220,9 @@ navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
 Poznámky:
 
 - **Spotřeba FVE / síť**: `fve_load` a `grid_power` se zobrazí vlevo/vpravo
-  vedle bateriového gauge (zelená „FVE" / modrá „síť"). Bez entity se daná
-  strana nevykreslí — karta dává smysl i v noci, kdy spodní graf výroby zmizí.
+  vedle bateriového gauge. Popisky řídí `fve_load_name` / `grid_name`
+  (default „FVE" / „síť"). Bez entity se daná strana nevykreslí — karta dává
+  smysl i v noci, kdy spodní graf výroby zmizí.
 - **Bez `apexcharts-card`** — graf je vlastní lehký SVG (žádná externí závislost).
 - **Stav baterie**: pokud je vyplněné `battery.power`, zobrazí se pod názvem řádek
   „Nabíjení …" / „Vybíjení …" / „Klidový stav" s vektorovou šipkou nahoru/dolů
