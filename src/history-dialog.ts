@@ -187,7 +187,7 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
       ]);
     }
     if (!customElements.get('apexcharts-card')) {
-      console.warn('[FVE Flow Card] apexcharts-card není zaregistrovaná.');
+      console.warn('[Hybrid Energy Flow] apexcharts-card není zaregistrovaná.');
       return false;
     }
 
@@ -261,7 +261,7 @@ export async function openHistoryDialog(options: HistoryDialogOptions): Promise<
     );
     return true;
   } catch (error) {
-    console.warn('[FVE Flow Card] Nepodařilo se otevřít 48h graf, používám nativní historii.', error);
+    console.warn('[Hybrid Energy Flow] Nepodařilo se otevřít 48h graf, používám nativní historii.', error);
     return false;
   }
 }

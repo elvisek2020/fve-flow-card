@@ -29,6 +29,25 @@ const SCHEMA = [
     ],
   },
   {
+    name: 'loads',
+    type: 'expandable',
+    flatten: true,
+    title: 'Spotřeba FVE / síť',
+    icon: 'mdi:flash',
+    schema: [
+      {
+        name: 'fve_load',
+        selector: ENTITY,
+        custom_label: 'Spotřeba z FVE (W) — vlevo u baterie',
+      },
+      {
+        name: 'grid_power',
+        selector: ENTITY,
+        custom_label: 'Spotřeba ze sítě (W) — vpravo u baterie',
+      },
+    ],
+  },
+  {
     // flatten: true — pole se ukládají přímo do konfigurace karty
     // (pv_power, solcast_power_now, solcast_total_today), sekce je jen
     // vizuální seskupení ve formuláři (vzor floor_grid/floor_fve v editor.ts).
@@ -83,12 +102,16 @@ const HELPERS: Record<string, string> = {
   invert: 'Zapni, pokud tvá baterie hlásí kladný výkon při vybíjení (obrácená konvence než Victron).',
   charge_threshold_w:
     'Od jakého výkonu (W) se baterie počítá jako "nabíjí" — ovlivňuje, kdy se zobrazí řádek "Do plného nabití". Výchozí 25 W potlačí šum kolem nuly; sniž, pokud chceš vidět dobu do nabití i při velmi slabém nabíjení.',
+  fve_load:
+    'Typicky kritické zátěže / výstup měniče (ostrovní spotřeba). Zobrazí se vlevo vedle gauge jako „FVE". Bez entity se levá strana nevykreslí.',
+  grid_power:
+    'Typicky AC-IN ze Shelly. Zobrazí se vpravo vedle gauge jako „síť". Bez entity se pravá strana nevykreslí.',
   solcast_total_today:
     'Stejná entita jako u velké karty ("Dnes celkem") — karta si z jejího atributu detailedForecast sama vybere dnešní hodiny pro graf.',
   chart_min_power_w:
     'Graf se zobrazí jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň této hodnoty — v noci nebo při velmi slabé výrobě tak zmizí úplně (žádný placeholder text). Výchozí 50 W.',
   navigation_path:
-    'Cesta velkého FVE Flow dashboardu, např. /lovelace/fve-flow — najdeš ji v adresním řádku prohlížeče, když máš velkou kartu otevřenou. Bez vyplnění klik na kartu otevře jen historii baterie.',
+    'Cesta velkého Hybrid Energy Flow dashboardu, např. /lovelace/fve-flow — najdeš ji v adresním řádku prohlížeče, když máš velkou kartu otevřenou. Bez vyplnění klik na kartu otevře jen historii baterie.',
 };
 
 @customElement('fve-flow-mini-card-editor')

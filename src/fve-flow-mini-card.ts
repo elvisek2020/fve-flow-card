@@ -10,6 +10,8 @@ import './mini-editor';
 
 const C_ACTUAL = '#00e676';
 const C_FORECAST = '#ffd54f';
+const C_FVE_LOAD = '#00e676';
+const C_GRID = '#4fc3f7';
 const HISTORY_REFRESH_MS = 5 * 60 * 1000;
 
 /**
@@ -137,6 +139,8 @@ export class FveFlowMiniCard extends LitElement {
       pv_power: 'sensor.smartsolar_mppt_ve_can_250_100_rev2_id_273_vynosovy_vykon_fotovoltaiky',
       solcast_power_now: 'sensor.solcast_pv_forecast_power_now',
       solcast_total_today: 'sensor.solcast_pv_forecast_forecast_today',
+      fve_load: 'sensor.gx_device_kriticke_zateze_na_l1',
+      grid_power: 'sensor.1np_vstupni_chodba_dub_1nb_grid_ac_in_vykon',
       navigation_path: '/lovelace/fve-flow',
     };
   }
@@ -169,6 +173,10 @@ export class FveFlowMiniCard extends LitElement {
 
     const pvNow = toNum(this.hass, cfg.pv_power);
     const solcastNow = toNum(this.hass, cfg.solcast_power_now);
+    const fveLoad = toNum(this.hass, cfg.fve_load);
+    const gridLoad = toNum(this.hass, cfg.grid_power);
+    const showFveLoad = !!cfg.fve_load;
+    const showGridLoad = !!cfg.grid_power;
 
     const forecastPoints = this._forecastPoints();
     const chartMinPower = cfg.chart_min_power_w ?? 50;
@@ -181,6 +189,11 @@ export class FveFlowMiniCard extends LitElement {
     const cx = W / 2;
     const cy = 114;
     const r = 74;
+    // Postranní spotřeby sedí vedle oblouku gauge (ne pod ním).
+    const sideXLeft = 52;
+    const sideXRight = W - 52;
+    const sideValueY = cy + 2;
+    const sideLabelY = cy + 20;
 
     const infoLines: Array<{ text: string; color?: string; arrow?: 'up' | 'down' }> = [];
     if (b.power) infoLines.push({ text: stateText, color: stateColor, arrow: stateArrow });
@@ -202,6 +215,21 @@ export class FveFlowMiniCard extends LitElement {
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">
           ${cfg.title
             ? svg`<text class="card-title" x="${cx}" y="20" text-anchor="middle">${cfg.title}</text>`
+            : nothing}
+
+          ${showFveLoad
+            ? svg`
+              <text class="side-value" x="${sideXLeft}" y="${sideValueY}" text-anchor="middle"
+                style="fill: ${C_FVE_LOAD}">${formatPower(fveLoad)}</text>
+              <text class="side-label" x="${sideXLeft}" y="${sideLabelY}" text-anchor="middle">FVE</text>
+            `
+            : nothing}
+          ${showGridLoad
+            ? svg`
+              <text class="side-value" x="${sideXRight}" y="${sideValueY}" text-anchor="middle"
+                style="fill: ${C_GRID}">${formatPower(gridLoad)}</text>
+              <text class="side-label" x="${sideXRight}" y="${sideLabelY}" text-anchor="middle">síť</text>
+            `
             : nothing}
 
           ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
@@ -298,6 +326,16 @@ export class FveFlowMiniCard extends LitElement {
       font-size: 13px;
       fill: rgba(226, 240, 248, 0.65);
     }
+    .side-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .side-label {
+      font-size: 11.5px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      fill: rgba(226, 240, 248, 0.45);
+    }
     .headline-value {
       font-size: 22px;
       font-weight: 700;
@@ -324,9 +362,9 @@ declare global {
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'fve-flow-mini-card',
-  name: 'FVE Flow Mini Card',
+  name: 'Hybrid Energy Flow Mini Card',
   description:
-    'Kompaktní karta: baterie jako gauge s výdrží, výroba FVE vs. Solcast predikce. Klik naviguje na velký FVE Flow dashboard.',
+    'Kompaktní karta: baterie jako gauge, spotřeba FVE/síť po stranách, výroba vs. Solcast. Klik naviguje na velký Hybrid Energy Flow dashboard.',
   preview: false,
   documentationURL: 'https://github.com/elvisek/fve-flow-card',
 });

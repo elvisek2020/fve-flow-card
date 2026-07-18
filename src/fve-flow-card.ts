@@ -59,7 +59,7 @@ const PHASE_STYLE: Record<string, { color: string; border: string }> = {
 };
 
 console.info(
-  `%c FVE-FLOW-CARD %c v${CARD_VERSION} `,
+  `%c HYBRID-ENERGY-FLOW %c v${CARD_VERSION} `,
   'color: #0a0f16; background: #00e676; font-weight: 700;',
   'color: #00e676; background: #0a0f16; font-weight: 700;',
 );
@@ -1128,9 +1128,9 @@ declare global {
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'fve-flow-card',
-  name: 'FVE Flow Card',
+  name: 'Hybrid Energy Flow Card',
   description:
-    'Animovaný diagram toků energie pro ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.',
+    'Animovaný diagram toků energie pro hybridní instalaci: ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.',
   preview: false,
   documentationURL: 'https://github.com/elvisek/fve-flow-card',
 });

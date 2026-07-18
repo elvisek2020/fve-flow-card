@@ -1,7 +1,7 @@
 {
   "name": "fve-flow-card",
-  "version": "0.5.9",
-  "description": "Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie pro ostrovní FVE (Victron) + grid po patrech (Shelly).",
+  "version": "0.6.0",
+  "description": "Hybrid Energy Flow Card — animovaný diagram toků energie pro ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.",
   "type": "module",
   "main": "dist/fve-flow-card.js",
   "license": "MIT",

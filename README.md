@@ -1,9 +1,12 @@
-# FVE Flow Card
+# Hybrid Energy Flow Card
 
 Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na míru
-**ostrovní FVE (Victron)** + **grid po patrech (Shelly)**, se Solcast predikcí.
+**hybridní instalaci**: ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.
 
-![FVE Flow Card — náhled](docs/preview.png)
+> Technický typ karty zůstává `custom:fve-flow-card` (a mini `custom:fve-flow-mini-card`),
+> aby se nerozbily existující dashboardy. V HACS a výběru karet se zobrazuje nový název.
+
+![Hybrid Energy Flow Card — náhled](docs/preview.png)
 
 - Ostrovní větev: FVE panely → MPPT → baterie Pylontech ↔ MultiPlus-II → patra
 - Gridová větev: AC-IN (Shelly) → patra, každé patro s pojmenovanými fázemi
@@ -37,7 +40,7 @@ názvech, funguje s čímkoli, co vrací čísla ve W / kWh / %.
 1. HACS → tři tečky vpravo nahoře → **Custom repositories**
 2. Vlož URL tohoto repozitáře, kategorie **Dashboard** (Lovelace)
 3. Pro vlastní grafy nainstaluj z HACS také **ApexCharts Card**
-4. Nainstaluj **FVE Flow Card** a reloadni prohlížeč
+4. Nainstaluj **Hybrid Energy Flow Card** a reloadni prohlížeč
 
 HACS řeší registraci resource i cache-busting automaticky; updaty se nabízejí
 z GitHub releases.
@@ -51,7 +54,7 @@ z GitHub releases.
 
 ## Konfigurace
 
-Kartu přidáš přes výběr karet (**FVE Flow Card**) a nakonfiguruješ v GUI editoru.
+Kartu přidáš přes výběr karet (**Hybrid Energy Flow Card**) a nakonfiguruješ v GUI editoru.
 Ekvivalentní YAML:
 
 ```yaml
@@ -179,16 +182,16 @@ Poznámky:
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 
-## FVE Flow Mini Card
+## Hybrid Energy Flow Mini Card
 
 Druhá karta ve stejném balíčku — kompaktní shrnutí pro hlavní dashboard
 (nahrazuje např. samostatnou kartu „Solární výroba" + „Stav baterie").
 Baterie je hlavní ukazatel jako půlkruhový gauge se semaforovými zónami,
-pod ním hlavičkové hodnoty „Realita" (aktuální výkon FVE) vs. „Predikce"
-(Solcast) a lehký graf dnešního dne. **Klik kamkoli na kartu** naviguje na
-velký `fve-flow-card` dashboard.
+po stranách spotřeba z FVE a ze sítě, pod ním (když FVE vyrábí) hlavičkové
+hodnoty „Realita" vs. „Predikce" a lehký graf dnešního dne.
+**Klik kamkoli na kartu** naviguje na velký Hybrid Energy Flow dashboard.
 
-![FVE Flow Mini Card — náhled](docs/preview-mini.png)
+![Hybrid Energy Flow Mini Card — náhled](docs/preview-mini.png)
 
 ```yaml
 type: custom:fve-flow-mini-card
@@ -203,6 +206,8 @@ battery:
   yellow_from: 15                              # default 15
   green_from: 40                               # default 40
   name: Baterie Pylontech
+fve_load: sensor.gx_kriticke_zateze            # spotřeba z FVE — vlevo u gauge
+grid_power: sensor.grid_ac_in_vykon            # spotřeba ze sítě — vpravo u gauge
 pv_power: sensor.mppt_vykon_fotovoltaiky       # „Realita" + graf dnešní výroby
 solcast_power_now: sensor.solcast_power_now    # „Predikce"
 solcast_total_today: sensor.solcast_forecast_today  # zdroj detailedForecast pro graf
@@ -212,6 +217,9 @@ navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
 
 Poznámky:
 
+- **Spotřeba FVE / síť**: `fve_load` a `grid_power` se zobrazí vlevo/vpravo
+  vedle bateriového gauge (zelená „FVE" / modrá „síť"). Bez entity se daná
+  strana nevykreslí — karta dává smysl i v noci, kdy spodní graf výroby zmizí.
 - **Bez `apexcharts-card`** — graf je vlastní lehký SVG (žádná externí závislost).
 - **Stav baterie**: pokud je vyplněné `battery.power`, zobrazí se pod názvem řádek
   „Nabíjení …" / „Vybíjení …" / „Klidový stav" s vektorovou šipkou nahoru/dolů
@@ -235,7 +243,7 @@ Poznámky:
 - **Navigace**: bez `navigation_path` otevře klik jen nativní historii baterie
   (fallback), jinak přepne na zadaný dashboard stejným mechanismem jako
   tlačítko nastavení ve velké kartě.
-- Konfiguruje se stejně přes GUI editor karty (výběr **FVE Flow Mini Card**).
+- Konfiguruje se stejně přes GUI editor karty (výběr **Hybrid Energy Flow Mini Card**).
 
 ## Vývoj
 

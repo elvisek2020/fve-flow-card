@@ -224,6 +224,10 @@ export interface FveFlowMiniCardConfig {
   type: string;
   title?: string;
   battery?: BatteryConfig;
+  /** Spotřeba z FVE / ostrova (W) — vlevo vedle gauge. */
+  fve_load?: string;
+  /** Spotřeba ze sítě (W) — vpravo vedle gauge. */
+  grid_power?: string;
   /** Aktuální výkon FVE panelů (W) — zobrazí se jako „Realita" a v grafu. */
   pv_power?: string;
   /** Predikovaný výkon Solcast teď (W) — zobrazí se jako „Predikce". */
@@ -231,8 +235,8 @@ export interface FveFlowMiniCardConfig {
   /** Entita s atributem `detailedForecast` — zdroj dnešní křivky predikce v grafu. */
   solcast_total_today?: string;
   /**
-   * Minimální dnešní špička výkonu (W) mezi realitou a predikcí, od které
-   * se místo prázdného/plochého grafu zobrazí graf vůbec. Default 50 W.
+   * Minimální aktuální výkon FVE (W), od kterého se zobrazí spodní sekce
+   * s Realitou/Predikcí a grafem. Default 50 W.
    */
   chart_min_power_w?: number;
   /** Cesta pro navigaci po kliknutí na kartu, např. `/lovelace/fve-flow`. */
