@@ -143,7 +143,7 @@ export interface SolcastConfig extends SeverityFields {
 
 /**
  * Konfigurace jednoho patra. Patro je uzel se dvěma vstupy:
- * grid větev (Shelly *-GRID-AC-OUT) a FVE/ostrovní větev.
+ * grid větev a FVE/fotovoltaická větev.
  * Fáze grid větve mají volitelné vlastní názvy + ikony (pračka, sušička, sporák...).
  */
 export interface FloorConfig {
@@ -152,19 +152,27 @@ export interface FloorConfig {
   grid_power?: string;
   /** Energie patra ze sítě (kWh). */
   grid_energy?: string;
-  /** Výkon patra z ostrova/FVE (W) — patrová Shelly na FVE větvi. */
+  /** Výkon patra z FVE (W). */
   island_power?: string;
-  /** Energie patra z ostrova (kWh). */
+  /** Energie patra z FVE (kWh). */
   island_energy?: string;
+  /** Vlastní název FVE chipu na patře (default „FVE"). */
+  island_name?: string;
   phase_a_entity?: string;
   phase_a_name?: string;
   phase_a_icon?: string;
+  /** Zobrazit L1 i bez vyplněné entity (neaktivní chip). */
+  phase_a_show?: boolean;
   phase_b_entity?: string;
   phase_b_name?: string;
   phase_b_icon?: string;
+  /** Zobrazit L2 i bez vyplněné entity (neaktivní chip). */
+  phase_b_show?: boolean;
   phase_c_entity?: string;
   phase_c_name?: string;
   phase_c_icon?: string;
+  /** Zobrazit L3 i bez vyplněné entity (neaktivní chip). */
+  phase_c_show?: boolean;
 }
 
 /** Ladění chování toků a animací. */
@@ -200,7 +208,8 @@ export interface FveFlowCardConfig {
 
 /** Jedna fáze patra po rozbalení konfigurace. */
 export interface PhaseSpec {
-  entity: string;
+  /** Entita výkonu; chybí u neaktivního placeholder chipu. */
+  entity?: string;
   name: string;
   icon: string;
   label: string; // L1/L2/L3

@@ -143,7 +143,7 @@ const SCHEMA = [
  * Schéma jednoho patra. Grid a FVE větev jsou samostatné skládací sekce
  * (stejně jako u hlavního formuláře), ale data zůstávají plochá přímo
  * v objektu patra — proto `flatten: true`. Fáze L1–L3 patří pod Grid,
- * protože jde o rozpad gridové AC-OUT větve (Shelly), ne FVE.
+ * protože jde o rozpad gridové AC-OUT větve, ne FVE.
  */
 const FLOOR_SCHEMA = [
   { name: 'name', required: true, selector: TEXT, custom_label: 'Název patra' },
@@ -152,7 +152,7 @@ const FLOOR_SCHEMA = [
     type: 'expandable',
     flatten: true,
     expanded: true,
-    title: 'Grid (síť) — Shelly *-GRID-AC-OUT',
+    title: 'Grid (síť)',
     icon: 'mdi:transmission-tower',
     schema: [
       { name: 'grid_power', selector: ENTITY },
@@ -160,12 +160,15 @@ const FLOOR_SCHEMA = [
       { name: 'phase_a_entity', selector: ENTITY },
       { name: 'phase_a_name', selector: TEXT },
       { name: 'phase_a_icon', selector: ICON },
+      { name: 'phase_a_show', selector: BOOL },
       { name: 'phase_b_entity', selector: ENTITY },
       { name: 'phase_b_name', selector: TEXT },
       { name: 'phase_b_icon', selector: ICON },
+      { name: 'phase_b_show', selector: BOOL },
       { name: 'phase_c_entity', selector: ENTITY },
       { name: 'phase_c_name', selector: TEXT },
       { name: 'phase_c_icon', selector: ICON },
+      { name: 'phase_c_show', selector: BOOL },
     ],
   },
   {
@@ -173,9 +176,10 @@ const FLOOR_SCHEMA = [
     type: 'expandable',
     flatten: true,
     expanded: true,
-    title: 'FVE (ostrov)',
+    title: 'Fotovoltaika',
     icon: 'mdi:solar-power',
     schema: [
+      { name: 'island_name', selector: TEXT, custom_label: 'Vlastní název FVE' },
       { name: 'island_power', selector: ENTITY },
       { name: 'island_energy', selector: ENTITY },
     ],
@@ -217,12 +221,15 @@ const LABELS: Record<string, string> = {
   phase_a_entity: 'Entita výkonu L1 (W)',
   phase_a_name: 'Vlastní název L1 (např. Pračka)',
   phase_a_icon: 'Ikona L1',
+  phase_a_show: 'Zobrazit L1 i bez entity',
   phase_b_entity: 'Entita výkonu L2 (W)',
   phase_b_name: 'Vlastní název L2 (např. Sušička)',
   phase_b_icon: 'Ikona L2',
+  phase_b_show: 'Zobrazit L2 i bez entity',
   phase_c_entity: 'Entita výkonu L3 (W)',
   phase_c_name: 'Vlastní název L3 (např. Sporák)',
   phase_c_icon: 'Ikona L3',
+  phase_c_show: 'Zobrazit L3 i bez entity',
   power_now: 'Predikovaný výkon teď (W)',
   remaining_today: 'Zbývá dnes (kWh)',
   total_today: 'Dnes celkem (kWh)',
@@ -240,6 +247,7 @@ const LABELS: Record<string, string> = {
   severity_invert: 'Obrátit barvy (vysoká hodnota = špatná)',
   grid_power: 'Výkon ze sítě (W) — nepovinné, jinak součet fází',
   grid_energy: 'Energie ze sítě (kWh)',
+  island_name: 'Vlastní název FVE',
   island_power: 'Výkon z FVE (W)',
   island_energy: 'Energie z FVE (kWh)',
 };
@@ -259,6 +267,9 @@ const HELPERS: Record<string, string> = {
   max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
+  phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
+  phase_b_show: 'Když je zapnuto a chybí entita L2, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
+  phase_c_show: 'Když je zapnuto a chybí entita L3, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
 };
 
 @customElement('fve-flow-card-editor')
@@ -326,8 +337,8 @@ export class FveFlowCardEditor extends LitElement {
       )}
       ${!floors.length
         ? html`<div class="hint">
-            Zatím žádná patra — přidej první přes tlačítko výše. Každé patro může mít grid větev
-            (Shelly *-GRID-AC-OUT), FVE větev a pojmenované fáze.
+            Zatím žádná patra — přidej první přes tlačítko výše. Každé patro může mít grid větev,
+            FVE větev a pojmenované fáze.
           </div>`
         : nothing}
     `;

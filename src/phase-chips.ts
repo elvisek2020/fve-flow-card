@@ -29,6 +29,7 @@ export interface PhaseChipsOptions extends ChipStyle {
 /**
  * Fáze patra vykreslené čistě v SVG (bez foreignObject + ha-icon).
  * foreignObject v škálovaném SVG způsobuje „utečení" ikon do středu scény.
+ * Bez entity = neaktivní placeholder (ztlumený, „—", bez kliku).
  */
 export function renderPhaseChips(
   r: Rect,
@@ -49,23 +50,27 @@ export function renderPhaseChips(
   const chipW = (totalW - gap * Math.max(0, phases.length - 1)) / phases.length;
 
   return svg`${phases.map((ph, i) => {
+    const inactive = !ph.entity;
     const style = opts?.itemStyle?.(ph, i);
     const drawIcon = style?.icon ?? opts?.icon ?? iconBolt;
     const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
     const borderColor = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
     const x = zoneX + i * (chipW + gap);
     const cx = x + chipW / 2;
-    const power = formatPower(toNum(hass, ph.entity));
+    const power = inactive ? '—' : formatPower(toNum(hass, ph.entity));
     const iconSize = 14;
     const iconX = cx - iconSize / 2;
     const iconY = chipY + 12;
 
     return svg`
-      <g class="phase-chip" @click=${(e: Event) => {
-        e.stopPropagation();
-        onOpen(ph.entity);
-      }}>
-        <title>${ph.label} · ${ph.name}</title>
+      <g class="phase-chip${inactive ? ' inactive' : ''}" opacity="${inactive ? 0.35 : 1}"
+        @click=${inactive
+          ? undefined
+          : (e: Event) => {
+              e.stopPropagation();
+              onOpen(ph.entity!);
+            }}>
+        <title>${ph.label} · ${ph.name}${inactive ? ' (neaktivní)' : ''}</title>
         <rect x="${x}" y="${chipY}" width="${chipW}" height="${chipH}" rx="10"
           fill="rgba(255,255,255,0.045)" stroke="${borderColor}" stroke-width="1"/>
         ${drawIcon(iconX, iconY, iconSize, iconColor)}

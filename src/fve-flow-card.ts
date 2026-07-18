@@ -350,6 +350,7 @@ export class FveFlowCard extends LitElement {
       series.push({ entity: f.grid_power, name: 'Síť', color: C.grid });
     } else {
       phases.forEach((phase) => {
+        if (!phase.entity) return;
         series.push({
           entity: phase.entity,
           name: phase.name || phase.label,
@@ -358,7 +359,7 @@ export class FveFlowCard extends LitElement {
       });
     }
     if (f.island_power) {
-      series.push({ entity: f.island_power, name: 'FVE', color: C.island });
+      series.push({ entity: f.island_power, name: f.island_name || 'FVE', color: C.island });
     }
 
     void this._openHistory(series, title);
@@ -381,16 +382,25 @@ export class FveFlowCard extends LitElement {
       }));
   }
 
-  /** Fáze patra rozbalené z ploché konfigurace. */
+  /** Fáze patra rozbalené z ploché konfigurace (včetně neaktivních placeholderů). */
   private _phases(f: FloorConfig): PhaseSpec[] {
     const out: PhaseSpec[] = [];
-    const defs: Array<[string | undefined, string | undefined, string | undefined, string]> = [
-      [f.phase_a_entity, f.phase_a_name, f.phase_a_icon, 'L1'],
-      [f.phase_b_entity, f.phase_b_name, f.phase_b_icon, 'L2'],
-      [f.phase_c_entity, f.phase_c_name, f.phase_c_icon, 'L3'],
+    const defs: Array<
+      [string | undefined, string | undefined, string | undefined, boolean | undefined, string]
+    > = [
+      [f.phase_a_entity, f.phase_a_name, f.phase_a_icon, f.phase_a_show, 'L1'],
+      [f.phase_b_entity, f.phase_b_name, f.phase_b_icon, f.phase_b_show, 'L2'],
+      [f.phase_c_entity, f.phase_c_name, f.phase_c_icon, f.phase_c_show, 'L3'],
     ];
-    for (const [entity, name, icon, label] of defs) {
-      if (entity) out.push({ entity, name: name || label, icon: icon || 'mdi:flash', label });
+    for (const [entity, name, icon, show, label] of defs) {
+      if (entity || show) {
+        out.push({
+          entity: entity || undefined,
+          name: name || label,
+          icon: icon || 'mdi:flash',
+          label,
+        });
+      }
     }
     return out;
   }
@@ -837,12 +847,14 @@ export class FveFlowCard extends LitElement {
     const hasIsland = !!f.island_power && hasNum(this.hass, f.island_power);
     const islandP = hasIsland ? toNum(this.hass, f.island_power) : 0;
     const phases = this._phases(f);
+    const hasGridSource = !!(f.grid_power || phases.some((p) => p.entity));
     const active = Math.abs(gridP) >= this._flowBase().deadband || (hasIsland && Math.abs(islandP) >= this._flowBase().deadband);
     const accent = hasIsland && islandP > gridP ? C.island : C.grid;
     // FVE chip(y) vlevo (kudy vstupuje zelený tok z měniče), grid fáze
     // vpravo (kudy vstupuje modrý tok ze sítě). Připraveno i na 3f FVE.
+    const fveLabel = f.island_name || 'FVE';
     const fveChips: PhaseSpec[] = hasIsland
-      ? [{ entity: f.island_power!, name: 'FVE výroba', icon: 'mdi:solar-power', label: 'FVE' }]
+      ? [{ entity: f.island_power!, name: fveLabel, icon: 'mdi:solar-power', label: 'FVE' }]
       : [];
     const gridChips = phases;
 
@@ -876,22 +888,40 @@ export class FveFlowCard extends LitElement {
     const chipTop = r.y + r.h - 72 - 24;
     const dividerX = r.x + pad + fveW + dividerSpace / 2;
 
+    let energyLine = '';
+    if (f.grid_energy && f.island_energy) {
+      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))} · z ${fveLabel} ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+    } else if (f.grid_energy) {
+      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
+    } else if (f.island_energy) {
+      energyLine = `Celkem z ${fveLabel} ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+    }
+
+    const canOpenHistory = !!(f.grid_power || f.island_power || phases.some((p) => p.entity));
+
     return svg`
       ${this._panel(r, accent, active)}
       ${iconHome(r.x + 16, r.y + 12, 30, accent)}
       <text class="floor-name" x="${r.x + 54}" y="${r.y + 34}">${f.name ?? 'Patro'}</text>
-      <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 32}" text-anchor="end">
-        <tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>
-      </text>
-      <text class="tiny" x="${r.x + 54}" y="${r.y + 56}">
-        ${f.grid_energy ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}` : ''}
-        ${f.island_energy ? ` · z fve ${formatEnergy(toNum(this.hass, f.island_energy))}` : ''}
-      </text>
+      ${hasGridSource || hasIsland
+        ? svg`
+          <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 32}" text-anchor="end">
+            ${hasGridSource
+              ? svg`<tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>`
+              : nothing}
+            ${hasGridSource && hasIsland ? svg`<tspan class="dim"> · </tspan>` : nothing}
+            ${hasIsland
+              ? svg`<tspan class="dim">${fveLabel} </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>`
+              : nothing}
+          </text>
+        `
+        : nothing}
+      ${energyLine
+        ? svg`<text class="tiny" x="${r.x + 54}" y="${r.y + 56}">${energyLine}</text>`
+        : nothing}
       ${this._hit(
         { x: r.x, y: r.y, w: r.w, h: 64 },
-        f.grid_power || f.island_power || phases.length
-          ? () => this._openFloorHistory(f, phases)
-          : undefined,
+        canOpenHistory ? () => this._openFloorHistory(f, phases) : undefined,
       )}
       ${split
         ? svg`<line x1="${dividerX}" y1="${chipTop - 4}" x2="${dividerX}" y2="${chipTop + 76}"
@@ -1022,12 +1052,20 @@ export class FveFlowCard extends LitElement {
     .phase-chip {
       cursor: pointer;
     }
+    .phase-chip.inactive {
+      cursor: default;
+      pointer-events: none;
+    }
     .phase-chip rect {
       transition: fill 0.15s ease, stroke 0.15s ease;
     }
     .phase-chip:hover rect {
       fill: rgba(255, 255, 255, 0.09);
       stroke: rgba(79, 195, 247, 0.55);
+    }
+    .phase-chip.inactive:hover rect {
+      fill: rgba(255, 255, 255, 0.045);
+      stroke: inherit;
     }
     .chip-value {
       font-size: 13px;
