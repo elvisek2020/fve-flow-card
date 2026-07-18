@@ -195,7 +195,7 @@ hodnoty „Realita" vs. „Predikce" a lehký graf dnešního dne.
 
 ```yaml
 type: custom:fve-flow-mini-card
-title: FVE přehled
+title: Hybrid Energy Flow
 battery:
   soc: sensor.baterie_nabijeni                 # povinné
   power: sensor.baterie_vykon                  # kladné = nabíjení (Victron)

@@ -129,7 +129,7 @@ export class FveFlowMiniCard extends LitElement {
 
   public static getStubConfig(): Record<string, unknown> {
     return {
-      title: 'FVE přehled',
+      title: 'Hybrid Energy Flow',
       battery: {
         soc: 'sensor.pylontech_battery_id_512_nabijeni',
         power: 'sensor.pylontech_battery_id_512_vykon',
