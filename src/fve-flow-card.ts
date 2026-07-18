@@ -635,12 +635,15 @@ export class FveFlowCard extends LitElement {
     const rawState = pv.mppt_state
       ? this.hass?.states[pv.mppt_state]?.state.trim().toLowerCase()
       : undefined;
+    const isOff = rawState === 'off' || rawState === 'vypnuto';
     const active =
       !!rawState && !['off', 'vypnuto', 'unknown', 'unavailable'].includes(rawState);
+    // Stejná červená jako u FVE panelů pod prahem (0 W) — zelená jen když MPPT běží.
+    const accent = isOff ? C.crit : C.solar;
     return svg`
-      ${this._panel(r, C.solar, active)}
+      ${this._panel(r, accent, active)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${pv.mppt_name || 'MPPT regulátor'}</text>
-      ${iconMppt(r.x + 18, r.y + 44, 48, active ? C.solar : 'rgba(148,170,190,0.5)')}
+      ${iconMppt(r.x + 18, r.y + 44, 48, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}">${state}</text>
       <text class="small" x="${r.x + 80}" y="${r.y + 92}">
         Napětí <tspan class="strong">${pv.voltage ? formatState(this.hass, pv.voltage) : '—'}</tspan>
