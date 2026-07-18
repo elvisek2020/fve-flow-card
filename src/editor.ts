@@ -278,6 +278,12 @@ export class FveFlowCardEditor extends LitElement {
 
   @state() private _config?: FveFlowCardConfig;
 
+  /** Index patra právě přetahovaného (DnD). */
+  @state() private _dragFromIdx?: number;
+
+  /** Index patra pod kurzorem během DnD (vizuální drop target). */
+  @state() private _dragOverIdx?: number;
+
   public setConfig(config: FveFlowCardConfig): void {
     this._config = config;
   }
@@ -308,37 +314,70 @@ export class FveFlowCardEditor extends LitElement {
 
       ${floors.map(
         (floor, idx) => html`
-          <ha-expansion-panel outlined>
-            <div slot="header" class="floor-header">
-              <span>${floor.name || `Patro ${idx + 1}`}</span>
-              <button
-                class="remove"
-                title="Odebrat patro"
-                @click=${(e: Event) => {
-                  e.stopPropagation();
-                  this._removeFloor(idx);
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            <div class="floor-body">
-              <ha-form
-                .hass=${this.hass}
-                .data=${floor}
-                .schema=${FLOOR_SCHEMA}
-                .computeLabel=${this._computeLabel}
-                .computeHelper=${this._computeHelper}
-                @value-changed=${(e: CustomEvent) => this._floorChanged(e, idx)}
-              ></ha-form>
-            </div>
-          </ha-expansion-panel>
+          <div
+            class="floor-wrap${this._dragOverIdx === idx ? ' drop-target' : ''}${this._dragFromIdx === idx ? ' dragging' : ''}"
+            @dragover=${(e: DragEvent) => this._onFloorDragOver(e, idx)}
+            @dragleave=${() => this._onFloorDragLeave(idx)}
+            @drop=${(e: DragEvent) => this._onFloorDrop(e, idx)}
+          >
+            <ha-expansion-panel outlined>
+              <div slot="header" class="floor-header">
+                <span
+                  class="drag-handle"
+                  title="Přetáhnout pro změnu pořadí"
+                  draggable="true"
+                  @click=${(e: Event) => e.stopPropagation()}
+                  @dragstart=${(e: DragEvent) => this._onFloorDragStart(e, idx)}
+                  @dragend=${() => this._onFloorDragEnd()}
+                >☰</span>
+                <span class="floor-title">${floor.name || `Patro ${idx + 1}`}</span>
+                <span class="floor-actions">
+                  <button
+                    class="move"
+                    title="Posunout nahoru"
+                    ?disabled=${idx === 0}
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this._moveFloor(idx, idx - 1);
+                    }}
+                  >▲</button>
+                  <button
+                    class="move"
+                    title="Posunout dolů"
+                    ?disabled=${idx >= floors.length - 1}
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this._moveFloor(idx, idx + 1);
+                    }}
+                  >▼</button>
+                  <button
+                    class="remove"
+                    title="Odebrat patro"
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this._removeFloor(idx);
+                    }}
+                  >✕</button>
+                </span>
+              </div>
+              <div class="floor-body">
+                <ha-form
+                  .hass=${this.hass}
+                  .data=${floor}
+                  .schema=${FLOOR_SCHEMA}
+                  .computeLabel=${this._computeLabel}
+                  .computeHelper=${this._computeHelper}
+                  @value-changed=${(e: CustomEvent) => this._floorChanged(e, idx)}
+                ></ha-form>
+              </div>
+            </ha-expansion-panel>
+          </div>
         `,
       )}
       ${!floors.length
         ? html`<div class="hint">
             Zatím žádná patra — přidej první přes tlačítko výše. Každé patro může mít grid větev,
-            FVE větev a pojmenované fáze.
+            FVE větev a pojmenované fáze. Pořadí změníš šipkami nebo přetažením za ☰.
           </div>`
         : nothing}
     `;
@@ -365,6 +404,46 @@ export class FveFlowCardEditor extends LitElement {
   private _removeFloor(idx: number): void {
     const floors = (this._config?.floors ?? []).filter((_, i) => i !== idx);
     this._emit({ ...(this._config as FveFlowCardConfig), floors });
+  }
+
+  /** Přesune patro z indexu `from` na index `to` (včetně drag & drop). */
+  private _moveFloor(from: number, to: number): void {
+    const floors = [...(this._config?.floors ?? [])];
+    if (from < 0 || to < 0 || from >= floors.length || to >= floors.length || from === to) return;
+    const [item] = floors.splice(from, 1);
+    floors.splice(to, 0, item);
+    this._emit({ ...(this._config as FveFlowCardConfig), floors });
+  }
+
+  private _onFloorDragStart(ev: DragEvent, idx: number): void {
+    this._dragFromIdx = idx;
+    ev.dataTransfer?.setData('text/plain', String(idx));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  private _onFloorDragOver(ev: DragEvent, idx: number): void {
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    if (this._dragOverIdx !== idx) this._dragOverIdx = idx;
+  }
+
+  private _onFloorDragLeave(idx: number): void {
+    if (this._dragOverIdx === idx) this._dragOverIdx = undefined;
+  }
+
+  private _onFloorDrop(ev: DragEvent, to: number): void {
+    ev.preventDefault();
+    const raw = ev.dataTransfer?.getData('text/plain');
+    const from = raw !== undefined && raw !== '' ? Number(raw) : this._dragFromIdx;
+    this._dragFromIdx = undefined;
+    this._dragOverIdx = undefined;
+    if (from === undefined || Number.isNaN(from)) return;
+    this._moveFloor(from, to);
+  }
+
+  private _onFloorDragEnd(): void {
+    this._dragFromIdx = undefined;
+    this._dragOverIdx = undefined;
   }
 
   private _emit(config: FveFlowCardConfig): void {
@@ -397,17 +476,57 @@ export class FveFlowCardEditor extends LitElement {
       font-weight: 600;
       cursor: pointer;
     }
+    .floor-wrap {
+      margin-bottom: 8px;
+      border-radius: 8px;
+      transition: box-shadow 0.15s ease, opacity 0.15s ease;
+    }
+    .floor-wrap.dragging {
+      opacity: 0.55;
+    }
+    .floor-wrap.drop-target {
+      box-shadow: 0 0 0 2px var(--primary-color);
+    }
     ha-expansion-panel {
       display: block;
-      margin-bottom: 8px;
     }
     .floor-header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 8px;
       width: 100%;
       padding-right: 8px;
     }
+    .floor-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .drag-handle {
+      cursor: grab;
+      user-select: none;
+      color: var(--secondary-text-color);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    .drag-handle:hover {
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.12);
+      color: var(--primary-text-color);
+    }
+    .floor-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .floor-header .move,
     .floor-header .remove {
       background: transparent;
       border: 1px solid var(--divider-color, #444);
@@ -415,6 +534,16 @@ export class FveFlowCardEditor extends LitElement {
       border-radius: 6px;
       padding: 2px 8px;
       cursor: pointer;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .floor-header .move:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .floor-header .move:not(:disabled):hover {
+      color: var(--primary-text-color);
+      border-color: var(--primary-color);
     }
     .floor-header .remove:hover {
       color: var(--error-color, #f44336);
