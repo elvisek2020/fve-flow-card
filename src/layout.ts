@@ -33,8 +33,10 @@ export interface LayoutOptions {
   backButton?: boolean;
 }
 
-const BACK_BTN_H = 70;
-const BACK_BTN_GAP = 20;
+// Výška v SVG jednotkách — při typickém škálování panel view (~0.78)
+// odpovídá cca 70 CSS px na obrazovce.
+const BACK_BTN_H = 90;
+const BACK_BTN_GAP_DESKTOP = 50;
 
 // Širší box kvůli rozdělení na FVE zónu (vlevo) a grid zónu (vpravo).
 const FLOOR_W = 380;
@@ -75,7 +77,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   const backButton: Rect | undefined = opts.backButton
     ? {
         x: inverter.x,
-        y: inverter.y + inverter.h + BACK_BTN_GAP,
+        y: inverter.y + inverter.h + BACK_BTN_GAP_DESKTOP,
         w: inverter.w,
         h: BACK_BTN_H,
       }
