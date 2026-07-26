@@ -488,10 +488,10 @@ export class FveFlowCard extends LitElement {
    */
   private _backButton(r: Rect): TemplateResult {
     const cx = r.x + r.w / 2;
-    const square = 22;
+    const square = 30;
     // Ikona a popisek vycentrované ve svislé ose tlačítka.
-    const squareY = r.y + r.h / 2 - 22;
-    const labelY = r.y + r.h / 2 + 20;
+    const squareY = r.y + r.h / 2 - 28;
+    const labelY = r.y + r.h / 2 + 24;
     return svg`
       <g class="back-btn" @click=${(e: Event) => {
         e.stopPropagation();

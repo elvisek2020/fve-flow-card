@@ -33,10 +33,10 @@ export interface LayoutOptions {
   backButton?: boolean;
 }
 
-// Výška v SVG jednotkách — při typickém škálování panel view (~0.78)
-// odpovídá cca 70 CSS px na obrazovce.
+// Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
+// odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.
 const BACK_BTN_H = 90;
-const BACK_BTN_GAP_DESKTOP = 50;
+const BACK_BTN_GAP_DESKTOP = 64;
 
 // Širší box kvůli rozdělení na FVE zónu (vlevo) a grid zónu (vpravo).
 const FLOOR_W = 380;
