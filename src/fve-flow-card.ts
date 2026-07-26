@@ -346,6 +346,9 @@ export class FveFlowCard extends LitElement {
     const title = `${f.name || 'Patro'} · výkon`;
     const series: HistorySeries[] = [];
 
+    if (f.island_power) {
+      series.push({ entity: f.island_power, name: f.island_name || 'FVE', color: C.island });
+    }
     if (f.grid_power) {
       series.push({ entity: f.grid_power, name: 'Síť', color: C.grid });
     } else {
@@ -357,9 +360,6 @@ export class FveFlowCard extends LitElement {
           color: PHASE_STYLE[phase.label]?.color ?? C.grid,
         });
       });
-    }
-    if (f.island_power) {
-      series.push({ entity: f.island_power, name: f.island_name || 'FVE', color: C.island });
     }
 
     void this._openHistory(series, title);
@@ -855,7 +855,7 @@ export class FveFlowCard extends LitElement {
     const accent = hasIsland && islandP > gridP ? C.island : C.grid;
     // FVE chip(y) vlevo (kudy vstupuje zelený tok z měniče), grid fáze
     // vpravo (kudy vstupuje modrý tok ze sítě). Připraveno i na 3f FVE.
-    // Vlastní název z nastavení platí jen pro chip; popisky „síť / FVE"
+    // Vlastní název z nastavení platí jen pro chip; popisky „FVE / síť"
     // a řádek energie zůstávají se statickým „FVE".
     const fveChipName = f.island_name || 'FVE';
     const fveChips: PhaseSpec[] = hasIsland
@@ -895,11 +895,11 @@ export class FveFlowCard extends LitElement {
 
     let energyLine = '';
     if (f.grid_energy && f.island_energy) {
-      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))} · z FVE ${formatEnergy(toNum(this.hass, f.island_energy))}`;
-    } else if (f.grid_energy) {
-      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
+      energyLine = `Celkem z FVE ${formatEnergy(toNum(this.hass, f.island_energy))} · ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
     } else if (f.island_energy) {
       energyLine = `Celkem z FVE ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+    } else if (f.grid_energy) {
+      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
     }
 
     const canOpenHistory = !!(f.grid_power || f.island_power || phases.some((p) => p.entity));
@@ -911,12 +911,12 @@ export class FveFlowCard extends LitElement {
       ${hasGridSource || hasIsland
         ? svg`
           <text class="floor-val" x="${r.x + r.w - 20}" y="${r.y + 32}" text-anchor="end">
-            ${hasGridSource
-              ? svg`<tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>`
-              : nothing}
-            ${hasGridSource && hasIsland ? svg`<tspan class="dim"> · </tspan>` : nothing}
             ${hasIsland
               ? svg`<tspan class="dim">FVE </tspan><tspan class="val-island strong">${formatPower(islandP)}</tspan>`
+              : nothing}
+            ${hasGridSource && hasIsland ? svg`<tspan class="dim"> · </tspan>` : nothing}
+            ${hasGridSource
+              ? svg`<tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>`
               : nothing}
           </text>
         `
