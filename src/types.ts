@@ -193,6 +193,17 @@ export interface OptionsConfig {
   sparklines?: boolean;
 }
 
+/**
+ * Tlačítko ZPĚT pod měničem — navigace zpět na dashboard.
+ * Prázdné `path` = výchozí dashboard (`/`).
+ */
+export interface BackButtonConfig {
+  /** Zobrazit tlačítko pod měničem. Default vypnuto. */
+  enabled?: boolean;
+  /** Cílová cesta, např. `/lovelace/home`. Prázdné = výchozí dashboard. */
+  path?: string;
+}
+
 export interface FveFlowCardConfig {
   type: string;
   title?: string;
@@ -203,6 +214,7 @@ export interface FveFlowCardConfig {
   solcast?: SolcastConfig;
   floors?: FloorConfig[];
   options?: OptionsConfig;
+  back_button?: BackButtonConfig;
   [key: string]: unknown;
 }
 

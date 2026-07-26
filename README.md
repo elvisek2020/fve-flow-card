@@ -126,6 +126,9 @@ options:
   min_duration: 1.4     # nejrychlejší oběh (s)
   max_duration: 6       # nejpomalejší oběh (s)
   animation: true
+back_button:
+  enabled: true
+  path: /lovelace/home  # prázdné = výchozí dashboard (/)
 ```
 
 ### Barevné prahy (semafor)
@@ -179,6 +182,9 @@ Poznámky:
   přepne dashboard přímo do editačního režimu (HA URL param `?edit=1`) —
   ušetří průchod přes postranní menu. U panelového view s jedinou kartou se
   hned nabídne tužka pro úpravu konfigurace.
+- **Tlačítko ZPĚT**: volitelné tlačítko pod měničem (`back_button.enabled`).
+  Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
+  vede na výchozí dashboard (`/`).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

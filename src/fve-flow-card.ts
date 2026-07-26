@@ -475,6 +475,37 @@ export class FveFlowCard extends LitElement {
     window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
   }
 
+  /** Navigace tlačítkem ZPĚT — prázdná cesta = výchozí dashboard. */
+  private _navigateBack(): void {
+    const path = this._config?.back_button?.path?.trim() || '/';
+    window.history.pushState(null, '', path);
+    window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+  }
+
+  /**
+   * Tlačítko ZPĚT pod měničem — stejný skleněný panel jako uzly,
+   * šedý okraj, červený čtverec a bílý popisek (dle mockupu).
+   */
+  private _backButton(r: Rect): TemplateResult {
+    const cx = r.x + r.w / 2;
+    const square = 18;
+    const squareY = r.y + 14;
+    return svg`
+      <g class="back-btn" @click=${(e: Event) => {
+        e.stopPropagation();
+        this._navigateBack();
+      }}>
+        <title>Zpět</title>
+        <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"
+          fill="rgba(14, 24, 34, 0.72)"
+          stroke="rgba(148,170,190,0.4)" stroke-width="1.5"/>
+        <rect x="${cx - square / 2}" y="${squareY}" width="${square}" height="${square}"
+          fill="none" stroke="${C.crit}" stroke-width="2.5" rx="2"/>
+        <text class="back-label" x="${cx}" y="${r.y + r.h - 16}" text-anchor="middle">ZPĚT</text>
+      </g>
+    `;
+  }
+
   private _floorGridPower(f: FloorConfig): number {
     if (f.grid_power && hasNum(this.hass, f.grid_power)) return toNum(this.hass, f.grid_power);
     return this._phases(f).reduce((sum, p) => sum + toNum(this.hass, p.entity), 0);
@@ -486,9 +517,10 @@ export class FveFlowCard extends LitElement {
     if (!this.hass) return html`<ha-card></ha-card>`;
 
     const floors = cfg.floors ?? [];
+    const showBack = !!cfg.back_button?.enabled;
     const layout = this._narrow
-      ? computeMobileLayout(Math.max(1, floors.length))
-      : computeLayout(Math.max(1, floors.length));
+      ? computeMobileLayout(Math.max(1, floors.length), { backButton: showBack })
+      : computeLayout(Math.max(1, floors.length), { backButton: showBack });
     const base = this._flowBase();
 
     const pvP = toNum(this.hass, cfg.pv?.power);
@@ -559,6 +591,7 @@ export class FveFlowCard extends LitElement {
           ${this._nodeMppt(layout.mppt)}
           ${this._nodeBattery(layout.battery, batP, charging, discharging)}
           ${this._nodeInverter(layout.inverter, islandTotal)}
+          ${layout.backButton ? this._backButton(layout.backButton) : nothing}
           ${this._nodeSolcast(layout.solcast)}
           ${this._nodeGrid(layout.grid, gridTotal)}
           ${layout.floors.map((r, i) => (floors[i] ? this._nodeFloor(r, floors[i]) : nothing))}
@@ -1104,6 +1137,22 @@ export class FveFlowCard extends LitElement {
     .settings-btn:hover circle {
       fill: rgba(255, 255, 255, 0.1);
       stroke: rgba(79, 195, 247, 0.55);
+    }
+    .back-btn {
+      cursor: pointer;
+    }
+    .back-btn > rect:first-of-type {
+      transition: fill 0.15s ease, stroke 0.15s ease;
+    }
+    .back-btn:hover > rect:first-of-type {
+      fill: rgba(255, 255, 255, 0.08);
+      stroke: rgba(148, 170, 190, 0.65);
+    }
+    .back-label {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      fill: rgba(226, 240, 248, 0.92);
     }
     /* Rotace lopatek ventilátoru, když je chlazení zapnuté. */
     .spin {

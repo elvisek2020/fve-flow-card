@@ -137,6 +137,20 @@ const SCHEMA = [
       { name: 'sparklines', selector: BOOL },
     ],
   },
+  {
+    name: 'back_button',
+    type: 'expandable',
+    title: 'Tlačítko Zpět',
+    icon: 'mdi:arrow-left-bold-box-outline',
+    schema: [
+      { name: 'enabled', selector: BOOL, custom_label: 'Zobrazit tlačítko ZPĚT pod měničem' },
+      {
+        name: 'path',
+        selector: TEXT,
+        custom_label: 'Cílová cesta (prázdné = výchozí dashboard)',
+      },
+    ],
+  },
 ];
 
 /**
@@ -196,6 +210,9 @@ const LABELS: Record<string, string> = {
   grid: 'Síť (grid)',
   solcast: 'Předpověď Solcast',
   options: 'Chování a animace',
+  back_button: 'Tlačítko Zpět',
+  enabled: 'Zobrazit tlačítko ZPĚT pod měničem',
+  path: 'Cílová cesta (prázdné = výchozí dashboard)',
   power: 'Výkon (W)',
   energy_today: 'Energie dnes (kWh)',
   energy_total: 'Energie celkem (kWh)',
@@ -267,6 +284,8 @@ const HELPERS: Record<string, string> = {
   max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
+  enabled: 'Pod měničem se zobrazí tlačítko ZPĚT pro návrat na jiný dashboard (typicky hlavní přehled).',
+  path: 'Cesta v adresním řádku HA, např. /lovelace/home nebo /lovelace/0. Nech prázdné pro výchozí dashboard (/).',
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_b_show: 'Když je zapnuto a chybí entita L2, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_c_show: 'Když je zapnuto a chybí entita L3, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',

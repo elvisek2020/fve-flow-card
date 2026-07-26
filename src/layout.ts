@@ -15,6 +15,8 @@ export interface Layout {
   solcast: Rect;
   grid: Rect;
   floors: Rect[];
+  /** Tlačítko ZPĚT pod měničem — jen když je v configu zapnuté. */
+  backButton?: Rect;
   paths: {
     pvMppt: string;
     mpptInv: string;
@@ -25,6 +27,14 @@ export interface Layout {
     gridTaps: string[];
   };
 }
+
+export interface LayoutOptions {
+  /** Rezervovat místo pro tlačítko ZPĚT pod měničem. */
+  backButton?: boolean;
+}
+
+const BACK_BTN_H = 70;
+const BACK_BTN_GAP = 20;
 
 // Širší box kvůli rozdělení na FVE zónu (vlevo) a grid zónu (vpravo).
 const FLOOR_W = 380;
@@ -46,7 +56,7 @@ const ISLAND_TRUNK_X = FLOOR_X - TRUNK_GAP;
  * Spočítá souřadnice uzlů a SVG cesty propojení pro daný počet pater.
  * Pevný viewBox → responzivní škálování celé scény.
  */
-export function computeLayout(floorCount: number): Layout {
+export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Layout {
   const n = Math.max(1, floorCount);
 
   const pv: Rect = { x: 50, y: 40, w: 300, h: 190 };
@@ -58,9 +68,18 @@ export function computeLayout(floorCount: number): Layout {
   const MID_W = 280;
   const MID_X = Math.round((LEFT_EDGE + FLOOR_X - MID_W) / 2);
   const inverter: Rect = { x: MID_X, y: 360, w: MID_W, h: 260 };
-  // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný.
+  // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný
+  // (tam sedí volitelné tlačítko ZPĚT).
   const solcast: Rect = { x: MID_X, y: 40, w: MID_W, h: 190 };
   const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: GRID_H };
+  const backButton: Rect | undefined = opts.backButton
+    ? {
+        x: inverter.x,
+        y: inverter.y + inverter.h + BACK_BTN_GAP,
+        w: inverter.w,
+        h: BACK_BTN_H,
+      }
+    : undefined;
 
   const floors: Rect[] = [];
   for (let i = 0; i < n; i++) {
@@ -72,6 +91,7 @@ export function computeLayout(floorCount: number): Layout {
     });
   }
   const floorsBottom = floors[floors.length - 1].y + FLOOR_H;
+  const backBottom = backButton ? backButton.y + backButton.h : 0;
 
   const pvCx = pv.x + pv.w / 2;
   const mpptMidY = mppt.y + mppt.h / 2;
@@ -98,7 +118,7 @@ export function computeLayout(floorCount: number): Layout {
 
   return {
     width: 1440,
-    height: Math.max(820, floorsBottom + 40),
+    height: Math.max(820, floorsBottom + 40, backBottom + 40),
     pv,
     mppt,
     battery,
@@ -106,6 +126,7 @@ export function computeLayout(floorCount: number): Layout {
     solcast,
     grid,
     floors,
+    backButton,
     paths,
   };
 }
@@ -130,7 +151,7 @@ const MOBILE_GRID_TRUNK_X = MOBILE_X + MOBILE_NODE_W + 10;
  * (FVE→MPPT přeskakuje Solcast, MPPT→Měnič přeskakuje Baterii), obchází
  * mezilehlý box krátkou odbočkou k pravému okraji scény.
  */
-export function computeMobileLayout(floorCount: number): Layout {
+export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}): Layout {
   const n = Math.max(1, floorCount);
   const x = MOBILE_X;
   const w = MOBILE_NODE_W;
@@ -146,6 +167,10 @@ export function computeMobileLayout(floorCount: number): Layout {
   y += battery.h + MOBILE_GAP;
   const inverter: Rect = { x, y, w, h: 260 };
   y += inverter.h + MOBILE_GAP;
+  const backButton: Rect | undefined = opts.backButton
+    ? { x, y, w, h: BACK_BTN_H }
+    : undefined;
+  if (backButton) y += backButton.h + MOBILE_GAP;
   const grid: Rect = { x, y, w, h: 210 };
   y += grid.h + MOBILE_GAP;
 
@@ -195,6 +220,7 @@ export function computeMobileLayout(floorCount: number): Layout {
     solcast,
     grid,
     floors,
+    backButton,
     paths: { pvMppt, mpptInv, batInv, pvSolcast, islandTaps, gridTaps },
   };
 }
