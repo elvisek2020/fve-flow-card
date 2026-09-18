@@ -583,16 +583,20 @@ export class FveFlowCard extends LitElement {
   }
 
   /**
-   * Chip Prognóza v panelu baterie — stopPropagation, aby neotevíral historii SoC.
+   * Chip Prognóza v panelu baterie — jen když je v nastavení denní spotřeba domu.
+   * Sedí vlevo pod ikonou baterie (mimo sloupec metrik vpravo).
+   * stopPropagation, aby neotevíral historii SoC.
    */
-  private _forecastChip(r: Rect): TemplateResult {
+  private _forecastChip(r: Rect): TemplateResult | typeof nothing {
+    if (!this._config?.forecast?.daily_load_entity?.trim()) return nothing;
     const reason = this._forecastBlockReason();
     const enabled = !reason;
     const accent = enabled ? C.warn : 'rgba(148,170,190,0.45)';
     const w = 92;
     const h = 28;
-    const x = r.x + r.w - w - 14;
-    const y = r.y + r.h - h - 14;
+    // Střed ikony baterie je x+59; kapacita (Ah) končí kolem y+252.
+    const x = r.x + 59 - w / 2;
+    const y = r.y + 262;
     return svg`
       <g class="forecast-chip${enabled ? '' : ' disabled'}" @click=${(e: Event) => {
         e.stopPropagation();
@@ -818,8 +822,14 @@ export class FveFlowCard extends LitElement {
           : undefined,
       )}
       ${pv.mppt_switch
-        ? this._controlChip(r.x + r.w - 110, r.y + 12, pv.mppt_switch, pv.mppt_name || 'MPPT regulátor', iconPower, () =>
-            void this._toggleSwitchConfirmed(pv.mppt_switch!, pv.mppt_name || 'MPPT regulátor'))
+        ? this._controlChip(
+            r.x + r.w - 110,
+            r.y + r.h - 42,
+            pv.mppt_switch,
+            pv.mppt_name || 'MPPT regulátor',
+            iconPower,
+            () => void this._toggleSwitchConfirmed(pv.mppt_switch!, pv.mppt_name || 'MPPT regulátor'),
+          )
         : nothing}
     `;
   }
