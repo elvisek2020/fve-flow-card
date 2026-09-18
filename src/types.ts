@@ -139,6 +139,27 @@ export interface SolcastConfig extends SeverityFields {
   total_today?: string;
   /** Zítřejší celková predikce (kWh). */
   total_tomorrow?: string;
+  /** Predikce den +2 (kWh) — Solcast Forecast Day 3. */
+  total_day3?: string;
+  /** Predikce den +3 (kWh) — Solcast Forecast Day 4. */
+  total_day4?: string;
+  /** Predikce den +4 (kWh) — Solcast Forecast Day 5. */
+  total_day5?: string;
+  /** Predikce den +5 (kWh) — Solcast Forecast Day 6. */
+  total_day6?: string;
+  /** Predikce den +6 (kWh) — Solcast Forecast Day 7. */
+  total_day7?: string;
+}
+
+/**
+ * Prognóza výdrže baterie (modal u baterie).
+ * `daily_load_entity` = denní spotřeba domu v kWh (ideálně včerejšek z Utility Meter).
+ */
+export interface ForecastConfig {
+  /** Entita denní spotřeby domu (kWh) — povinná pro Prognózu. */
+  daily_load_entity?: string;
+  /** Minimální SoC (%), pod které se hlásí riziko. Default 10. */
+  min_soc_pct?: number;
 }
 
 /**
@@ -212,6 +233,7 @@ export interface FveFlowCardConfig {
   inverter?: InverterConfig;
   grid?: GridConfig;
   solcast?: SolcastConfig;
+  forecast?: ForecastConfig;
   floors?: FloorConfig[];
   options?: OptionsConfig;
   back_button?: BackButtonConfig;

@@ -105,6 +105,14 @@ solcast:
   remaining_today: sensor.solcast_remaining_today
   total_today: sensor.solcast_forecast_today
   total_tomorrow: sensor.solcast_forecast_tomorrow
+  total_day3: sensor.solcast_forecast_day_3   # v Solcast často disabled by default
+  total_day4: sensor.solcast_forecast_day_4
+  total_day5: sensor.solcast_forecast_day_5
+  total_day6: sensor.solcast_forecast_day_6
+  total_day7: sensor.solcast_forecast_day_7
+forecast:
+  daily_load_entity: sensor.dum_spotreba_vcera  # denní spotřeba domu (kWh), ideálně včerejšek
+  min_soc_pct: 10                               # pod tímto SoC = riziko (default 10)
 floors:
   - name: 0NP
     grid_power: sensor.0np_grid_ac_out_vykon   # nepovinné, jinak součet fází
@@ -185,6 +193,12 @@ Poznámky:
 - **Tlačítko ZPĚT**: volitelné tlačítko pod měničem (`back_button.enabled`).
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
+- **Prognóza výdrže baterie**: chip **Prognóza** v panelu baterie otevře modal
+  s 7denní tabulkou (Solcast − denní spotřeba → odhad SoC). Potřebuješ
+  `battery.soc`, `battery.capacity`, `forecast.daily_load_entity` (kWh/den,
+  ideálně včerejšek z Utility Meter) a aspoň Solcast dnes/zítra. Dny 3–7
+  doplň přes `solcast.total_day3`…`total_day7` (v Solcast integraci často
+  defaultně vypnuté entity). Práh rizika řídí `forecast.min_soc_pct` (default 10).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

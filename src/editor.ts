@@ -120,7 +120,30 @@ const SCHEMA = [
       { name: 'remaining_today', selector: ENTITY },
       { name: 'total_today', selector: ENTITY },
       { name: 'total_tomorrow', selector: ENTITY },
+      { name: 'total_day3', selector: ENTITY },
+      { name: 'total_day4', selector: ENTITY },
+      { name: 'total_day5', selector: ENTITY },
+      { name: 'total_day6', selector: ENTITY },
+      { name: 'total_day7', selector: ENTITY },
       ...SEVERITY_W,
+    ],
+  },
+  {
+    name: 'forecast',
+    type: 'expandable',
+    title: 'Prognóza výdrže baterie',
+    icon: 'mdi:battery-clock',
+    schema: [
+      {
+        name: 'daily_load_entity',
+        selector: ENTITY,
+        custom_label: 'Denní spotřeba domu (kWh) — ideálně včerejšek',
+      },
+      {
+        name: 'min_soc_pct',
+        selector: numBox(0, 100, 1),
+        custom_label: 'Minimální SoC pro riziko (%)',
+      },
     ],
   },
   {
@@ -209,6 +232,7 @@ const LABELS: Record<string, string> = {
   inverter: 'Měnič',
   grid: 'Síť (grid)',
   solcast: 'Předpověď Solcast',
+  forecast: 'Prognóza výdrže baterie',
   options: 'Chování a animace',
   back_button: 'Tlačítko Zpět',
   enabled: 'Zobrazit tlačítko ZPĚT pod měničem',
@@ -251,6 +275,13 @@ const LABELS: Record<string, string> = {
   remaining_today: 'Zbývá dnes (kWh)',
   total_today: 'Dnes celkem (kWh)',
   total_tomorrow: 'Zítra celkem (kWh)',
+  total_day3: 'Den 3 celkem (kWh)',
+  total_day4: 'Den 4 celkem (kWh)',
+  total_day5: 'Den 5 celkem (kWh)',
+  total_day6: 'Den 6 celkem (kWh)',
+  total_day7: 'Den 7 celkem (kWh)',
+  daily_load_entity: 'Denní spotřeba domu (kWh) — ideálně včerejšek',
+  min_soc_pct: 'Minimální SoC pro riziko (%)',
   max_flow_w: 'Výkon pro plnou rychlost animace (W)',
   deadband_w: 'Mrtvá zóna — pod tímto výkonem je linka neaktivní (W)',
   dots: 'Počet svítících teček na jedné aktivní lince',
@@ -289,6 +320,15 @@ const HELPERS: Record<string, string> = {
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_b_show: 'Když je zapnuto a chybí entita L2, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_c_show: 'Když je zapnuto a chybí entita L3, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
+  total_day3:
+    'Solcast Forecast Day 3 (kWh). V integraci Solcast bývá senzor ve výchozím stavu vypnutý — v entitách ho zapni.',
+  total_day4: 'Solcast Forecast Day 4 (kWh). Ve výchozím stavu často disabled.',
+  total_day5: 'Solcast Forecast Day 5 (kWh). Ve výchozím stavu často disabled.',
+  total_day6: 'Solcast Forecast Day 6 (kWh). Ve výchozím stavu často disabled.',
+  total_day7: 'Solcast Forecast Day 7 (kWh). Ve výchozím stavu často disabled.',
+  daily_load_entity:
+    'Entita s denní spotřebou domu v kWh (Integral + Utility Meter z kritických zátěží). Pro prognózu ideálně včerejší hodnota, ne „dnes zatím“.',
+  min_soc_pct: 'Pod tímto SoC (%) na konci dne se v prognóze hlásí riziko. Výchozí 10 %.',
 };
 
 @customElement('fve-flow-card-editor')

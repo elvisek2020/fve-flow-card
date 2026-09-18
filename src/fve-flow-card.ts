@@ -24,6 +24,12 @@ import {
   iconSun,
 } from './icons';
 import { openConfirmDialog } from './confirm-dialog';
+import { openForecastDialog } from './forecast-dialog';
+import {
+  capacityToKwh,
+  computeBatteryForecast,
+  forecastDayLabels,
+} from './battery-forecast';
 import {
   formatEnergy,
   formatPower,
@@ -216,6 +222,15 @@ export class FveFlowCard extends LitElement {
         remaining_today: 'sensor.solcast_pv_forecast_forecast_remaining_today',
         total_today: 'sensor.solcast_pv_forecast_forecast_today',
         total_tomorrow: 'sensor.solcast_pv_forecast_forecast_tomorrow',
+        total_day3: 'sensor.solcast_pv_forecast_forecast_day_3',
+        total_day4: 'sensor.solcast_pv_forecast_forecast_day_4',
+        total_day5: 'sensor.solcast_pv_forecast_forecast_day_5',
+        total_day6: 'sensor.solcast_pv_forecast_forecast_day_6',
+        total_day7: 'sensor.solcast_pv_forecast_forecast_day_7',
+      },
+      forecast: {
+        daily_load_entity: 'sensor.dum_spotreba_vcera',
+        min_soc_pct: 10,
       },
       floors: [
         {
@@ -480,6 +495,116 @@ export class FveFlowCard extends LitElement {
     const path = this._config?.back_button?.path?.trim() || '/';
     window.history.pushState(null, '', path);
     window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+  }
+
+  /** Kapacita baterie v kWh (Ah převod přes napětí entity / 48 V). */
+  private _batteryCapacityKwh(): number {
+    const b = this._config?.battery;
+    if (!b?.capacity || !hasNum(this.hass, b.capacity)) return 0;
+    const st = this.hass!.states[b.capacity];
+    const unit = st?.attributes.unit_of_measurement as string | undefined;
+    const voltage = hasNum(this.hass, b.voltage) ? toNum(this.hass, b.voltage) : 48;
+    return capacityToKwh(toNum(this.hass, b.capacity), unit, voltage);
+  }
+
+  /** Proč nejde otevřít prognózu — prázdné = ready. */
+  private _forecastBlockReason(): string | null {
+    const cfg = this._config;
+    if (!cfg?.battery?.soc || !hasNum(this.hass, cfg.battery.soc)) {
+      return 'Chybí SoC baterie';
+    }
+    if (this._batteryCapacityKwh() <= 0) {
+      return 'Chybí kapacita baterie (kWh / Ah)';
+    }
+    if (!cfg.forecast?.daily_load_entity || !hasNum(this.hass, cfg.forecast.daily_load_entity)) {
+      return 'Doplň forecast.daily_load_entity (denní spotřeba kWh)';
+    }
+    const s = cfg.solcast;
+    const hasPv =
+      hasNum(this.hass, s?.remaining_today) ||
+      hasNum(this.hass, s?.total_today) ||
+      hasNum(this.hass, s?.total_tomorrow);
+    if (!hasPv) {
+      return 'Doplň Solcast dnes nebo zítra (kWh)';
+    }
+    return null;
+  }
+
+  private _solcastDayKwh(dayIndex: number): number | null {
+    const s = this._config?.solcast;
+    if (!s) return null;
+    const ids =
+      dayIndex === 0
+        ? [s.remaining_today, s.total_today]
+        : dayIndex === 1
+          ? [s.total_tomorrow]
+          : dayIndex === 2
+            ? [s.total_day3]
+            : dayIndex === 3
+              ? [s.total_day4]
+              : dayIndex === 4
+                ? [s.total_day5]
+                : dayIndex === 5
+                  ? [s.total_day6]
+                  : [s.total_day7];
+    for (const id of ids) {
+      if (hasNum(this.hass, id)) return toNum(this.hass, id);
+    }
+    return null;
+  }
+
+  private _openBatteryForecast(): void {
+    const reason = this._forecastBlockReason();
+    if (reason) return;
+    const cfg = this._config!;
+    const socNow = toNum(this.hass, cfg.battery!.soc);
+    const capacityKwh = this._batteryCapacityKwh();
+    const dailyLoadKwh = toNum(this.hass, cfg.forecast!.daily_load_entity);
+    const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
+    const labels = forecastDayLabels();
+    const days = labels.map((label, i) => ({
+      label,
+      pvKwh: this._solcastDayKwh(i),
+    }));
+    const result = computeBatteryForecast({
+      socNow,
+      capacityKwh,
+      dailyLoadKwh,
+      minSocPct,
+      days,
+    });
+    openForecastDialog({
+      result,
+      dailyLoadKwh,
+      capacityKwh,
+      socNow,
+      accent: result.ok ? C.ok : C.crit,
+    });
+  }
+
+  /**
+   * Chip Prognóza v panelu baterie — stopPropagation, aby neotevíral historii SoC.
+   */
+  private _forecastChip(r: Rect): TemplateResult {
+    const reason = this._forecastBlockReason();
+    const enabled = !reason;
+    const accent = enabled ? C.warn : 'rgba(148,170,190,0.45)';
+    const w = 92;
+    const h = 28;
+    const x = r.x + r.w - w - 14;
+    const y = r.y + r.h - h - 14;
+    return svg`
+      <g class="forecast-chip${enabled ? '' : ' disabled'}" @click=${(e: Event) => {
+        e.stopPropagation();
+        if (enabled) this._openBatteryForecast();
+      }}>
+        <title>${reason ?? 'Prognóza výdrže baterie'}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9"
+          fill="rgba(255,255,255,0.05)" stroke="${accent}" stroke-opacity="${enabled ? 0.7 : 0.3}"
+          stroke-width="1" style="${enabled ? `filter: drop-shadow(0 0 6px ${accent}50)` : ''}"/>
+        <text class="forecast-label" x="${x + w / 2}" y="${y + 18}" text-anchor="middle"
+          style="fill: ${enabled ? '#ffe0b2' : 'rgba(226,240,248,0.4)'}">Prognóza</text>
+      </g>`;
   }
 
   /**
@@ -751,6 +876,7 @@ export class FveFlowCard extends LitElement {
           ? () => this._openEntity(b.soc, `${b.name || 'Baterie Pylontech'} · SoC`, socColor)
           : undefined,
       )}
+      ${this._forecastChip(r)}
     `;
   }
 
@@ -1126,6 +1252,23 @@ export class FveFlowCard extends LitElement {
       fill: rgba(255, 255, 255, 0.1);
     }
     .ctrl-label {
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+    }
+    .forecast-chip {
+      cursor: pointer;
+    }
+    .forecast-chip.disabled {
+      cursor: not-allowed;
+    }
+    .forecast-chip rect {
+      transition: fill 0.15s ease, stroke 0.15s ease;
+    }
+    .forecast-chip:not(.disabled):hover rect {
+      fill: rgba(255, 255, 255, 0.1);
+    }
+    .forecast-label {
       font-size: 12px;
       font-weight: 650;
       letter-spacing: 0.03em;
