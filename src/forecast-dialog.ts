@@ -30,7 +30,6 @@ class FveFlowForecastDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
   private readonly _meta: HTMLParagraphElement;
   private readonly _tbody: HTMLTableSectionElement;
-  private readonly _verdict: HTMLParagraphElement;
 
   public constructor() {
     super();
@@ -162,14 +161,6 @@ class FveFlowForecastDialog extends HTMLElement {
           font-size: 11.5px;
           line-height: 1.4;
         }
-        .verdict {
-          margin: 8px 0 0;
-          font-size: 13px;
-          font-weight: 650;
-          line-height: 1.4;
-        }
-        .verdict.ok { color: #69f0ae; }
-        .verdict.risk { color: #ff8a80; }
       </style>
       <dialog aria-labelledby="forecast-title">
         <header>
@@ -185,7 +176,7 @@ class FveFlowForecastDialog extends HTMLElement {
                 <th>Den</th>
                 <th>Solcast</th>
                 <th>Spotřeba</th>
-                <th>SoC na konci</th>
+                <th>SoC po bilanci</th>
                 <th></th>
               </tr>
             </thead>
@@ -194,7 +185,6 @@ class FveFlowForecastDialog extends HTMLElement {
           <p class="note">
             Hrubý denní model: SoC += (Solcast − spotřeba) / kapacita × 100.
           </p>
-          <p class="verdict"></p>
         </div>
       </dialog>
     `;
@@ -202,7 +192,6 @@ class FveFlowForecastDialog extends HTMLElement {
     this._dialog = root.querySelector('dialog')!;
     this._meta = root.querySelector('.meta')!;
     this._tbody = root.querySelector('tbody')!;
-    this._verdict = root.querySelector('.verdict')!;
     root.querySelector('.close')!.addEventListener('click', () => this._dialog.close());
     this._dialog.addEventListener('click', (event) => {
       if (event.target === this._dialog) this._dialog.close();
@@ -229,16 +218,6 @@ class FveFlowForecastDialog extends HTMLElement {
         <td><span class="dot ${day.risk ? 'bad' : 'ok'}" title="${day.risk ? 'Riziko' : 'OK'}"></span></td>
       `;
       this._tbody.append(tr);
-    }
-
-    this._verdict.className = `verdict ${result.ok ? 'ok' : 'risk'}`;
-    if (result.ok) {
-      this._verdict.textContent =
-        `Vydrží — SoC zůstane nad ${formatSoc(result.minSocPct)} (nejníže ${formatSoc(result.lowestSoc)}).`;
-    } else {
-      const day = result.days[result.firstRiskDayIndex!];
-      this._verdict.textContent =
-        `Riziko — ${day.label} končí na ${formatSoc(day.socEnd)} (práh ${formatSoc(result.minSocPct)}).`;
     }
 
     this._dialog.showModal();
