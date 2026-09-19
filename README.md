@@ -13,9 +13,12 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
   (L1 = Pračka, L2 = Sušička, ...)
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
   mrtvá linka pod prahem zešedne
+- Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
+- Prognóza výdrže baterie — 3 dny historie + 7denní predikce (Solcast − spotřeba)
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
+- Volitelné tlačítko ZPĚT pod měničem a rychlý vstup do editace dashboardu
 
 ## Předpoklady a závislosti
 
@@ -50,7 +53,8 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=0.1.0`, typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=0.7.5`, typ **JavaScript module**
+   (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
 
@@ -182,10 +186,14 @@ Poznámky:
   chipů na každé straně (1 FVE + 3 grid = 1:3). Bez FVE zabírají grid fáze
   celou šířku — jednofázové patro tak má jeden chip přes celý box.
 - **Fáze bez vlastního názvu** se zobrazí jako L1/L2/L3 s ikonou `mdi:flash`.
+- **Aktivní chipy**: při |výkon| > 10 W se okraj chipu zvýrazní barvou fáze
+  (L1/L2/L3) nebo FVE; pod prahem zůstane tlumený. Platí pro patra i AC-IN.
+- **Grid (AC-IN)**: kompaktnější box než dřív; název sítě je malý titulek
+  vpravo nahoře (stejný styl jako Solcast), ikona pylónu zůstává velká.
 - **Ovládací tlačítka**: `inverter.fan_switch` zobrazí v panelu měniče chip
   Zapnout/Vypnout externí chlazení (přepíná rovnou, běžící ventilátor se točí),
-  `pv.mppt_switch` zobrazí v panelu MPPT stejný chip chráněný potvrzovacím
-  dialogem. Bez nakonfigurované switch entity se tlačítka nevykreslí.
+  `pv.mppt_switch` zobrazí v panelu MPPT chip dole (přepnutí s potvrzením).
+  Bez nakonfigurované switch entity se tlačítka nevykreslí.
 - **Tlačítko nastavení**: ikonka ozubeného kolečka v pravém horním rohu karty
   přepne dashboard přímo do editačního režimu (HA URL param `?edit=1`) —
   ušetří průchod přes postranní menu. U panelového view s jedinou kartou se
@@ -193,10 +201,11 @@ Poznámky:
 - **Tlačítko ZPĚT**: volitelné tlačítko pod měničem (`back_button.enabled`).
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
-- **Prognóza výdrže baterie**: chip **Prognóza** v panelu baterie otevře modal
-  s tabulkou — nahoře **3 dny naměřené historie** (výroba z `pv.energy_today`,
-  spotřeba z `forecast.daily_load_entity` přes recorder statistics; SoC po bilanci
-  u historie je „—“) a pod tím **7denní predikce** (Solcast − denní spotřeba →
+- **Prognóza výdrže baterie**: chip **Prognóza** pod ikonou baterie (jen když
+  je vyplněné `forecast.daily_load_entity`) otevře modal s tabulkou — nahoře
+  **3 dny naměřené historie** (výroba z `pv.energy_today`, spotřeba z
+  `forecast.daily_load_entity` přes recorder statistics; SoC po bilanci u
+  historie je „—“) a pod tím **7denní predikce** (Solcast − denní spotřeba →
   SoC po bilanci). SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy
   výroba dožene spotřebu), ne SoC večer. Potřebuješ `battery.soc`,
   `battery.capacity`, `forecast.daily_load_entity` (kWh/den, ideálně včerejšek
@@ -298,6 +307,10 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
   nativní HA historie.
 - Export do gridu se nevizualizuje (ostrovní systém nedodává do sítě).
 - Fáze jsou max. 3 na patro (A/B/C dle Shelly 3EM).
+- Prognóza je hrubý denní model (PV − spotřeba); nepočítá denní průběh ani grid.
+  Bez long-term statistics u `pv.energy_today` / denní spotřeby jsou historické
+  řádky prázdné (`—`).
+- SoC po bilanci u historických dní se nezobrazuje (jen u predikce).
 
 ## Autor
 
