@@ -1018,7 +1018,7 @@ export class FveFlowCard extends LitElement {
       ${this._panel(r, accent, active)}
       ${this._sparklineNode(g.power, r, accent)}
       ${iconPylon(r.x + 16, r.y + 10, 40, active ? accent : 'rgba(148,170,190,0.5)')}
-      <text class="floor-name" x="${r.x + 64}" y="${r.y + 30}">${g.name || 'Síť ČEZ'}</text>
+      <text class="node-title" x="${r.x + r.w - 20}" y="${r.y + 28}" text-anchor="end">${g.name || 'Síť ČEZ'}</text>
       <text class="big" x="${r.x + 90}" y="${r.y + 62}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <text class="tiny" x="${r.x + 90}" y="${r.y + 76}">
