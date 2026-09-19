@@ -536,9 +536,11 @@ export class FveFlowCard extends LitElement {
   private _solcastDayKwh(dayIndex: number): number | null {
     const s = this._config?.solcast;
     if (!s) return null;
+    // Dnes: vždy total_today (celodenní predikce). remaining_today v noci padá na 0
+    // a s celodenní spotřebou by SoC po bilanci nesmyslně propadl.
     const ids =
       dayIndex === 0
-        ? [s.remaining_today, s.total_today]
+        ? [s.total_today, s.remaining_today]
         : dayIndex === 1
           ? [s.total_tomorrow]
           : dayIndex === 2
