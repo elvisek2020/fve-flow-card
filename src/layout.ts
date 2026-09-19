@@ -42,9 +42,9 @@ const BACK_BTN_GAP_DESKTOP = 64;
 const FLOOR_W = 380;
 // Patro má jen jeden řádek chipů (FVE + grid fáze vedle sebe).
 const FLOOR_H = 170;
-// Grid uzel má navíc řádek se souhrnnou energií, proto potřebuje víc
-// místa nad chipy, aby se ikonka fáze nepřekrývala s textem "Celkem ze sítě/dnes".
-const GRID_H = 210;
+// Grid je o něco vyšší než patro (řádek energie nad chipy), ale užší než
+// dřívějších 210 — název sedí u ikony, ne na samostatném řádku.
+const GRID_H = 185;
 const FLOOR_GAP = 30;
 // Stejná mezera mezi AC-IN a prvním patrem jako mezi jednotlivými patry.
 const FLOORS_TOP = 40 + GRID_H + FLOOR_GAP;
@@ -173,7 +173,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     ? { x, y, w, h: BACK_BTN_H }
     : undefined;
   if (backButton) y += backButton.h + MOBILE_GAP;
-  const grid: Rect = { x, y, w, h: 210 };
+  const grid: Rect = { x, y, w, h: 185 };
   y += grid.h + MOBILE_GAP;
 
   const floorTop = y;

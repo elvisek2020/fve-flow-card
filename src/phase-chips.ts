@@ -4,6 +4,9 @@ import type { Rect } from './layout';
 import { iconBolt } from './icons';
 import { formatPower, toNum } from './utils';
 
+/** Nad tímto výkonem (W) se okraj chipu zvýrazní barvou fáze / FVE. */
+const ACTIVE_CHIP_W = 10;
+
 export interface ChipStyle {
   icon?: (x: number, y: number, size: number, color: string) => TemplateResult;
   iconColor?: string;
@@ -30,6 +33,7 @@ export interface PhaseChipsOptions extends ChipStyle {
  * Fáze patra vykreslené čistě v SVG (bez foreignObject + ha-icon).
  * foreignObject v škálovaném SVG způsobuje „utečení" ikon do středu scény.
  * Bez entity = neaktivní placeholder (ztlumený, „—", bez kliku).
+ * Okraj: při |výkon| > 10 W barva fáze (výraznější), jinak tlumený.
  */
 export function renderPhaseChips(
   r: Rect,
@@ -54,7 +58,12 @@ export function renderPhaseChips(
     const style = opts?.itemStyle?.(ph, i);
     const drawIcon = style?.icon ?? opts?.icon ?? iconBolt;
     const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
-    const borderColor = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
+    const idleBorder = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
+    const watts = inactive ? 0 : Math.abs(toNum(hass, ph.entity));
+    const activeLoad = !inactive && watts > ACTIVE_CHIP_W;
+    const borderColor = activeLoad ? iconColor : idleBorder;
+    const strokeWidth = activeLoad ? 1.75 : 1;
+    const strokeOpacity = activeLoad ? 0.85 : 0.45;
     const x = zoneX + i * (chipW + gap);
     const cx = x + chipW / 2;
     const power = inactive ? '—' : formatPower(toNum(hass, ph.entity));
@@ -63,7 +72,8 @@ export function renderPhaseChips(
     const iconY = chipY + 12;
 
     return svg`
-      <g class="phase-chip${inactive ? ' inactive' : ''}" opacity="${inactive ? 0.35 : 1}"
+      <g class="phase-chip${inactive ? ' inactive' : ''}${activeLoad ? ' active' : ''}"
+        opacity="${inactive ? 0.35 : 1}"
         @click=${inactive
           ? undefined
           : (e: Event) => {
@@ -72,7 +82,9 @@ export function renderPhaseChips(
             }}>
         <title>${ph.label} · ${ph.name}${inactive ? ' (neaktivní)' : ''}</title>
         <rect x="${x}" y="${chipY}" width="${chipW}" height="${chipH}" rx="10"
-          fill="rgba(255,255,255,0.045)" stroke="${borderColor}" stroke-width="1"/>
+          fill="rgba(255,255,255,0.045)" stroke="${borderColor}"
+          stroke-opacity="${strokeOpacity}" stroke-width="${strokeWidth}"
+          style="${activeLoad ? `filter: drop-shadow(0 0 5px ${borderColor}55)` : ''}"/>
         ${drawIcon(iconX, iconY, iconSize, iconColor)}
         <text x="${cx}" y="${chipY + 38}" text-anchor="middle" class="chip-value">${power}</text>
         <text x="${cx}" y="${chipY + 56}" text-anchor="middle" class="chip-name">${ph.name}</text>
