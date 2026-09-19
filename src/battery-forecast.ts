@@ -3,10 +3,12 @@
  * Bez závislosti na Lit / DOM — vhodný i pro pozdější reuse v automatizaci.
  */
 
+export type ForecastDayKind = 'past' | 'today' | 'tomorrow' | 'future';
+
 export interface BatteryForecastDayInput {
   /** Popisek dne (Dnes / Zítra / datum). */
   label: string;
-  /** Predikce výroby (kWh); null = chybí senzor. */
+  /** Predikce / výroba (kWh); null = chybí senzor. */
   pvKwh: number | null;
 }
 
@@ -24,18 +26,20 @@ export interface BatteryForecastDayResult {
   loadKwh: number;
   socStart: number;
   socEnd: number;
-  /** SoC na konci dne pod min_soc_pct. */
+  /** SoC po bilanci pod min_soc_pct (jen forward řádky). */
   risk: boolean;
+  /** Vizuální / sémantická role řádku v modalu. */
+  kind: ForecastDayKind;
 }
 
 export interface BatteryForecastResult {
   days: BatteryForecastDayResult[];
-  /** Žádný den nekončí pod prahem. */
+  /** Žádný forward den nekončí pod prahem. */
   ok: boolean;
-  /** Index prvního rizikového dne, nebo null. */
+  /** Index prvního rizikového dne v `days`, nebo null. */
   firstRiskDayIndex: number | null;
   minSocPct: number;
-  /** Nejnižší SoC v horizontu. */
+  /** Nejnižší SoC v forward horizontu. */
   lowestSoc: number;
 }
 
@@ -44,9 +48,16 @@ function clampSoc(soc: number): number {
   return Math.min(100, Math.max(0, soc));
 }
 
+function forwardKind(index: number): ForecastDayKind {
+  if (index === 0) return 'today';
+  if (index === 1) return 'tomorrow';
+  return 'future';
+}
+
 /**
  * Simuluje denní SoC: delta = pv − load, SoC se clampuje na 0–100 %.
  * Chybějící PV se bere jako 0 kWh (konzervativní).
+ * Volá se jen pro forward dny (Dnes…+6), ne pro historii.
  */
 export function computeBatteryForecast(input: BatteryForecastInput): BatteryForecastResult {
   const capacity = Math.max(0.001, input.capacityKwh);
@@ -73,6 +84,7 @@ export function computeBatteryForecast(input: BatteryForecastInput): BatteryFore
       socStart,
       socEnd,
       risk,
+      kind: forwardKind(i),
     });
     soc = socEnd;
   }
@@ -83,6 +95,28 @@ export function computeBatteryForecast(input: BatteryForecastInput): BatteryFore
     firstRiskDayIndex,
     minSocPct: minSoc,
     lowestSoc,
+  };
+}
+
+/**
+ * Historický řádek (reálná výroba + spotřeba). SoC po bilanci se nepočítá.
+ * `loadKwh === -1` = chybí naměřená spotřeba (UI ukáže „—“).
+ */
+export function makePastForecastDay(
+  label: string,
+  pvKwh: number | null,
+  loadKwh: number | null,
+): BatteryForecastDayResult {
+  const load =
+    loadKwh != null && Number.isFinite(loadKwh) ? Math.max(0, loadKwh) : -1;
+  return {
+    label,
+    pvKwh,
+    loadKwh: load,
+    socStart: 0,
+    socEnd: 0,
+    risk: false,
+    kind: 'past',
   };
 }
 
@@ -114,6 +148,21 @@ export function forecastDayLabels(now = new Date(), locale = 'cs-CZ'): string[] 
   for (let i = 2; i < 7; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
+    labels.push(fmt.format(d));
+  }
+  return labels;
+}
+
+/**
+ * Popisky pro `count` dní zpět (nejstarší první), bez dneška.
+ * Stejný formát data jako u forward D3+.
+ */
+export function pastDayLabels(count: number, now = new Date(), locale = 'cs-CZ'): string[] {
+  const fmt = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'numeric' });
+  const labels: string[] = [];
+  for (let i = count; i >= 1; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
     labels.push(fmt.format(d));
   }
   return labels;

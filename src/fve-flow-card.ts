@@ -29,7 +29,10 @@ import {
   capacityToKwh,
   computeBatteryForecast,
   forecastDayLabels,
+  makePastForecastDay,
+  pastDayLabels,
 } from './battery-forecast';
+import { fetchDailyEnergyKwh, localDayKeyOffset } from './daily-stats';
 import {
   formatEnergy,
   formatPower,
@@ -553,33 +556,67 @@ export class FveFlowCard extends LitElement {
     return null;
   }
 
-  private _openBatteryForecast(): void {
+  /** Guard proti dvojitému otevření prognózy během async fetch. */
+  private _forecastOpening = false;
+
+  private async _openBatteryForecast(): Promise<void> {
     const reason = this._forecastBlockReason();
-    if (reason) return;
-    const cfg = this._config!;
-    const socNow = toNum(this.hass, cfg.battery!.soc);
-    const capacityKwh = this._batteryCapacityKwh();
-    const dailyLoadKwh = toNum(this.hass, cfg.forecast!.daily_load_entity);
-    const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
-    const labels = forecastDayLabels();
-    const days = labels.map((label, i) => ({
-      label,
-      pvKwh: this._solcastDayKwh(i),
-    }));
-    const result = computeBatteryForecast({
-      socNow,
-      capacityKwh,
-      dailyLoadKwh,
-      minSocPct,
-      days,
-    });
-    openForecastDialog({
-      result,
-      dailyLoadKwh,
-      capacityKwh,
-      socNow,
-      accent: result.ok ? C.ok : C.crit,
-    });
+    if (reason || this._forecastOpening) return;
+    this._forecastOpening = true;
+    try {
+      const cfg = this._config!;
+      const pastDays = 3;
+      const socNow = toNum(this.hass, cfg.battery!.soc);
+      const capacityKwh = this._batteryCapacityKwh();
+      const dailyLoadKwh = toNum(this.hass, cfg.forecast!.daily_load_entity);
+      const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
+      const labels = forecastDayLabels();
+      const forwardInput = labels.map((label, i) => ({
+        label,
+        pvKwh: this._solcastDayKwh(i),
+      }));
+
+      const [pvStats, loadStats] = await Promise.all([
+        fetchDailyEnergyKwh(this.hass, cfg.pv?.energy_today, pastDays),
+        fetchDailyEnergyKwh(this.hass, cfg.forecast?.daily_load_entity, pastDays),
+      ]);
+
+      const pastLabels = pastDayLabels(pastDays);
+      const pastRows = pastLabels.map((label, i) => {
+        const offset = -(pastDays - i);
+        const key = localDayKeyOffset(offset);
+        const pv = pvStats.has(key) ? pvStats.get(key)! : null;
+        const load = loadStats.has(key) ? loadStats.get(key)! : null;
+        return makePastForecastDay(label, pv, load);
+      });
+
+      const forward = computeBatteryForecast({
+        socNow,
+        capacityKwh,
+        dailyLoadKwh,
+        minSocPct,
+        days: forwardInput,
+      });
+
+      const result = {
+        ...forward,
+        days: [...pastRows, ...forward.days],
+        firstRiskDayIndex:
+          forward.firstRiskDayIndex == null
+            ? null
+            : forward.firstRiskDayIndex + pastRows.length,
+      };
+
+      openForecastDialog({
+        result,
+        dailyLoadKwh,
+        capacityKwh,
+        socNow,
+        accent: result.ok ? C.ok : C.crit,
+      });
+    } finally {
+      this._forecastOpening = false;
+    }
   }
 
   /**
@@ -600,7 +637,7 @@ export class FveFlowCard extends LitElement {
     return svg`
       <g class="forecast-chip${enabled ? '' : ' disabled'}" @click=${(e: Event) => {
         e.stopPropagation();
-        if (enabled) this._openBatteryForecast();
+        if (enabled) void this._openBatteryForecast();
       }}>
         <title>${reason ?? 'Prognóza výdrže baterie'}</title>
         <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9"

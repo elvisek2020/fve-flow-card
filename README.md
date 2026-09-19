@@ -194,11 +194,16 @@ Poznámky:
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
 - **Prognóza výdrže baterie**: chip **Prognóza** v panelu baterie otevře modal
-  s 7denní tabulkou (Solcast − denní spotřeba → odhad SoC). Potřebuješ
-  `battery.soc`, `battery.capacity`, `forecast.daily_load_entity` (kWh/den,
-  ideálně včerejšek z Utility Meter) a aspoň Solcast dnes/zítra. Dny 3–7
-  doplň přes `solcast.total_day3`…`total_day7` (v Solcast integraci často
-  defaultně vypnuté entity). Práh rizika řídí `forecast.min_soc_pct` (default 10).
+  s tabulkou — nahoře **3 dny naměřené historie** (výroba z `pv.energy_today`,
+  spotřeba z `forecast.daily_load_entity` přes recorder statistics; SoC po bilanci
+  u historie je „—“) a pod tím **7denní predikce** (Solcast − denní spotřeba →
+  SoC po bilanci). SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy
+  výroba dožene spotřebu), ne SoC večer. Potřebuješ `battery.soc`,
+  `battery.capacity`, `forecast.daily_load_entity` (kWh/den, ideálně včerejšek
+  z Utility Meter) a aspoň Solcast dnes/zítra. Dny 3–7 doplň přes
+  `solcast.total_day3`…`total_day7` (v Solcast integraci často defaultně
+  vypnuté entity). Práh rizika řídí `forecast.min_soc_pct` (default 10).
+  Historie vyžaduje long-term statistics u `pv.energy_today` a denní spotřeby.
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

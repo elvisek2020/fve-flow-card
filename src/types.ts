@@ -19,6 +19,8 @@ export interface HomeAssistant {
   ) => Promise<unknown>;
   /** HA API — obecné REST volání (např. history/period pro sparkliny). */
   callApi?: (method: string, path: string) => Promise<unknown>;
+  /** HA WebSocket — např. recorder/statistics_during_period. */
+  callWS?: <T = unknown>(message: Record<string, unknown>) => Promise<T>;
 }
 
 /** Minimální rozhraní dynamicky vytvořené Lovelace karty. */

@@ -1,4 +1,4 @@
-import type { BatteryForecastResult } from './battery-forecast';
+import type { BatteryForecastDayResult, BatteryForecastResult } from './battery-forecast';
 import { formatEnergy } from './utils';
 
 export interface ForecastDialogOptions {
@@ -24,6 +24,12 @@ function formatSoc(pct: number): string {
 function formatPv(kwh: number | null): string {
   if (kwh == null || !Number.isFinite(kwh)) return '—';
   return formatEnergy(kwh);
+}
+
+/** Past: loadKwh < 0 = chybí data. Forward: vždy ≥ 0. */
+function formatLoad(day: BatteryForecastDayResult): string {
+  if (day.kind === 'past' && day.loadKwh < 0) return '—';
+  return formatEnergy(Math.max(0, day.loadKwh));
 }
 
 class FveFlowForecastDialog extends HTMLElement {
@@ -146,6 +152,20 @@ class FveFlowForecastDialog extends HTMLElement {
         tr.risk td {
           background: color-mix(in srgb, #ff5252 8%, transparent);
         }
+        tr.past td {
+          color: rgba(220, 235, 245, 0.38);
+        }
+        tr.past + tr.today td {
+          border-top: 1px solid rgba(130, 190, 220, 0.28);
+        }
+        tr.today td,
+        tr.tomorrow td {
+          color: var(--primary-text-color, #e6f4fa);
+          font-weight: 650;
+        }
+        tr.future td {
+          color: rgba(220, 235, 245, 0.62);
+        }
         .dot {
           display: inline-block;
           width: 9px;
@@ -174,7 +194,7 @@ class FveFlowForecastDialog extends HTMLElement {
             <thead>
               <tr>
                 <th>Den</th>
-                <th>Solcast</th>
+                <th>Výroba</th>
                 <th>Spotřeba</th>
                 <th>SoC po bilanci</th>
                 <th></th>
@@ -183,7 +203,9 @@ class FveFlowForecastDialog extends HTMLElement {
             <tbody></tbody>
           </table>
           <p class="note">
-            Hrubý denní model: SoC += (Solcast − spotřeba) / kapacita × 100.
+            Hrubý denní model: SoC += (výroba − spotřeba) / kapacita × 100.
+            SoC po bilanci = očekávaná hladina, kdy denní výroba dožene spotřebu (ne SoC večer).
+            Šedé řádky = naměřená historie.
           </p>
         </div>
       </dialog>
@@ -209,13 +231,22 @@ class FveFlowForecastDialog extends HTMLElement {
     this._tbody.replaceChildren();
     for (const day of result.days) {
       const tr = document.createElement('tr');
-      if (day.risk) tr.classList.add('risk');
+      tr.classList.add(day.kind);
+      if (day.kind !== 'past' && day.risk) tr.classList.add('risk');
+
+      const isPast = day.kind === 'past';
+      const loadDisplay = formatLoad(day);
+      const socDisplay = isPast ? '—' : formatSoc(day.socEnd);
+      const dotHtml = isPast
+        ? ''
+        : `<span class="dot ${day.risk ? 'bad' : 'ok'}" title="${day.risk ? 'Riziko' : 'OK'}"></span>`;
+
       tr.innerHTML = `
         <td>${escapeHtml(day.label)}</td>
         <td class="${day.pvKwh == null ? 'muted' : ''}">${escapeHtml(formatPv(day.pvKwh))}</td>
-        <td>${escapeHtml(formatEnergy(day.loadKwh))}</td>
-        <td>${escapeHtml(formatSoc(day.socEnd))}</td>
-        <td><span class="dot ${day.risk ? 'bad' : 'ok'}" title="${day.risk ? 'Riziko' : 'OK'}"></span></td>
+        <td class="${loadDisplay === '—' ? 'muted' : ''}">${escapeHtml(loadDisplay)}</td>
+        <td class="${isPast ? 'muted' : ''}">${escapeHtml(socDisplay)}</td>
+        <td>${dotHtml}</td>
       `;
       this._tbody.append(tr);
     }
