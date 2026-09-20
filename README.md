@@ -213,6 +213,11 @@ Poznámky:
     `solcast.total_today`, ne `remaining_today` (v noci by zbývalo 0 kWh).
   - SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy výroba dožene
     spotřebu), ne SoC večer.
+  - **Poznámka:** SoC po bilanci **není entita** — karta ho **počítá** sama:
+    start = aktuální `battery.soc`, každý den
+    `SoC += (PV − spotřeba) / capacity × 100` (clamp 0–100 %).
+    Z Home Assistant bere jen vstupy (SoC teď, kapacita, Solcast kWh,
+    spotřeba), ne predikovaný SoC senzor.
   - Potřebuješ `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče
     a aspoň Solcast dnes/zítra. Pro historickou spotřebu ideálně i
     `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes

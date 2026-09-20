@@ -326,8 +326,7 @@ const HELPERS: Record<string, string> = {
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_b_show: 'Když je zapnuto a chybí entita L2, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
   phase_c_show: 'Když je zapnuto a chybí entita L3, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
-  total_day3:
-    'Solcast Forecast Day 3 (kWh). V integraci Solcast bývá senzor ve výchozím stavu vypnutý — v entitách ho zapni.',
+  total_day3: 'Solcast Forecast Day 3 (kWh). Ve výchozím stavu často disabled.',
   total_day4: 'Solcast Forecast Day 4 (kWh). Ve výchozím stavu často disabled.',
   total_day5: 'Solcast Forecast Day 5 (kWh). Ve výchozím stavu často disabled.',
   total_day6: 'Solcast Forecast Day 6 (kWh). Ve výchozím stavu často disabled.',
@@ -336,7 +335,10 @@ const HELPERS: Record<string, string> = {
     'Legacy: přesuň entitu do Měnič → Včerejší spotřeba domu. Stále funguje jako fallback pro prognózu.',
   energy_yesterday:
     'Utility Meter last_period (včerejší kWh). Povinné pro chip Prognóza u baterie.',
-  min_soc_pct: 'Pod tímto SoC (%) na konci dne se v prognóze hlásí riziko. Výchozí 10 %.',
+  forecast:
+    'SoC po bilanci není entita — karta ho počítá sama z aktuálního SoC, Solcastu a spotřeby.',
+  min_soc_pct:
+    'SoC po bilanci není entita — karta ho počítá: start = aktuální SoC baterie, každý den SoC += (PV − spotřeba) / kapacita × 100 (0–100 %). Pod tímto prahem (%) se hlásí riziko. Výchozí 10 %.',
 };
 
 @customElement('fve-flow-card-editor')
