@@ -583,7 +583,7 @@ export class FveFlowCard extends LitElement {
     this._forecastOpening = true;
     try {
       const cfg = this._config!;
-      const pastDays = 3;
+      const pastDays = 5;
       const socNow = toNum(this.hass, cfg.battery!.soc);
       const capacityKwh = this._batteryCapacityKwh();
       const yesterdayId = this._yesterdayLoadEntity()!;

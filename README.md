@@ -14,7 +14,7 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
   mrtvá linka pod prahem zešedne
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
-- Prognóza výdrže baterie — 3 dny historie + 7denní predikce (Solcast − spotřeba)
+- Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
@@ -53,7 +53,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=0.7.7`, typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=0.7.8`, typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -94,8 +94,8 @@ inverter:
   voltage: sensor.multiplus_vystupni_napeti
   current: sensor.multiplus_vystupni_proud
   load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba (W)
-  energy_today: sensor.dum_spotreba_dnes       # řádek „Energie dnes" u měniče
-  energy_yesterday: sensor.dum_spotreba_vcera  # prognóza výdrže (Utility Meter last_period)
+  energy_today: sensor.dum_spotreba_dnes       # „Energie dnes" + LTS historie prognózy (5 dní)
+  energy_yesterday: sensor.dum_spotreba_vcera  # model prognózy (Utility Meter last_period)
   days_in_service: sensor.fve_pocet_dni        # informační řádek
   fan_switch: switch.chlazeni_menice           # ovládací tlačítko ventilátoru
   name: MultiPlus-II
@@ -204,17 +204,20 @@ Poznámky:
   vede na výchozí dashboard (`/`).
 - **Prognóza výdrže baterie**: chip **Prognóza** pod ikonou baterie (jen když
   je vyplněné `inverter.energy_yesterday`, případně legacy
-  `forecast.daily_load_entity`) otevře modal s tabulkou — nahoře
-  **3 dny naměřené historie** (výroba z `pv.energy_today`, spotřeba z
-  `inverter.energy_today` / včerejší entity přes recorder statistics; SoC po
-  bilanci u historie je „—“) a pod tím **7denní predikce** (Solcast − včerejší
-  spotřeba → SoC po bilanci). SoC po bilanci = očekávaná hladina z denního
-  rozpočtu (kdy výroba dožene spotřebu), ne SoC večer. Potřebuješ
-  `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče a aspoň Solcast
-  dnes/zítra. Dny 3–7 doplň přes `solcast.total_day3`…`total_day7` (v Solcast
-  integraci často defaultně vypnuté entity). Práh rizika řídí
-  `forecast.min_soc_pct` (default 10). Historie vyžaduje long-term statistics
-  u `pv.energy_today` a denní spotřeby.
+  `forecast.daily_load_entity`) otevře modal:
+  - **5 dní naměřené historie** (šedé řádky): výroba z `pv.energy_today`,
+    spotřeba z `inverter.energy_today` (denní Utility Meter s LTS; fallback
+    na včerejší entitu). SoC po bilanci u historie = „—“.
+  - **7denní predikce**: Solcast (`total_today` / zítra / D3–D7) − včerejší
+    spotřeba → SoC po bilanci. Řádek **Dnes** bere celodenní
+    `solcast.total_today`, ne `remaining_today` (v noci by zbývalo 0 kWh).
+  - SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy výroba dožene
+    spotřebu), ne SoC večer.
+  - Potřebuješ `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče
+    a aspoň Solcast dnes/zítra. Pro historickou spotřebu ideálně i
+    `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes
+    `solcast.total_day3`…`total_day7` (v Solcast často defaultně vypnuté).
+    Práh rizika: `forecast.min_soc_pct` (default 10).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 
@@ -310,8 +313,8 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
 - Export do gridu se nevizualizuje (ostrovní systém nedodává do sítě).
 - Fáze jsou max. 3 na patro (A/B/C dle Shelly 3EM).
 - Prognóza je hrubý denní model (PV − spotřeba); nepočítá denní průběh ani grid.
-  Bez long-term statistics u `pv.energy_today` / denní spotřeby jsou historické
-  řádky prázdné (`—`).
+  Bez long-term statistics u `pv.energy_today` / `inverter.energy_today` jsou
+  historické řádky (až 5 dní) u výroby nebo spotřeby prázdné (`—`).
 - SoC po bilanci u historických dní se nezobrazuje (jen u predikce).
 
 ## Autor
