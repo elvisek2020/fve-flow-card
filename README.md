@@ -53,7 +53,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=0.7.5`, typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=0.7.7`, typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -93,7 +93,9 @@ inverter:
   state: sensor.multiplus_stav
   voltage: sensor.multiplus_vystupni_napeti
   current: sensor.multiplus_vystupni_proud
-  load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba
+  load_power: sensor.gx_kriticke_zateze        # celková ostrovní spotřeba (W)
+  energy_today: sensor.dum_spotreba_dnes       # řádek „Energie dnes" u měniče
+  energy_yesterday: sensor.dum_spotreba_vcera  # prognóza výdrže (Utility Meter last_period)
   days_in_service: sensor.fve_pocet_dni        # informační řádek
   fan_switch: switch.chlazeni_menice           # ovládací tlačítko ventilátoru
   name: MultiPlus-II
@@ -115,7 +117,6 @@ solcast:
   total_day6: sensor.solcast_forecast_day_6
   total_day7: sensor.solcast_forecast_day_7
 forecast:
-  daily_load_entity: sensor.dum_spotreba_vcera  # denní spotřeba domu (kWh), ideálně včerejšek
   min_soc_pct: 10                               # pod tímto SoC = riziko (default 10)
 floors:
   - name: 0NP
@@ -202,17 +203,18 @@ Poznámky:
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
 - **Prognóza výdrže baterie**: chip **Prognóza** pod ikonou baterie (jen když
-  je vyplněné `forecast.daily_load_entity`) otevře modal s tabulkou — nahoře
+  je vyplněné `inverter.energy_yesterday`, případně legacy
+  `forecast.daily_load_entity`) otevře modal s tabulkou — nahoře
   **3 dny naměřené historie** (výroba z `pv.energy_today`, spotřeba z
-  `forecast.daily_load_entity` přes recorder statistics; SoC po bilanci u
-  historie je „—“) a pod tím **7denní predikce** (Solcast − denní spotřeba →
-  SoC po bilanci). SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy
-  výroba dožene spotřebu), ne SoC večer. Potřebuješ `battery.soc`,
-  `battery.capacity`, `forecast.daily_load_entity` (kWh/den, ideálně včerejšek
-  z Utility Meter) a aspoň Solcast dnes/zítra. Dny 3–7 doplň přes
-  `solcast.total_day3`…`total_day7` (v Solcast integraci často defaultně
-  vypnuté entity). Práh rizika řídí `forecast.min_soc_pct` (default 10).
-  Historie vyžaduje long-term statistics u `pv.energy_today` a denní spotřeby.
+  `inverter.energy_today` / včerejší entity přes recorder statistics; SoC po
+  bilanci u historie je „—“) a pod tím **7denní predikce** (Solcast − včerejší
+  spotřeba → SoC po bilanci). SoC po bilanci = očekávaná hladina z denního
+  rozpočtu (kdy výroba dožene spotřebu), ne SoC večer. Potřebuješ
+  `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče a aspoň Solcast
+  dnes/zítra. Dny 3–7 doplň přes `solcast.total_day3`…`total_day7` (v Solcast
+  integraci často defaultně vypnuté entity). Práh rizika řídí
+  `forecast.min_soc_pct` (default 10). Historie vyžaduje long-term statistics
+  u `pv.energy_today` a denní spotřeby.
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

@@ -209,6 +209,8 @@ export class FveFlowCard extends LitElement {
         power: 'sensor.multiplus_ii_48_5000_70_50_id_275_vystupni_vykon_l1',
         state: 'sensor.multiplus_ii_48_5000_70_50_id_275_stav',
         load_power: 'sensor.gx_device_kriticke_zateze_na_l1',
+        energy_today: 'sensor.dum_spotreba_dnes',
+        energy_yesterday: 'sensor.dum_spotreba_vcera',
         days_in_service: 'sensor.fve_pocet_dni_v_provozu',
         name: 'MultiPlus-II',
       },
@@ -232,7 +234,6 @@ export class FveFlowCard extends LitElement {
         total_day7: 'sensor.solcast_pv_forecast_forecast_day_7',
       },
       forecast: {
-        daily_load_entity: 'sensor.dum_spotreba_vcera',
         min_soc_pct: 10,
       },
       floors: [
@@ -510,6 +511,20 @@ export class FveFlowCard extends LitElement {
     return capacityToKwh(toNum(this.hass, b.capacity), unit, voltage);
   }
 
+  /** Včerejší spotřeba domu (kWh) — prognóza; fallback na legacy forecast.daily_load_entity. */
+  private _yesterdayLoadEntity(): string | undefined {
+    const id =
+      this._config?.inverter?.energy_yesterday?.trim() ||
+      this._config?.forecast?.daily_load_entity?.trim();
+    return id || undefined;
+  }
+
+  /** Dnešní spotřeba domu (kWh) — řádek u měniče + LTS historie v prognóze. */
+  private _todayLoadEntity(): string | undefined {
+    const id = this._config?.inverter?.energy_today?.trim();
+    return id || undefined;
+  }
+
   /** Proč nejde otevřít prognózu — prázdné = ready. */
   private _forecastBlockReason(): string | null {
     const cfg = this._config;
@@ -519,8 +534,9 @@ export class FveFlowCard extends LitElement {
     if (this._batteryCapacityKwh() <= 0) {
       return 'Chybí kapacita baterie (kWh / Ah)';
     }
-    if (!cfg.forecast?.daily_load_entity || !hasNum(this.hass, cfg.forecast.daily_load_entity)) {
-      return 'Doplň forecast.daily_load_entity (denní spotřeba kWh)';
+    const yesterday = this._yesterdayLoadEntity();
+    if (!yesterday || !hasNum(this.hass, yesterday)) {
+      return 'Doplň měnič → včerejší spotřeba domu (kWh)';
     }
     const s = cfg.solcast;
     const hasPv =
@@ -570,7 +586,8 @@ export class FveFlowCard extends LitElement {
       const pastDays = 3;
       const socNow = toNum(this.hass, cfg.battery!.soc);
       const capacityKwh = this._batteryCapacityKwh();
-      const dailyLoadKwh = toNum(this.hass, cfg.forecast!.daily_load_entity);
+      const yesterdayId = this._yesterdayLoadEntity()!;
+      const dailyLoadKwh = toNum(this.hass, yesterdayId);
       const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
       const labels = forecastDayLabels();
       const forwardInput = labels.map((label, i) => ({
@@ -578,9 +595,10 @@ export class FveFlowCard extends LitElement {
         pvKwh: this._solcastDayKwh(i),
       }));
 
+      const loadHistoryId = this._todayLoadEntity() ?? yesterdayId;
       const [pvStats, loadStats] = await Promise.all([
         fetchDailyEnergyKwh(this.hass, cfg.pv?.energy_today, pastDays),
-        fetchDailyEnergyKwh(this.hass, cfg.forecast?.daily_load_entity, pastDays),
+        fetchDailyEnergyKwh(this.hass, loadHistoryId, pastDays),
       ]);
 
       const pastLabels = pastDayLabels(pastDays);
@@ -627,7 +645,7 @@ export class FveFlowCard extends LitElement {
    * stopPropagation, aby neotevíral historii SoC.
    */
   private _forecastChip(r: Rect): TemplateResult | typeof nothing {
-    if (!this._config?.forecast?.daily_load_entity?.trim()) return nothing;
+    if (!this._yesterdayLoadEntity()) return nothing;
     const reason = this._forecastBlockReason();
     const enabled = !reason;
     const accent = enabled ? C.warn : 'rgba(148,170,190,0.45)';
@@ -954,8 +972,13 @@ export class FveFlowCard extends LitElement {
             Proud <tspan class="strong">${formatState(this.hass, inv.current)}</tspan>
           </text>`
         : nothing}
+      ${inv.energy_today
+        ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 182}">
+            Energie dnes <tspan class="strong">${formatEnergy(toNum(this.hass, inv.energy_today))}</tspan>
+          </text>`
+        : nothing}
       ${inv.load_power
-        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + 184}">
+        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + (inv.energy_today ? 204 : 184)}">
             Kritické zátěže ${formatPower(toNum(this.hass, inv.load_power))}
           </text>`
         : nothing}

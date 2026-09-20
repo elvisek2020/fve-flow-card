@@ -108,6 +108,13 @@ export interface InverterConfig extends SeverityFields {
   voltage?: string;
   /** Výstupní proud AC (A). */
   current?: string;
+  /** Dnešní spotřeba domu (kWh) — řádek „Energie dnes" u měniče. */
+  energy_today?: string;
+  /**
+   * Včerejší spotřeba domu (kWh) — vstup do prognózy výdrže baterie
+   * (ideálně Utility Meter `last_period`).
+   */
+  energy_yesterday?: string;
   /** Počet dní v provozu — informační řádek. */
   days_in_service?: string;
   /** Spínač externího chlazení (switch.*) — zobrazí ovládací tlačítko. */
@@ -155,10 +162,13 @@ export interface SolcastConfig extends SeverityFields {
 
 /**
  * Prognóza výdrže baterie (modal u baterie).
- * `daily_load_entity` = denní spotřeba domu v kWh (ideálně včerejšek z Utility Meter).
+ * Spotřeba domu je u měniče (`energy_yesterday` / `energy_today`).
+ * `daily_load_entity` je legacy alias pro včerejší spotřebu.
  */
 export interface ForecastConfig {
-  /** Entita denní spotřeby domu (kWh) — povinná pro Prognózu. */
+  /**
+   * @deprecated Použij `inverter.energy_yesterday`. Stále se bere jako fallback.
+   */
   daily_load_entity?: string;
   /** Minimální SoC (%), pod které se hlásí riziko. Default 10. */
   min_soc_pct?: number;

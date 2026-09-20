@@ -89,6 +89,16 @@ const SCHEMA = [
       { name: 'state', selector: ENTITY },
       { name: 'voltage', selector: ENTITY },
       { name: 'current', selector: ENTITY },
+      {
+        name: 'energy_today',
+        selector: ENTITY,
+        custom_label: 'Dnešní spotřeba domu (kWh)',
+      },
+      {
+        name: 'energy_yesterday',
+        selector: ENTITY,
+        custom_label: 'Včerejší spotřeba domu (kWh)',
+      },
       { name: 'load_power', selector: ENTITY },
       { name: 'days_in_service', selector: ENTITY },
       { name: 'fan_switch', selector: SWITCH },
@@ -134,11 +144,6 @@ const SCHEMA = [
     title: 'Prognóza výdrže baterie',
     icon: 'mdi:battery-clock',
     schema: [
-      {
-        name: 'daily_load_entity',
-        selector: ENTITY,
-        custom_label: 'Denní spotřeba domu (kWh) — ideálně včerejšek',
-      },
       {
         name: 'min_soc_pct',
         selector: numBox(0, 100, 1),
@@ -254,6 +259,7 @@ const LABELS: Record<string, string> = {
   invert: 'Obrátit znaménko výkonu baterie',
   state: 'Stav měniče',
   load_power: 'Ostrovní spotřeba — kritické zátěže (W)',
+  energy_yesterday: 'Včerejší spotřeba domu (kWh)',
   days_in_service: 'Počet dní v provozu',
   name: 'Vlastní název',
   phase_a: 'Fáze L1',
@@ -327,7 +333,9 @@ const HELPERS: Record<string, string> = {
   total_day6: 'Solcast Forecast Day 6 (kWh). Ve výchozím stavu často disabled.',
   total_day7: 'Solcast Forecast Day 7 (kWh). Ve výchozím stavu často disabled.',
   daily_load_entity:
-    'Entita s denní spotřebou domu v kWh (Integral + Utility Meter z kritických zátěží). Pro prognózu ideálně včerejší hodnota, ne „dnes zatím“.',
+    'Legacy: přesuň entitu do Měnič → Včerejší spotřeba domu. Stále funguje jako fallback pro prognózu.',
+  energy_yesterday:
+    'Utility Meter last_period (včerejší kWh). Povinné pro chip Prognóza u baterie.',
   min_soc_pct: 'Pod tímto SoC (%) na konci dne se v prognóze hlásí riziko. Výchozí 10 %.',
 };
 
