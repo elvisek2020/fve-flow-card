@@ -382,6 +382,9 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     const right = nodes.filter((n) => n.column === 1).length;
     const h = Math.max(260, Math.min(460, 58 * right + 40));
+    const floorsPartial = [d.balanceDays.fve, d.balanceDays.grid].some(
+      (x) => x != null && x < d.balanceDays.total,
+    );
     const mismatch = [
       d.mismatch.fve ? `FVE: patra o ${formatEnergy(d.mismatch.fve)} víc než měnič` : '',
       d.mismatch.grid ? `síť: patra o ${formatEnergy(d.mismatch.grid)} víc než přívod` : '',
@@ -415,6 +418,12 @@ export class FveFlowAnalysisDialog extends LitElement {
         </tbody>
       </table>
       ${mismatch.length ? html`<p class="warn">Nesoulad měřáků — ${mismatch.join('; ')}.</p>` : nothing}
+      ${floorsPartial
+        ? html`<p class="note">
+            Neměřeno a nesoulad jen za dny, kdy mají data hlavní měřák i všechna patra
+            (FVE ${d.balanceDays.fve ?? '—'}, síť ${d.balanceDays.grid ?? '—'} z ${d.balanceDays.total} dní).
+          </p>`
+        : nothing}
     </article>`;
   }
 
@@ -522,11 +531,15 @@ export class FveFlowAnalysisDialog extends LitElement {
   /** 4 — MPPT · baterie · střídač: DC bilance. */
   private _cardDc(d: AnalysisData, live?: AnalysisLive): TemplateResult {
     const s = d.series;
-    const pv = d.pv.total;
-    const ch = d.charge.total;
-    const dis = d.discharge.total;
-    const ac = d.fve.total;
+    // Diagram a ztráty jen za společné dny všech čtyř veličin (viz dc.days).
     const dc = d.dc;
+    const pv = dc.pv;
+    const ch = dc.charge;
+    const dis = dc.discharge;
+    const ac = dc.ac;
+    const dcPartial = dc.days != null && dc.days < d.balanceDays.total;
+    const approxKwh = (v: number | null, q: Quantity) =>
+      v == null ? '—' : `${q.approx && !dcPartial ? '≈ ' : ''}${formatEnergy(v)}`;
     const lossPct = dc.losses != null && dc.inverterIn ? dc.losses / dc.inverterIn : null;
     const bat = live?.batteryW;
     const batText =
@@ -536,11 +549,11 @@ export class FveFlowAnalysisDialog extends LitElement {
     if (pv != null && ch != null && dis != null && ac != null) {
       const fromPv = Math.min(ch, pv);
       const nodes: SankeyNode[] = [
-        { id: 'pv', label: 'FVE (MPPT)', sub: fmtQ(d.pv), column: 0, color: C.solar },
-        { id: 'dis', label: 'Z baterie', sub: fmtQ(d.discharge), column: 0, color: C.discharge },
-        { id: 'chg', label: 'Do baterie', sub: fmtQ(d.charge), column: 1, color: C.charge },
+        { id: 'pv', label: 'FVE (MPPT)', sub: approxKwh(pv, d.pv), column: 0, color: C.solar },
+        { id: 'dis', label: 'Z baterie', sub: approxKwh(dis, d.discharge), column: 0, color: C.discharge },
+        { id: 'chg', label: 'Do baterie', sub: approxKwh(ch, d.charge), column: 1, color: C.charge },
         { id: 'inv', label: 'Střídač', sub: fmtKwh(dc.inverterIn), column: 1, color: C.ac },
-        { id: 'house', label: 'Dům (AC)', sub: fmtQ(d.fve), column: 2, color: C.island },
+        { id: 'house', label: 'Dům (AC)', sub: approxKwh(ac, d.fve), column: 2, color: C.island },
         { id: 'loss', label: 'Ztráty', sub: fmtKwh(dc.losses), column: 2, color: C.loss },
       ];
       const links: SankeyLink[] = [
@@ -550,11 +563,14 @@ export class FveFlowAnalysisDialog extends LitElement {
         { source: 'inv', target: 'house', value: ac, title: `Střídač → dům · ${formatEnergy(ac)}` },
         ...(dc.losses ? [{ source: 'inv', target: 'loss', value: dc.losses, faint: true, title: `Ztráty · ${formatEnergy(dc.losses)}` }] : []),
       ];
-      sankey = this._chart(
-        280,
-        renderSankey({ id: 'an-dc', width: this._chartW, height: 280, nodes, links, pad: 40 }),
-        'DC bilance',
-      );
+      sankey = html`${dcPartial
+          ? html`<p class="note">Bilance za ${dc.days} z ${d.balanceDays.total} dní — jen dny, kdy mají data všechny měřáky.</p>`
+          : nothing}
+        ${this._chart(
+          280,
+          renderSankey({ id: 'an-dc', width: this._chartW, height: 280, nodes, links, pad: 40 }),
+          'DC bilance',
+        )}`;
     }
 
     const charts = s
@@ -1012,6 +1028,11 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .warn {
       color: #ffb74d;
+    }
+    .note {
+      margin: 10px 0 0;
+      color: rgba(226, 240, 248, 0.55);
+      font-size: 13px;
     }
     .card .warn {
       margin: 10px 0 0;

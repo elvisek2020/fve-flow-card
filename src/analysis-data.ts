@@ -210,6 +210,8 @@ export interface Quantity {
   /** Odhad (integrál s mezerami / hodinovou přesností, neúplný součet pater…). */
   approx: boolean;
   source: 'meter' | 'integral' | 'floors' | 'none';
+  /** Dny doplněné součtem pater — nehodí se pro srovnání hlavní dodávky s patry. */
+  fromFloors?: Set<string>;
 }
 
 const none = (): Quantity => ({ total: null, byDay: new Map(), approx: false, source: 'none' });
@@ -229,6 +231,8 @@ interface Store {
   fetchedPower: Set<string>;
   /** Délka rozsahu, kterou by měla pokrýt data (pro „≈“ u integrálů). */
   expectedMs: number;
+  /** Dny, které má veličina pokrýt (chybějící se doplní dalším zdrojem v řetězci). */
+  dayKeys: string[];
 }
 
 const dayKeyOf = (t: number): string => toLocalDayKey(new Date(t));
@@ -245,6 +249,11 @@ function evalCandidate(
     const rows = st.meters.get(c.id);
     if (!rows) return null;
     const byDay = meterByDay(rows, dayKeyOf, { dayRows: st.dayRows, daily: c.daily });
+    // Měřák založený uprostřed období: jeho první den je neúplný → doplní ho další zdroj.
+    if (st.dayRows) {
+      const first = [...byDay.keys()].sort()[0];
+      if (first && st.dayKeys.length && first > st.dayKeys[0]) byDay.delete(first);
+    }
     if (!byDay.size) return null;
     return { total: sumMap(byDay), byDay, approx: false, source: 'meter' };
   }
@@ -271,13 +280,18 @@ function evalCandidate(
   if (!parts || !parts.length) return null;
   const known = parts.filter((q) => q.total != null);
   if (!known.length) return null;
+  // Jen dny, kdy mají data všechna patra s daty — jinak by součet podhodnotil.
   const byDay = new Map<string, number>();
-  for (const q of known) for (const [k, v] of q.byDay) byDay.set(k, (byDay.get(k) ?? 0) + v);
+  for (const k of known[0].byDay.keys()) {
+    if (known.every((q) => q.byDay.has(k))) byDay.set(k, known.reduce((sum, q) => sum + q.byDay.get(k)!, 0));
+  }
+  if (!byDay.size) return null;
   return {
     total: sumMap(byDay),
     byDay,
     approx: known.length < parts.length || known.some((q) => q.approx),
     source: 'floors',
+    fromFloors: new Set(byDay.keys()),
   };
 }
 
@@ -297,15 +311,33 @@ function resolveChain(
   floorParts: (part: 'fve' | 'grid') => Quantity[] | null,
   pending: Set<string>,
 ): Quantity {
+  // Dny doplňuje po sobě: první zdroj s daty, chybějící dny z dalších v řetězci
+  // (např. měřák založený před 11 dny + integrál výkonu za zbytek období).
+  let acc: Quantity | null = null;
   for (const c of chain) {
+    const missing = acc ? st.dayKeys.filter((k) => !acc!.byDay.has(k)) : st.dayKeys;
+    if (acc && !missing.length) break;
     const r = evalCandidate(c, st, floorParts);
     if (r === 'pending') {
       if (c.kind === 'integral') c.ids.forEach((id) => pending.add(id));
-      return none();
+      break;
     }
-    if (r) return r;
+    if (!r) continue;
+    if (!acc) {
+      acc = { ...r, byDay: new Map(r.byDay), fromFloors: r.fromFloors ? new Set(r.fromFloors) : undefined };
+      continue;
+    }
+    for (const k of missing) {
+      const v = r.byDay.get(k);
+      if (v == null) continue;
+      acc.byDay.set(k, v);
+      acc.approx = true;
+      if (r.source === 'floors') (acc.fromFloors ??= new Set()).add(k);
+    }
   }
-  return none();
+  if (!acc) return none();
+  acc.total = sumMap(acc.byDay);
+  return acc;
 }
 
 function resolveAll(plan: AnalysisPlan, st: Store): Resolved {
@@ -463,12 +495,20 @@ export interface AnalysisData {
   unmeasured: { fve: number | null; grid: number | null };
   mismatch: { fve: number | null; grid: number | null };
   dc: {
+    /** Hodnoty za dny, kdy mají data všechny čtyři veličiny (FVE, nabito, vybito, AC). */
+    pv: number | null;
+    charge: number | null;
+    discharge: number | null;
+    ac: number | null;
     inverterIn: number | null;
     losses: number | null;
     efficiency: number | null;
     cycles: number | null;
     mismatch: boolean;
+    days: number | null;
   };
+  /** Počet dní, ze kterých jsou spočítané bilance (Neměřeno / nesoulad / DC). */
+  balanceDays: { fve: number | null; grid: number | null; dc: number | null; total: number };
   soc: { min: number | null; max: number | null };
   /** Víc dní: počet dní s plnou baterií. */
   fullDays: number | null;
@@ -599,6 +639,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
     fetchedMeters: new Set(mIds),
     fetchedPower: new Set(chartIds),
     expectedMs: Math.max(1, (asOf ?? range.end) - range.start),
+    dayKeys: [range.days[0].key],
   };
   const res = await resolveWithFetch(ctx, st, (ids) =>
     safe(fetchFineRows(hass, ids, range.start, range.end, ['mean']), empty, warnings, 'Statistiky výkonů'),
@@ -714,6 +755,7 @@ export async function loadRange(
     fetchedMeters: new Set(mIds),
     fetchedPower: new Set(batteryIds),
     expectedMs: Math.max(1, todayStart - range.start),
+    dayKeys: range.days.slice(0, -1).map((d) => d.key),
   };
   const past = await resolveWithFetch(ctx, st, (ids) =>
     safe(fetchFineRows(hass, ids, range.start, todayStart, ['mean']), empty, warnings, 'Statistiky výkonů'),
@@ -732,11 +774,14 @@ export async function loadRange(
     const byDay = new Map(q.byDay);
     if (t?.total != null) byDay.set(todayKey, t.total);
     const missingPast = q.source !== 'none' && pastKeys.some((k) => !byDay.has(k));
+    const fromFloors = new Set([...(q.fromFloors ?? [])]);
+    if (t?.total != null && t.source === 'floors') fromFloors.add(todayKey);
     return {
       total: byDay.size ? sumMap(byDay) : null,
       byDay,
       approx: q.approx || !!t?.approx || missingPast || q.source === 'none',
       source: q.source !== 'none' ? q.source : t?.source ?? 'none',
+      fromFloors: fromFloors.size ? fromFloors : undefined,
     };
   };
   const res: Resolved = {
@@ -824,16 +869,31 @@ interface DeriveExtra {
   forecast: AnalysisData['forecast'];
 }
 
-/** Rozdíl hlavní dodávky a součtu pater s tolerancí max(0,05 kWh, 2 %). */
-function unmeasuredOf(main: Quantity, parts: Array<number | null>): { u: number | null; mismatch: number | null } {
-  if (main.total == null || main.source === 'floors' || !parts.length || parts.some((v) => v == null)) {
-    return { u: null, mismatch: null };
-  }
-  const d = main.total - parts.reduce<number>((s, v) => s + (v ?? 0), 0);
-  const tol = Math.max(0.05, 0.02 * main.total);
-  if (d > tol) return { u: d, mismatch: null };
-  if (d < -tol) return { u: 0, mismatch: -d };
-  return { u: 0, mismatch: null };
+/** Dny, kdy mají data všechny veličiny (a hlavní dodávka není jen součtem pater). */
+function commonDays(qs: Quantity[], exclude?: Set<string>): string[] {
+  if (!qs.length) return [];
+  return [...qs[0].byDay.keys()].filter((k) => !exclude?.has(k) && qs.every((q) => q.byDay.has(k)));
+}
+
+const sumDays = (q: Quantity, days: string[]) => days.reduce((s, k) => s + (q.byDay.get(k) ?? 0), 0);
+
+/**
+ * Rozdíl hlavní dodávky a součtu pater s tolerancí max(0,05 kWh, 2 %) — jen za
+ * společné dny, aby měřák s kratší historií nevyrobil falešný nesoulad.
+ */
+function unmeasuredOf(
+  main: Quantity,
+  parts: Quantity[],
+): { u: number | null; mismatch: number | null; days: number | null } {
+  if (main.total == null || main.source === 'floors' || !parts.length) return { u: null, mismatch: null, days: null };
+  const days = commonDays([main, ...parts], main.fromFloors);
+  if (!days.length) return { u: null, mismatch: null, days: 0 };
+  const m = sumDays(main, days);
+  const d = m - parts.reduce((s, q) => s + sumDays(q, days), 0);
+  const tol = Math.max(0.05, 0.02 * m);
+  if (d > tol) return { u: d, mismatch: null, days: days.length };
+  if (d < -tol) return { u: 0, mismatch: -d, days: days.length };
+  return { u: 0, mismatch: null, days: days.length };
 }
 
 function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: DeriveExtra): AnalysisData {
@@ -859,28 +919,61 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
       approx: !!(q.fve?.approx || q.grid?.approx) || (q.fve != null && fv == null) || (q.grid != null && gv == null),
     };
   });
-  const uf = unmeasuredOf(res.fve, floors.filter((f) => f.hasFve).map((f) => f.fve));
-  const ug = unmeasuredOf(res.grid, floors.filter((f) => f.hasGrid).map((f) => f.grid));
+  const partsOf = (part: 'fve' | 'grid') =>
+    res.floors.map((f) => f[part]).filter((q): q is Quantity => q != null);
+  const uf = unmeasuredOf(res.fve, partsOf('fve'));
+  const ug = unmeasuredOf(res.grid, partsOf('grid'));
 
-  // DC bilance: vstup střídače = FVE − nabito + vybito; ztráty = vstup − AC výstup.
-  const pv = res.pv.total;
-  const ch = res.charge.total;
+  // DC bilance jen za společné dny: vstup střídače = FVE − nabito + vybito; ztráty = vstup − AC.
   const dis = res.discharge.total;
-  let dc: AnalysisData['dc'] = { inverterIn: null, losses: null, efficiency: null, cycles: null, mismatch: false };
-  if (pv != null && ch != null && dis != null && fve != null) {
-    const inverterIn = pv - ch + dis;
-    const raw = inverterIn - fve;
-    const tol = Math.max(0.05, 0.03 * Math.abs(inverterIn));
-    const mismatch = raw < -tol;
-    dc = {
-      inverterIn,
-      losses: mismatch ? null : Math.max(0, raw),
-      efficiency: !mismatch && inverterIn > 0.05 ? Math.min(1, fve / inverterIn) : null,
-      cycles: null,
-      mismatch,
-    };
+  let dc: AnalysisData['dc'] = {
+    pv: null,
+    charge: null,
+    discharge: null,
+    ac: null,
+    inverterIn: null,
+    losses: null,
+    efficiency: null,
+    cycles: null,
+    mismatch: false,
+    days: null,
+  };
+  const dcQs = [res.pv, res.charge, res.discharge, res.fve];
+  if (dcQs.every((q) => q.total != null)) {
+    const days = commonDays(dcQs);
+    if (days.length) {
+      const [pv, ch, di, ac] = dcQs.map((q) => sumDays(q, days));
+      const inverterIn = pv - ch + di;
+      const raw = inverterIn - ac;
+      const tol = Math.max(0.05, 0.03 * Math.abs(inverterIn));
+      const mismatch = raw < -tol;
+      dc = {
+        pv,
+        charge: ch,
+        discharge: di,
+        ac,
+        inverterIn,
+        losses: mismatch ? null : Math.max(0, raw),
+        efficiency: !mismatch && inverterIn > 0.05 ? Math.min(1, ac / inverterIn) : null,
+        cycles: null,
+        mismatch,
+        days: days.length,
+      };
+    }
   }
   dc.cycles = dis != null && capacityKwh > 0 ? dis / capacityKwh : null;
+
+  // Upozornění, když bilance nejde spočítat za celé období.
+  const totalDays = range.days.length;
+  const warnings = [...x.warnings];
+  const partial = (days: number | null, what: string) => {
+    if (days != null && days > 0 && days < totalDays) {
+      warnings.push(`${what} je spočítané jen za ${days} z ${totalDays} dní (ostatní dny nemají data ze všech měřáků).`);
+    }
+  };
+  partial(uf.days, 'Neměřeno a nesoulad FVE');
+  partial(ug.days, 'Neměřeno a nesoulad sítě');
+  partial(dc.days, 'DC bilance');
 
   return {
     range,
@@ -899,11 +992,12 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
     unmeasured: { fve: uf.u, grid: ug.u },
     mismatch: { fve: uf.mismatch, grid: ug.mismatch },
     dc,
+    balanceDays: { fve: uf.days, grid: ug.days, dc: dc.days, total: totalDays },
     soc: x.soc,
     fullDays: x.fullDays,
     forecast: x.forecast,
     series: x.series,
-    warnings: [...new Set(x.warnings)],
+    warnings: [...new Set(warnings)],
     minSocPct: plan.minSocPct,
     fullSocPct: plan.fullSocPct,
     capacityKwh,

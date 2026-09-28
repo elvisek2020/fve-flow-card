@@ -291,6 +291,12 @@ Poznámky:
 
 - Hodnota s **„≈"** je odhad (integrál výkonu, mezery v datech, u starších
   dnů baterie jen hodinové průměry). Chybějící data = „—".
+- Zdroje se doplňují **po dnech**: když má měřák kratší historii (např. Utility
+  Meter založený před 11 dny), chybějící dny se dopočítají z dalšího zdroje
+  v tabulce (typicky integrál výkonu). První, neúplný den nového měřáku se
+  také bere z dalšího zdroje.
+- **Neměřeno, nesoulad měřáků a DC bilance** se počítají jen ze dnů, kdy mají
+  data všechny zúčastněné měřáky — okno pak napíše „za X z Y dní".
 - Statistiky vznikají jen u entit se `state_class` (`measurement` u výkonu,
   `total_increasing` u energie).
 - Recorder drží 5min statistiky standardně 10 dní — u 30 dní se starší část
