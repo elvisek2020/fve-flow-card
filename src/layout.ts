@@ -43,7 +43,7 @@ const BACK_BTN_H = 90;
 // Mezera mezi měničem a prvním tlačítkem pod ním (Analýza nebo ZPĚT).
 const BUTTONS_GAP_DESKTOP = 64;
 const ANALYSIS_BTN_H = 72;
-// Mezera mezi tlačítkem Analýza a ZPĚT pod ním.
+// Minimální mezera mezi ZPĚT a Analýzou pod ním.
 const BTN_STACK_GAP = 20;
 
 // Širší box kvůli rozdělení na FVE zónu (vlevo) a grid zónu (vpravo).
@@ -82,15 +82,6 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   // (tam sedí volitelné tlačítko ZPĚT).
   const solcast: Rect = { x: MID_X, y: 40, w: MID_W, h: 190 };
   const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: GRID_H };
-  // Tlačítka pod měničem: Analýza nahoře, ZPĚT pod ní (každé volitelné).
-  let btnY = inverter.y + inverter.h + BUTTONS_GAP_DESKTOP;
-  const analysisButton: Rect | undefined = opts.analysisButton
-    ? { x: inverter.x, y: btnY, w: inverter.w, h: ANALYSIS_BTN_H }
-    : undefined;
-  if (analysisButton) btnY += ANALYSIS_BTN_H + BTN_STACK_GAP;
-  const backButton: Rect | undefined = opts.backButton
-    ? { x: inverter.x, y: btnY, w: inverter.w, h: BACK_BTN_H }
-    : undefined;
 
   const floors: Rect[] = [];
   for (let i = 0; i < n; i++) {
@@ -102,6 +93,21 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     });
   }
   const floorsBottom = floors[floors.length - 1].y + FLOOR_H;
+  // Tlačítka pod měničem: ZPĚT hned pod ním, Analýza dole — spodní hranou
+  // lícuje s posledním patrem (při málo patrech aspoň pod ZPĚT).
+  const btnTop = inverter.y + inverter.h + BUTTONS_GAP_DESKTOP;
+  const backButton: Rect | undefined = opts.backButton
+    ? { x: inverter.x, y: btnTop, w: inverter.w, h: BACK_BTN_H }
+    : undefined;
+  const analysisMinY = backButton ? backButton.y + backButton.h + BTN_STACK_GAP : btnTop;
+  const analysisButton: Rect | undefined = opts.analysisButton
+    ? {
+        x: inverter.x,
+        y: Math.max(analysisMinY, floorsBottom - ANALYSIS_BTN_H),
+        w: inverter.w,
+        h: ANALYSIS_BTN_H,
+      }
+    : undefined;
   const buttonsBottom = Math.max(
     analysisButton ? analysisButton.y + analysisButton.h : 0,
     backButton ? backButton.y + backButton.h : 0,
@@ -182,14 +188,14 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   y += battery.h + MOBILE_GAP;
   const inverter: Rect = { x, y, w, h: 260 };
   y += inverter.h + MOBILE_GAP;
-  const analysisButton: Rect | undefined = opts.analysisButton
-    ? { x, y, w, h: ANALYSIS_BTN_H }
-    : undefined;
-  if (analysisButton) y += analysisButton.h + MOBILE_GAP;
   const backButton: Rect | undefined = opts.backButton
     ? { x, y, w, h: BACK_BTN_H }
     : undefined;
   if (backButton) y += backButton.h + MOBILE_GAP;
+  const analysisButton: Rect | undefined = opts.analysisButton
+    ? { x, y, w, h: ANALYSIS_BTN_H }
+    : undefined;
+  if (analysisButton) y += analysisButton.h + MOBILE_GAP;
   const grid: Rect = { x, y, w, h: 185 };
   y += grid.h + MOBILE_GAP;
 

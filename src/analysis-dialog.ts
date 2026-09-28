@@ -124,9 +124,9 @@ export class FveFlowAnalysisDialog extends LitElement {
       this._ro = new ResizeObserver((entries) => {
         const w = entries[0]?.contentRect.width ?? 0;
         if (!w) return;
-        const cols = w >= 820 ? 2 : 1;
-        const cell = cols === 2 ? (w - 14) / 2 : w;
-        const chartW = Math.max(240, Math.floor((cell - 34) / 10) * 10);
+        const cols = w >= 900 ? 2 : 1;
+        const cell = cols === 2 ? (w - 18) / 2 : w;
+        const chartW = Math.max(240, Math.floor((cell - 42) / 10) * 10);
         // Až v dalším snímku — změna layoutu uvnitř callbacku by hlásila „ResizeObserver loop“.
         requestAnimationFrame(() => {
           if (cols !== this._cols) this._cols = cols;
@@ -270,10 +270,11 @@ export class FveFlowAnalysisDialog extends LitElement {
     </div>`;
   }
 
-  private _kpi(label: string, value: string, color?: string, title?: string): TemplateResult {
+  private _kpi(label: string, value: string, color?: string, title?: string, sub?: string): TemplateResult {
     return html`<div class="kpi" title=${title ?? ''}>
       <span class="k-label">${label}</span>
       <span class="k-value" style=${color ? `color:${color}` : ''}>${value}</span>
+      ${sub ? html`<span class="k-sub">${sub}</span>` : nothing}
     </div>`;
   }
 
@@ -288,10 +289,10 @@ export class FveFlowAnalysisDialog extends LitElement {
     const s = d.series;
     const chart = s
       ? this._chart(
-          190,
+          240,
           renderTimeChart({
             width: this._chartW,
-            height: 190,
+            height: 240,
             grid: s.grid,
             x0: d.range.start,
             x1: d.range.dayEnd,
@@ -305,10 +306,10 @@ export class FveFlowAnalysisDialog extends LitElement {
           'Průběh odběru z FVE a ze sítě',
         )
       : this._chart(
-          180,
+          230,
           renderColumns({
             width: this._chartW,
-            height: 180,
+            height: 230,
             days: d.range.days,
             mode: 'stacked',
             partialLast: true,
@@ -331,9 +332,9 @@ export class FveFlowAnalysisDialog extends LitElement {
       </div>
       <div class="kpis">
         ${this._kpi('Spotřeba domu', fmtKwh(d.house))}
-        ${this._kpi('Z FVE', `${fmtQ(d.fve)}${fShare != null ? ` · ${fmtPct(fShare)}` : ''}`, C.island, this._srcTitle(d.fve))}
+        ${this._kpi('Z FVE', fmtQ(d.fve), C.island, this._srcTitle(d.fve), fShare != null ? `${fmtPct(fShare)} spotřeby` : undefined)}
         ${d.gridConfigured
-          ? this._kpi('Ze sítě', `${fmtQ(d.grid)}${gShare != null ? ` · ${fmtPct(gShare)}` : ''}`, C.grid, this._srcTitle(d.grid))
+          ? this._kpi('Ze sítě', fmtQ(d.grid), C.grid, this._srcTitle(d.grid), gShare != null ? `${fmtPct(gShare)} spotřeby` : undefined)
           : nothing}
         ${this._kpi('Soběstačnost', fmtPct(d.selfSufficiency), C.ok)}
       </div>
@@ -380,7 +381,7 @@ export class FveFlowAnalysisDialog extends LitElement {
       if (uG > 0) links.push({ source: 'grid', target: 'u', value: uG, faint: true, title: `Síť → neměřeno · ${formatEnergy(uG)}` });
     }
     const right = nodes.filter((n) => n.column === 1).length;
-    const h = Math.max(200, Math.min(340, 44 * right + 24));
+    const h = Math.max(260, Math.min(460, 58 * right + 40));
     const mismatch = [
       d.mismatch.fve ? `FVE: patra o ${formatEnergy(d.mismatch.fve)} víc než měnič` : '',
       d.mismatch.grid ? `síť: patra o ${formatEnergy(d.mismatch.grid)} víc než přívod` : '',
@@ -433,10 +434,10 @@ export class FveFlowAnalysisDialog extends LitElement {
       : '—';
     const chart = s
       ? this._chart(
-          200,
+          250,
           renderTimeChart({
             width: this._chartW,
-            height: 200,
+            height: 250,
             grid: s.grid,
             x0: d.range.start,
             x1: d.range.dayEnd,
@@ -451,10 +452,10 @@ export class FveFlowAnalysisDialog extends LitElement {
           'Výroba FVE a predikce Solcast',
         )
       : this._chart(
-          180,
+          230,
           renderColumns({
             width: this._chartW,
-            height: 180,
+            height: 230,
             days: d.range.days,
             mode: 'grouped',
             partialLast: true,
@@ -550,18 +551,18 @@ export class FveFlowAnalysisDialog extends LitElement {
         ...(dc.losses ? [{ source: 'inv', target: 'loss', value: dc.losses, faint: true, title: `Ztráty · ${formatEnergy(dc.losses)}` }] : []),
       ];
       sankey = this._chart(
-        230,
-        renderSankey({ id: 'an-dc', width: this._chartW, height: 230, nodes, links, pad: 34 }),
+        280,
+        renderSankey({ id: 'an-dc', width: this._chartW, height: 280, nodes, links, pad: 40 }),
         'DC bilance',
       );
     }
 
     const charts = s
       ? html`${this._chart(
-            190,
+            240,
             renderTimeChart({
               width: this._chartW,
-              height: 190,
+              height: 240,
               grid: s.grid,
               x0: d.range.start,
               x1: d.range.dayEnd,
@@ -576,10 +577,10 @@ export class FveFlowAnalysisDialog extends LitElement {
             'Výkon FVE, baterie a střídače',
           )}
           ${this._chart(
-            64,
+            76,
             renderTimeChart({
               width: this._chartW,
-              height: 64,
+              height: 76,
               grid: s.grid,
               x0: d.range.start,
               x1: d.range.dayEnd,
@@ -600,10 +601,10 @@ export class FveFlowAnalysisDialog extends LitElement {
             ['SoC', C.ok, 'line'],
           ])}`
       : html`${this._chart(
-            180,
+            230,
             renderColumns({
               width: this._chartW,
-              height: 180,
+              height: 230,
               days: d.range.days,
               mode: 'grouped',
               partialLast: true,
@@ -638,9 +639,10 @@ export class FveFlowAnalysisDialog extends LitElement {
         ${this._kpi('AC výstup', fmtQ(d.fve), C.ac, this._srcTitle(d.fve))}
         ${this._kpi(
           'Ztráty',
-          dc.mismatch ? 'nesedí' : dc.losses == null ? '—' : `${formatEnergy(dc.losses)}${lossPct != null ? ` · ${fmtPct(lossPct)}` : ''}`,
+          dc.mismatch ? 'nesedí' : dc.losses == null ? '—' : formatEnergy(dc.losses),
           dc.mismatch ? C.warn : undefined,
           'Vstup střídače (FVE − nabito + vybito) minus AC výstup',
+          lossPct != null && !dc.mismatch ? `${fmtPct(lossPct)} vstupu` : undefined,
         )}
         ${this._kpi('Účinnost', fmtPct(dc.efficiency))}
         ${this._kpi(
@@ -661,10 +663,10 @@ export class FveFlowAnalysisDialog extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
     }
     dialog {
-      width: min(1180px, calc(100vw - 32px));
-      max-width: 1180px;
-      max-height: calc(100vh - 32px);
-      max-height: calc(100dvh - 32px);
+      width: min(1640px, calc(100vw - 32px));
+      max-width: 1640px;
+      max-height: calc(100vh - 24px);
+      max-height: calc(100dvh - 24px);
       padding: 0;
       overflow: hidden;
       color: inherit;
@@ -798,13 +800,13 @@ export class FveFlowAnalysisDialog extends LitElement {
     .summary {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 14px;
+      gap: 10px;
+      margin-bottom: 18px;
     }
     .insight {
-      flex: 1 1 260px;
-      padding: 9px 12px;
-      font-size: 13px;
+      flex: 1 1 320px;
+      padding: 11px 14px;
+      font-size: 14.5px;
       line-height: 1.4;
       background: rgba(255, 255, 255, 0.035);
       border: 1px solid rgba(130, 190, 220, 0.12);
@@ -823,7 +825,7 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .grid {
       display: grid;
-      gap: 14px;
+      gap: 18px;
       grid-template-columns: 1fr;
     }
     .grid.cols-2 {
@@ -831,49 +833,57 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .card {
       min-width: 0;
-      padding: 14px 16px 16px;
+      padding: 18px 20px 20px;
       background: rgba(14, 24, 34, 0.72);
       border: 1px solid rgba(130, 190, 220, 0.12);
       border-radius: 16px;
     }
     h3 {
-      margin: 0 0 6px;
-      color: rgba(226, 240, 248, 0.5);
-      font-size: 12px;
+      margin: 0 0 8px;
+      color: rgba(226, 240, 248, 0.55);
+      font-size: 13.5px;
       font-weight: 600;
       letter-spacing: 0.14em;
       text-transform: uppercase;
     }
     .now {
-      margin-bottom: 10px;
-      color: rgba(226, 240, 248, 0.6);
-      font-size: 12.5px;
+      margin-bottom: 14px;
+      color: rgba(226, 240, 248, 0.65);
+      font-size: 14px;
     }
     .now b {
       font-weight: 650;
     }
     .kpis {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-      gap: 8px;
-      margin-bottom: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
     }
     .kpi {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      padding: 7px 10px;
+      gap: 3px;
+      min-width: 0;
+      padding: 10px 12px;
       background: rgba(255, 255, 255, 0.035);
-      border-radius: 9px;
+      border-radius: 10px;
     }
     .k-label {
-      color: rgba(226, 240, 248, 0.5);
-      font-size: 11px;
+      overflow: hidden;
+      color: rgba(226, 240, 248, 0.55);
+      font-size: 12.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .k-value {
-      font-size: 15px;
+      font-size: 19px;
       font-weight: 700;
       white-space: nowrap;
+    }
+    .k-sub {
+      color: rgba(226, 240, 248, 0.5);
+      font-size: 12px;
     }
     .split {
       display: flex;
@@ -897,8 +907,8 @@ export class FveFlowAnalysisDialog extends LitElement {
       margin-top: 6px;
     }
     .axis {
-      fill: rgba(226, 240, 248, 0.42);
-      font-size: 10px;
+      fill: rgba(226, 240, 248, 0.45);
+      font-size: 11.5px;
     }
     .empty {
       fill: rgba(226, 240, 248, 0.45);
@@ -906,12 +916,12 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .s-name {
       fill: rgba(226, 240, 248, 0.92);
-      font-size: 12px;
+      font-size: 13.5px;
       font-weight: 600;
     }
     .s-sub {
-      fill: rgba(226, 240, 248, 0.55);
-      font-size: 11px;
+      fill: rgba(226, 240, 248, 0.6);
+      font-size: 12.5px;
     }
     .halo {
       paint-order: stroke;
@@ -932,9 +942,9 @@ export class FveFlowAnalysisDialog extends LitElement {
       display: flex;
       flex-wrap: wrap;
       gap: 6px 14px;
-      margin-top: 8px;
-      color: rgba(226, 240, 248, 0.6);
-      font-size: 11.5px;
+      margin-top: 10px;
+      color: rgba(226, 240, 248, 0.65);
+      font-size: 13px;
     }
     .legend span {
       display: inline-flex;
@@ -970,13 +980,13 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     table {
       width: 100%;
-      margin-top: 10px;
+      margin-top: 14px;
       border-collapse: collapse;
-      font-size: 12.5px;
+      font-size: 14px;
     }
     th,
     td {
-      padding: 6px 6px;
+      padding: 8px 8px;
       text-align: right;
       border-bottom: 1px solid rgba(130, 190, 220, 0.08);
       white-space: nowrap;
@@ -988,7 +998,7 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     th {
       color: rgba(226, 240, 248, 0.5);
-      font-size: 10.5px;
+      font-size: 11.5px;
       font-weight: 600;
       letter-spacing: 0.05em;
       text-transform: uppercase;
@@ -1004,8 +1014,8 @@ export class FveFlowAnalysisDialog extends LitElement {
       color: #ffb74d;
     }
     .card .warn {
-      margin: 8px 0 0;
-      font-size: 12px;
+      margin: 10px 0 0;
+      font-size: 13px;
     }
     .foot {
       margin-top: 14px;

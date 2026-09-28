@@ -64,7 +64,7 @@ export interface TimeChartOptions {
 }
 
 export function renderTimeChart(o: TimeChartOptions): TemplateResult {
-  const pl = 46;
+  const pl = 56;
   const pr = 10;
   const pt = 8;
   const pb = o.compact ? 6 : 20;
@@ -245,7 +245,7 @@ export interface ColumnsOptions {
 }
 
 export function renderColumns(o: ColumnsOptions): TemplateResult {
-  const pl = 46;
+  const pl = 56;
   const pr = 10;
   const pt = 8;
   const pb = 22;
@@ -354,7 +354,7 @@ const DEFAULT_PAD = 14;
 const MIN_LINK = 1.5;
 const MIN_NODE = 3;
 const EPS = 0.005;
-const LABEL_H = 30;
+const LABEL_H = 36;
 
 /** Rozprostře středy popisků tak, aby se nepřekrývaly (a vešly se do výšky). */
 function spreadLabels(items: Array<{ want: number; set: (v: number) => void }>, height: number): void {
@@ -502,7 +502,7 @@ export function renderSankey(o: SankeyOptions): TemplateResult {
     }
     if (!n.outs.length) return { n, x: n.x + NODE_W + 6, anchor: 'start', cy, halo: true };
     if (!n.ins.length) return { n, x: n.x - 6, anchor: 'end', cy, halo: true };
-    return { n, x: n.x + NODE_W / 2, anchor: 'middle', cy: n.y - 16, halo: true };
+    return { n, x: n.x + NODE_W / 2, anchor: 'middle', cy: n.y - 19, halo: true };
   });
   const groups = new Map<string, Label[]>();
   for (const l of labels) {
@@ -548,9 +548,9 @@ export function renderSankey(o: SankeyOptions): TemplateResult {
           ? svg`<line x1="${f1(edge)}" y1="${f1(l.n.y + l.n.h / 2)}" x2="${f1(edge)}" y2="${f1(l.cy)}"
               stroke="rgba(226,240,248,0.25)"/>`
           : nothing}
-        <text x="${f1(l.x)}" y="${f1(l.cy - 2)}" text-anchor="${l.anchor}" class="s-name${l.halo ? ' halo' : ''}">${l.n.label}</text>
+        <text x="${f1(l.x)}" y="${f1(l.cy - 3)}" text-anchor="${l.anchor}" class="s-name${l.halo ? ' halo' : ''}">${l.n.label}</text>
         ${l.n.sub
-          ? svg`<text x="${f1(l.x)}" y="${f1(l.cy + 12)}" text-anchor="${l.anchor}" class="s-sub${l.halo ? ' halo' : ''}">${l.n.sub}</text>`
+          ? svg`<text x="${f1(l.x)}" y="${f1(l.cy + 14)}" text-anchor="${l.anchor}" class="s-sub${l.halo ? ' halo' : ''}">${l.n.sub}</text>`
           : nothing}`;
     })}`;
 }
