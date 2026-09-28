@@ -169,6 +169,28 @@ const SCHEMA = [
     ],
   },
   {
+    name: 'analysis',
+    type: 'expandable',
+    title: 'Analýza',
+    icon: 'mdi:chart-box-outline',
+    schema: [
+      {
+        name: 'enabled',
+        selector: BOOL,
+        default: true,
+        custom_label: 'Zobrazit tlačítko Analýza pod měničem',
+        custom_helper:
+          'Nad tlačítkem ZPĚT se zobrazí tlačítko Analýza — přehled pater, zdrojů (FVE / síť), výroby proti predikci Solcast a DC bilance baterie za Dnes / Včera / 7 / 30 dní. Bere jen entity nastavené výše.',
+      },
+      {
+        name: 'full_soc_pct',
+        selector: numBox(80, 100, 1),
+        default: 98,
+        custom_label: 'Plná baterie od SoC (%)',
+      },
+    ],
+  },
+  {
     name: 'back_button',
     type: 'expandable',
     title: 'Tlačítko Zpět',
@@ -243,6 +265,7 @@ const LABELS: Record<string, string> = {
   forecast: 'Prognóza výdrže baterie',
   options: 'Chování a animace',
   back_button: 'Tlačítko Zpět',
+  analysis: 'Analýza',
   enabled: 'Zobrazit tlačítko ZPĚT pod měničem',
   path: 'Cílová cesta (prázdné = výchozí dashboard)',
   power: 'Výkon (W)',
@@ -325,6 +348,8 @@ const HELPERS: Record<string, string> = {
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
   capacity: 'Entita v kWh, Wh nebo Ah (Ah se přepočte přes napětí baterie, jinak 48 V). Potřebná pro prognózu.',
+  full_soc_pct:
+    'Od tohoto SoC se baterie v Analýze bere jako plná: podbarví se v grafu a z rozdílu predikce a skutečnosti se odhadne možná nevyužitá výroba. Výchozí 98 %.',
   enabled: 'Pod měničem se zobrazí tlačítko ZPĚT pro návrat na jiný dashboard (typicky hlavní přehled).',
   path: 'Cesta v adresním řádku HA, např. /lovelace/home nebo /lovelace/0. Nech prázdné pro výchozí dashboard (/).',
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
@@ -362,8 +387,8 @@ export class FveFlowCardEditor extends LitElement {
   private _computeLabel = (schema: { name: string; custom_label?: string }): string =>
     schema.custom_label ?? LABELS[schema.name] ?? schema.name;
 
-  private _computeHelper = (schema: { name: string }): string | undefined =>
-    HELPERS[schema.name];
+  private _computeHelper = (schema: { name: string; custom_helper?: string }): string | undefined =>
+    schema.custom_helper ?? HELPERS[schema.name];
 
   protected render(): TemplateResult {
     if (!this.hass || !this._config) return html``;

@@ -17,6 +17,8 @@ export interface Layout {
   floors: Rect[];
   /** Tlačítko ZPĚT pod měničem — jen když je v configu zapnuté. */
   backButton?: Rect;
+  /** Tlačítko Analýza pod měničem (nad ZPĚT) — default zapnuté. */
+  analysisButton?: Rect;
   paths: {
     pvMppt: string;
     mpptInv: string;
@@ -31,12 +33,18 @@ export interface Layout {
 export interface LayoutOptions {
   /** Rezervovat místo pro tlačítko ZPĚT pod měničem. */
   backButton?: boolean;
+  /** Rezervovat místo pro tlačítko Analýza (nad ZPĚT). */
+  analysisButton?: boolean;
 }
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
 // odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.
 const BACK_BTN_H = 90;
-const BACK_BTN_GAP_DESKTOP = 64;
+// Mezera mezi měničem a prvním tlačítkem pod ním (Analýza nebo ZPĚT).
+const BUTTONS_GAP_DESKTOP = 64;
+const ANALYSIS_BTN_H = 72;
+// Mezera mezi tlačítkem Analýza a ZPĚT pod ním.
+const BTN_STACK_GAP = 20;
 
 // Širší box kvůli rozdělení na FVE zónu (vlevo) a grid zónu (vpravo).
 const FLOOR_W = 380;
@@ -74,13 +82,14 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   // (tam sedí volitelné tlačítko ZPĚT).
   const solcast: Rect = { x: MID_X, y: 40, w: MID_W, h: 190 };
   const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: GRID_H };
+  // Tlačítka pod měničem: Analýza nahoře, ZPĚT pod ní (každé volitelné).
+  let btnY = inverter.y + inverter.h + BUTTONS_GAP_DESKTOP;
+  const analysisButton: Rect | undefined = opts.analysisButton
+    ? { x: inverter.x, y: btnY, w: inverter.w, h: ANALYSIS_BTN_H }
+    : undefined;
+  if (analysisButton) btnY += ANALYSIS_BTN_H + BTN_STACK_GAP;
   const backButton: Rect | undefined = opts.backButton
-    ? {
-        x: inverter.x,
-        y: inverter.y + inverter.h + BACK_BTN_GAP_DESKTOP,
-        w: inverter.w,
-        h: BACK_BTN_H,
-      }
+    ? { x: inverter.x, y: btnY, w: inverter.w, h: BACK_BTN_H }
     : undefined;
 
   const floors: Rect[] = [];
@@ -93,7 +102,10 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     });
   }
   const floorsBottom = floors[floors.length - 1].y + FLOOR_H;
-  const backBottom = backButton ? backButton.y + backButton.h : 0;
+  const buttonsBottom = Math.max(
+    analysisButton ? analysisButton.y + analysisButton.h : 0,
+    backButton ? backButton.y + backButton.h : 0,
+  );
 
   const pvCx = pv.x + pv.w / 2;
   const mpptMidY = mppt.y + mppt.h / 2;
@@ -120,7 +132,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
 
   return {
     width: 1440,
-    height: Math.max(820, floorsBottom + 40, backBottom + 40),
+    height: Math.max(820, floorsBottom + 40, buttonsBottom + 40),
     pv,
     mppt,
     battery,
@@ -129,6 +141,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     grid,
     floors,
     backButton,
+    analysisButton,
     paths,
   };
 }
@@ -169,6 +182,10 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   y += battery.h + MOBILE_GAP;
   const inverter: Rect = { x, y, w, h: 260 };
   y += inverter.h + MOBILE_GAP;
+  const analysisButton: Rect | undefined = opts.analysisButton
+    ? { x, y, w, h: ANALYSIS_BTN_H }
+    : undefined;
+  if (analysisButton) y += analysisButton.h + MOBILE_GAP;
   const backButton: Rect | undefined = opts.backButton
     ? { x, y, w, h: BACK_BTN_H }
     : undefined;
@@ -223,6 +240,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     grid,
     floors,
     backButton,
+    analysisButton,
     paths: { pvMppt, mpptInv, batInv, pvSolcast, islandTaps, gridTaps },
   };
 }

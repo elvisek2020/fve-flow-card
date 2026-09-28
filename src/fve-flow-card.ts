@@ -13,6 +13,7 @@ import { renderFlow, type FlowOptions } from './flow';
 import { renderPhaseChips } from './phase-chips';
 import {
   iconBattery,
+  iconChart,
   iconFan,
   iconGear,
   iconHome,
@@ -24,6 +25,8 @@ import {
   iconSun,
 } from './icons';
 import { openConfirmDialog } from './confirm-dialog';
+import { openAnalysisDialog, type AnalysisLive, type FveFlowAnalysisDialog } from './analysis-dialog';
+import { C, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import {
   capacityToKwh,
@@ -50,19 +53,6 @@ import './fve-flow-mini-card';
 
 const CARD_VERSION = '__CARD_VERSION__';
 
-const C = {
-  solar: '#00e676',
-  island: '#00e676',
-  grid: '#4fc3f7',
-  charge: '#e040fb',
-  discharge: '#ffb74d',
-  ok: '#69f0ae',
-  warn: '#ffb74d',
-  crit: '#ff5252',
-};
-
-/** Tlumená barva pro nedostupné hodnoty a neaktivní ikony. */
-const NEUTRAL = 'rgba(148,170,190,0.5)';
 
 const PHASE_STYLE: Record<string, { color: string; border: string }> = {
   L1: { color: '#f5f5f5', border: 'rgba(245,245,245,0.28)' },
@@ -129,6 +119,9 @@ export class FveFlowCard extends LitElement {
     this._sparkEntities = [];
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
+    // Pohled se zavírá (navigace pryč) → zavřít i otevřené okno Analýza.
+    this._analysisDialog?.close();
+    this._analysisDialog = undefined;
   }
 
   protected updated(changed: PropertyValues<this>): void {
@@ -513,6 +506,58 @@ export class FveFlowCard extends LitElement {
     window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
   }
 
+  private _analysisDialog?: FveFlowAnalysisDialog;
+
+  /** Živé hodnoty „Teď“ pro okno Analýza — stejná pravidla jako scéna. */
+  private _liveSnapshot(): AnalysisLive {
+    const cfg = this._config;
+    const num = (id?: string) => (hasNum(this.hass, id) ? toNum(this.hass, id) : null);
+    const floors = cfg?.floors ?? [];
+    const bat = num(cfg?.battery?.power);
+    return {
+      fveW: num(cfg?.inverter?.load_power) ?? num(cfg?.inverter?.power),
+      gridW:
+        num(cfg?.grid?.power) ??
+        (floors.some((f) => this._floorGridKnown(f))
+          ? floors.reduce((sum, f) => sum + this._floorGridPower(f), 0)
+          : null),
+      pvW: num(cfg?.pv?.power),
+      batteryW: bat == null ? null : cfg?.battery?.invert ? -bat : bat,
+      inverterW: num(cfg?.inverter?.power) ?? num(cfg?.inverter?.load_power),
+      soc: num(cfg?.battery?.soc),
+      solcastNowW: num(cfg?.solcast?.power_now),
+    };
+  }
+
+  private _openAnalysis(): void {
+    if (!this.hass || !this._config || this._analysisDialog?.isConnected) return;
+    this._analysisDialog = openAnalysisDialog({
+      getHass: () => this.hass,
+      getLive: () => this._liveSnapshot(),
+      config: this._config,
+      getCapacityKwh: () => this._batteryCapacityKwh(),
+    });
+  }
+
+  /** Tlačítko Analýza nad ZPĚT — stejný skleněný panel, ikona grafu. */
+  private _analysisButton(r: Rect): TemplateResult {
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    return svg`
+      <g class="analysis-btn" @click=${(e: Event) => {
+        e.stopPropagation();
+        this._openAnalysis();
+      }}>
+        <title>Analýza energie — patra, zdroje, predikce, baterie</title>
+        <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"
+          fill="rgba(14, 24, 34, 0.72)"
+          stroke="rgba(148,170,190,0.4)" stroke-width="1.5"/>
+        ${iconChart(cx - 64, cy - 15, 30, C.grid)}
+        <text class="back-label" x="${cx - 24}" y="${cy + 5}">ANALÝZA</text>
+      </g>
+    `;
+  }
+
   /** Navigace tlačítkem ZPĚT — prázdná cesta = výchozí dashboard. */
   private _navigateBack(): void {
     const path = this._config?.back_button?.path?.trim() || '/';
@@ -743,10 +788,13 @@ export class FveFlowCard extends LitElement {
     if (!this.hass) return html`<ha-card></ha-card>`;
 
     const floors = cfg.floors ?? [];
-    const showBack = !!cfg.back_button?.enabled;
+    const buttons = {
+      backButton: !!cfg.back_button?.enabled,
+      analysisButton: cfg.analysis?.enabled !== false,
+    };
     const layout = this._narrow
-      ? computeMobileLayout(Math.max(1, floors.length), { backButton: showBack })
-      : computeLayout(Math.max(1, floors.length), { backButton: showBack });
+      ? computeMobileLayout(Math.max(1, floors.length), buttons)
+      : computeLayout(Math.max(1, floors.length), buttons);
     const base = this._flowBase();
 
     const pvP = toNum(this.hass, cfg.pv?.power);
@@ -824,6 +872,7 @@ export class FveFlowCard extends LitElement {
           ${this._nodeMppt(layout.mppt)}
           ${this._nodeBattery(layout.battery, batP, charging, discharging)}
           ${this._nodeInverter(layout.inverter, islandTotal)}
+          ${layout.analysisButton ? this._analysisButton(layout.analysisButton) : nothing}
           ${layout.backButton ? this._backButton(layout.backButton) : nothing}
           ${this._nodeSolcast(layout.solcast)}
           ${this._nodeGrid(layout.grid, gridTotal, gridKnown)}
@@ -1417,13 +1466,16 @@ export class FveFlowCard extends LitElement {
       fill: rgba(255, 255, 255, 0.1);
       stroke: rgba(79, 195, 247, 0.55);
     }
-    .back-btn {
+    .back-btn,
+    .analysis-btn {
       cursor: pointer;
     }
-    .back-btn > rect:first-of-type {
+    .back-btn > rect:first-of-type,
+    .analysis-btn > rect:first-of-type {
       transition: fill 0.15s ease, stroke 0.15s ease;
     }
-    .back-btn:hover > rect:first-of-type {
+    .back-btn:hover > rect:first-of-type,
+    .analysis-btn:hover > rect:first-of-type {
       fill: rgba(255, 255, 255, 0.08);
       stroke: rgba(148, 170, 190, 0.65);
     }

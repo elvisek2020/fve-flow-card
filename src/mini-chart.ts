@@ -30,7 +30,7 @@ function bucketAverage(points: HistoryPoint[], t0: number, t1: number): HistoryP
 }
 
 /** Hladká Catmull-Rom křivka (převedená na kubické Beziery) — plynulý přechod bez zlomů. */
-function smoothPath(coords: Array<[number, number]>): string {
+export function smoothPath(coords: Array<[number, number]>): string {
   if (coords.length < 2) return '';
   if (coords.length === 2) {
     const [[x0, y0], [x1, y1]] = coords;

@@ -237,6 +237,17 @@ export interface BackButtonConfig {
   path?: string;
 }
 
+/**
+ * Tlačítko Analýza pod měničem (nad ZPĚT) a okno s přehledem energie
+ * za Dnes / Včera / 7 / 30 dní. Bere jen entity, které karta už má.
+ */
+export interface AnalysisConfig {
+  /** Zobrazit tlačítko Analýza. Default zapnuto. */
+  enabled?: boolean;
+  /** SoC (%), od kterého je baterie „plná“ — odhad nevyužité výroby. Default 98. */
+  full_soc_pct?: number;
+}
+
 export interface FveFlowCardConfig {
   type: string;
   title?: string;
@@ -249,6 +260,7 @@ export interface FveFlowCardConfig {
   floors?: FloorConfig[];
   options?: OptionsConfig;
   back_button?: BackButtonConfig;
+  analysis?: AnalysisConfig;
   [key: string]: unknown;
 }
 

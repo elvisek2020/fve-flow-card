@@ -15,6 +15,9 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
   mrtvá linka pod prahem zešedne
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
 - Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
+- Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
+  výroba vs predikce Solcast a DC bilance MPPT · baterie · střídač za
+  Dnes / Včera / 7 / 30 dní
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
@@ -144,6 +147,9 @@ options:
 back_button:
   enabled: true
   path: /lovelace/home  # prázdné = výchozí dashboard (/)
+analysis:
+  enabled: true         # tlačítko Analýza nad ZPĚT (default zapnuto)
+  full_soc_pct: 98      # od jakého SoC je baterie „plná" (odhad nevyužité výroby)
 ```
 
 ### Barevné prahy (semafor)
@@ -214,7 +220,8 @@ Poznámky:
   přepne dashboard přímo do editačního režimu (HA URL param `?edit=1`) —
   ušetří průchod přes postranní menu. U panelového view s jedinou kartou se
   hned nabídne tužka pro úpravu konfigurace.
-- **Tlačítko ZPĚT**: volitelné tlačítko pod měničem (`back_button.enabled`).
+- **Tlačítko ZPĚT**: volitelné tlačítko pod měničem, případně pod tlačítkem
+  Analýza (`back_button.enabled`).
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
 - **Prognóza výdrže baterie**: chip **Prognóza** pod ikonou baterie (jen když
@@ -246,6 +253,52 @@ Poznámky:
     `battery.voltage` (bez něj 48 V).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
+
+### Okno Analýza
+
+Tlačítko **ANALÝZA** pod měničem (nad ZPĚT) otevře přehled za **Dnes / Včera /
+7 dní / 30 dní**. Karta k tomu nepotřebuje žádné nové entity — bere ty, které
+už má, a jejich dlouhodobé statistiky z recorderu HA.
+
+- **Shrnutí** — automatické postřehy: soběstačnost, plnění predikce, možná
+  nevyužitá výroba při plné baterii, patro s největší spotřebou, neměřená
+  spotřeba, nesoulad měřáků, ztráty a cykly baterie.
+- **Zdroje domu** — spotřeba z FVE (výstup měniče) vs. ze sítě, soběstačnost,
+  průběh dne (u 7 / 30 dní denní sloupce).
+- **Patra** — tokový diagram FVE (měnič) a síť → patra + **Neměřeno**
+  (hlavní dodávka − součet pater) a tabulka FVE / síť / celkem / podíl.
+  Když patra naměří víc než hlavní měřák, okno upozorní na nesoulad měřáků.
+- **FVE a predikce** — skutečná výroba vs. Solcast (`detailedForecast`, p50
+  a pásmo p10–p90), plnění predikce, doba s plnou baterií a odhad možné
+  nevyužité výroby (predikce − skutečnost v době, kdy SoC ≥ `full_soc_pct`).
+  U minulých dní se porovnává s predikcí den předem.
+- **MPPT · baterie · střídač** — DC bilance: FVE → baterie / střídač,
+  baterie → střídač, střídač → dům a ztráty; účinnost, SoC min–max,
+  ekvivalentní cykly, průběh výkonů a SoC.
+
+Zdroje hodnot (bere se první dostupný):
+
+| Veličina | Zdroj |
+| --- | --- |
+| Dům z FVE | `inverter.energy_today` → integrál `inverter.load_power` / `power` → součet `island_energy` pater |
+| Dům ze sítě | `grid.energy_total` → `grid.energy_today` → integrál `grid.power` / fází → součet `grid_energy` pater |
+| Výroba FVE | `pv.energy_today` → `pv.energy_total` → integrál `pv.power` |
+| Nabito / vybito | integrál `battery.power` (kladná / záporná část) |
+| Patro | `island_energy` / `grid_energy` → integrál výkonu patra nebo fází |
+| Predikce | Dnes atribut `detailedForecast`; minulé dny `total_today` po půlnoci z historie (záložně `total_tomorrow`) |
+
+Poznámky:
+
+- Hodnota s **„≈"** je odhad (integrál výkonu, mezery v datech, u starších
+  dnů baterie jen hodinové průměry). Chybějící data = „—".
+- Statistiky vznikají jen u entit se `state_class` (`measurement` u výkonu,
+  `total_increasing` u energie).
+- Recorder drží 5min statistiky standardně 10 dní — u 30 dní se starší část
+  baterie počítá z hodinových průměrů. Historie predikce Solcast je omezená
+  retencí recorderu (`purge_keep_days`).
+- DC bilance předpokládá, že se baterie nabíjí jen z FVE a síť nevede přes
+  střídač. Ztráty zahrnují vlastní spotřebu měniče, DC vedení i chyby měření.
+- Dny se počítají podle časové zóny prohlížeče (má sedět s HA serverem).
 
 ## Hybrid Energy Flow Mini Card
 

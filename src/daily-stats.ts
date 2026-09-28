@@ -12,14 +12,14 @@ interface StatisticPoint {
 
 type StatisticsResult = Record<string, StatisticPoint[]>;
 
-function toLocalDayKey(d: Date): string {
+export function toLocalDayKey(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
-function startOfLocalDay(d: Date): Date {
+export function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 

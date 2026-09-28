@@ -122,6 +122,19 @@ export function iconHome(x: number, y: number, size: number, color: string): Tem
     </g>`;
 }
 
+/** Graf (osy + rostoucí trend) pro tlačítko Analýza. */
+export function iconChart(x: number, y: number, size: number, color: string): TemplateResult {
+  const s = size / 64;
+  return svg`
+    <g transform="translate(${x},${y}) scale(${s})" stroke="${color}" fill="none"
+       stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+       style="filter: drop-shadow(0 0 5px ${color})">
+      <path d="M10 8 L10 54 L56 54"/>
+      <path d="M18 44 L28 32 L37 38 L52 20"/>
+      <path d="M44 20 L52 20 L52 28"/>
+    </g>`;
+}
+
 /** Blesk pro drobné akcenty. */
 export function iconBolt(x: number, y: number, size: number, color: string): TemplateResult {
   const s = size / 64;
