@@ -32,10 +32,11 @@ import {
   makePastForecastDay,
   pastDayLabels,
 } from './battery-forecast';
-import { fetchDailyEnergyKwh, localDayKeyOffset } from './daily-stats';
+import { fetchDailyEnergyKwh, fetchYesterdaySensorKwh, localDayKeyOffset } from './daily-stats';
 import {
-  formatEnergy,
+  formatEnergyEntity,
   formatPower,
+  formatPowerEntity,
   formatState,
   hasNum,
   moreInfo,
@@ -59,6 +60,9 @@ const C = {
   warn: '#ffb74d',
   crit: '#ff5252',
 };
+
+/** Tlumená barva pro nedostupné hodnoty a neaktivní ikony. */
+const NEUTRAL = 'rgba(148,170,190,0.5)';
 
 const PHASE_STYLE: Record<string, { color: string; border: string }> = {
   L1: { color: '#f5f5f5', border: 'rgba(245,245,245,0.28)' },
@@ -121,6 +125,8 @@ export class FveFlowCard extends LitElement {
       window.clearInterval(this._sparkTimer);
       this._sparkTimer = undefined;
     }
+    // Po návratu na view (reconnect) se sparkliny načtou hned, ne až za 5 min.
+    this._sparkEntities = [];
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
   }
@@ -282,16 +288,24 @@ export class FveFlowCard extends LitElement {
     spanOffset?: string,
     rangeLabel?: string,
   ): Promise<void> {
-    if (!this.hass || !series.length) return;
-    const opened = await openHistoryDialog({
-      hass: this.hass,
-      title,
-      series,
-      spanOffset,
-      rangeLabel,
-    });
-    if (!opened) moreInfo(this, series[0].entity);
+    if (!this.hass || !series.length || this._historyOpening) return;
+    this._historyOpening = true;
+    try {
+      const opened = await openHistoryDialog({
+        hass: this.hass,
+        title,
+        series,
+        spanOffset,
+        rangeLabel,
+      });
+      if (!opened) moreInfo(this, series[0].entity);
+    } finally {
+      this._historyOpening = false;
+    }
   }
+
+  /** Guard proti dvojímu otevření grafu (čekání na apexcharts až 1,5 s). */
+  private _historyOpening = false;
 
   private _openEntity(entityId: string | undefined, title: string, color: string): void {
     if (!entityId) return;
@@ -311,9 +325,12 @@ export class FveFlowCard extends LitElement {
       return;
     }
 
+    // Predikce pokrývá celé okno grafu, pro které jsou data: detailedForecast
+    // má dnešek od půlnoci + zítřek, takže jde porovnat i uplynulé hodiny dneška.
     const dataGenerator = `
       const entityIds = ${JSON.stringify(forecastEntities)};
       const now = Date.now();
+      const windowStart = now - 24 * 60 * 60 * 1000;
       const forecastEnd = now + 24 * 60 * 60 * 1000;
       return entityIds
         .flatMap((entityId) => {
@@ -328,18 +345,20 @@ export class FveFlowCard extends LitElement {
           return [timestamp, watts];
         })
         .filter(([timestamp, watts]) =>
-          timestamp >= now - 30 * 60 * 1000 &&
+          timestamp >= windowStart &&
           timestamp <= forecastEnd &&
           Number.isFinite(watts)
         )
-        .map(([timestamp, watts]) => [Math.max(timestamp, now), watts]);
+        .sort((a, b) => a[0] - b[0]);
     `;
 
+    // Skutečnost = reálná výroba FVE; bez ní aspoň historie Solcast power_now.
+    const actualEntity = this._config?.pv?.power || solcast.power_now;
     void this._openHistory(
       [
         {
-          entity: solcast.power_now,
-          name: 'Skutečnost',
+          entity: actualEntity,
+          name: this._config?.pv?.power ? 'Skutečnost' : 'Solcast (historie)',
           color: '#4fc3f7',
           opacity: 0.18,
           extendTo: 'now',
@@ -595,10 +614,14 @@ export class FveFlowCard extends LitElement {
         pvKwh: this._solcastDayKwh(i),
       }));
 
-      const loadHistoryId = this._todayLoadEntity() ?? yesterdayId;
+      // Historie spotřeby: denní meter (LTS change/state), jinak „včerejší“
+      // entita — ta má hodnoty o den posunuté, proto vlastní načtení.
+      const todayLoadId = this._todayLoadEntity();
       const [pvStats, loadStats] = await Promise.all([
         fetchDailyEnergyKwh(this.hass, cfg.pv?.energy_today, pastDays),
-        fetchDailyEnergyKwh(this.hass, loadHistoryId, pastDays),
+        todayLoadId
+          ? fetchDailyEnergyKwh(this.hass, todayLoadId, pastDays)
+          : fetchYesterdaySensorKwh(this.hass, yesterdayId, pastDays),
       ]);
 
       const pastLabels = pastDayLabels(pastDays);
@@ -665,7 +688,10 @@ export class FveFlowCard extends LitElement {
           stroke-width="1" style="${enabled ? `filter: drop-shadow(0 0 6px ${accent}50)` : ''}"/>
         <text class="forecast-label" x="${x + w / 2}" y="${y + 18}" text-anchor="middle"
           style="fill: ${enabled ? '#ffe0b2' : 'rgba(226,240,248,0.4)'}">Prognóza</text>
-      </g>`;
+      </g>
+      ${reason
+        ? svg`<text class="tiny" x="${x}" y="${y + h + 16}">${reason}</text>`
+        : nothing}`;
   }
 
   /**
@@ -692,6 +718,18 @@ export class FveFlowCard extends LitElement {
         <text class="back-label" x="${cx}" y="${labelY}" text-anchor="middle">ZPĚT</text>
       </g>
     `;
+  }
+
+  /** Má patro nakonfigurovanou gridovou větev (celkový výkon nebo entitu fáze)? */
+  private _floorHasGrid(f: FloorConfig): boolean {
+    return !!(f.grid_power || this._phases(f).some((p) => p.entity));
+  }
+
+  /** Má patro aspoň jednu číselnou gridovou hodnotu (celek nebo fáze)? */
+  private _floorGridKnown(f: FloorConfig): boolean {
+    return (
+      hasNum(this.hass, f.grid_power) || this._phases(f).some((p) => hasNum(this.hass, p.entity))
+    );
   }
 
   private _floorGridPower(f: FloorConfig): number {
@@ -722,6 +760,8 @@ export class FveFlowCard extends LitElement {
     const gridTotal = hasNum(this.hass, cfg.grid?.power)
       ? toNum(this.hass, cfg.grid?.power)
       : floors.reduce((s, f) => s + this._floorGridPower(f), 0);
+    const gridKnown =
+      hasNum(this.hass, cfg.grid?.power) || floors.some((f) => this._floorGridKnown(f));
 
     const flow = (id: string, d: string, extra: Partial<FlowOptions> & { power: number; color: string }) =>
       renderFlow(id, d, { ...base, reverse: false, hidden: false, ...extra });
@@ -763,15 +803,20 @@ export class FveFlowCard extends LitElement {
             hidden: !cfg.battery?.power,
           })}
           ${layout.paths.islandTaps.map((d, i) => {
+            // Layout drží min. 1 slot patra — bez nakonfigurovaného patra žádný tok.
             const f = floors[i];
-            const p = f?.island_power && hasNum(this.hass, f.island_power)
+            if (!f) return nothing;
+            const p = f.island_power && hasNum(this.hass, f.island_power)
               ? toNum(this.hass, f.island_power)
               : islandTotal;
             return flow(`island-${i}`, d, { power: p, color: C.island });
           })}
           ${layout.paths.gridTaps.map((d, i) => {
+            // Patro bez gridové větve (jen FVE) nemá spoj ze sítě; trunk tak
+            // končí u posledního patra, které síť opravdu má.
             const f = floors[i];
-            return flow(`grid-${i}`, d, { power: f ? this._floorGridPower(f) : 0, color: C.grid });
+            if (!f || !this._floorHasGrid(f)) return nothing;
+            return flow(`grid-${i}`, d, { power: this._floorGridPower(f), color: C.grid });
           })}
 
           <!-- Uzly -->
@@ -781,7 +826,7 @@ export class FveFlowCard extends LitElement {
           ${this._nodeInverter(layout.inverter, islandTotal)}
           ${layout.backButton ? this._backButton(layout.backButton) : nothing}
           ${this._nodeSolcast(layout.solcast)}
-          ${this._nodeGrid(layout.grid, gridTotal)}
+          ${this._nodeGrid(layout.grid, gridTotal, gridKnown)}
           ${layout.floors.map((r, i) => (floors[i] ? this._nodeFloor(r, floors[i]) : nothing))}
         </svg>
       </ha-card>
@@ -812,12 +857,16 @@ export class FveFlowCard extends LitElement {
   }
 
   /** Neviditelná klikací plocha přes celý uzel. */
-  private _hit(r: Rect, onClick?: () => void): TemplateResult | typeof nothing {
+  private _hit(
+    r: Rect,
+    onClick?: () => void,
+    title = 'Zobrazit graf za 48 hodin',
+  ): TemplateResult | typeof nothing {
     if (!onClick) return nothing;
     return svg`
       <rect class="hit" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="18"
         fill="transparent" @click=${onClick}>
-        <title>Zobrazit graf za 48 hodin</title>
+        <title>${title}</title>
       </rect>`;
   }
 
@@ -832,16 +881,16 @@ export class FveFlowCard extends LitElement {
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${pv.name || 'FVE panely'}</text>
       ${this._sparklineNode(pv.power, r, accent)}
       ${iconSolarPanel(r.x + 18, r.y + 46, 60, active ? accent : 'rgba(148,170,190,0.5)')}
-      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${pv.power ? formatPower(p) : '—'}</text>
+      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPowerEntity(this.hass, pv.power)}</text>
       ${sev ? this._bar(r, p, pv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <text class="small" x="${r.x + 90}" y="${r.y + 112}">
-        Dnes <tspan class="strong">${pv.energy_today ? formatEnergy(toNum(this.hass, pv.energy_today)) : '—'}</tspan>
+        Dnes <tspan class="strong">${formatEnergyEntity(this.hass, pv.energy_today)}</tspan>
       </text>
       <text class="small" x="${r.x + 90}" y="${r.y + 134}">
-        Špička dnes <tspan class="strong">${pv.max_power_today ? formatPower(toNum(this.hass, pv.max_power_today)) : '—'}</tspan>
+        Špička dnes <tspan class="strong">${formatPowerEntity(this.hass, pv.max_power_today)}</tspan>
       </text>
       <text class="small" x="${r.x + 90}" y="${r.y + 156}">
-        Celkem <tspan class="strong">${pv.energy_total ? formatEnergy(toNum(this.hass, pv.energy_total)) : '—'}</tspan>
+        Celkem <tspan class="strong">${formatEnergyEntity(this.hass, pv.energy_total)}</tspan>
       </text>
       ${this._hit(
         r,
@@ -875,8 +924,9 @@ export class FveFlowCard extends LitElement {
       ${this._hit(
         r,
         pv.mppt_state || pv.voltage
-          ? () => moreInfo(this, pv.mppt_state ?? pv.voltage)
+          ? () => moreInfo(this, pv.mppt_state || pv.voltage)
           : undefined,
+        'Zobrazit detail a historii',
       )}
       ${pv.mppt_switch
         ? this._controlChip(
@@ -894,12 +944,16 @@ export class FveFlowCard extends LitElement {
   private _nodeBattery(r: Rect, batP: number, charging: boolean, discharging: boolean): TemplateResult {
     const b = this._config?.battery ?? {};
     const soc = toNum(this.hass, b.soc, 0);
+    // Nedostupné SoC nesmí vypadat jako prázdná červená baterie — neutrální šedá.
+    const socKnown = hasNum(this.hass, b.soc);
     // Prahy konfigurovatelné, default žlutá od 15 %, zelená od 40 %.
-    const socColor = severityColor(soc, {
-      yellow_from: b.yellow_from ?? 15,
-      green_from: b.green_from ?? 40,
-      severity_invert: b.severity_invert,
-    })!;
+    const socColor = socKnown
+      ? severityColor(soc, {
+          yellow_from: b.yellow_from ?? 15,
+          green_from: b.green_from ?? 40,
+          severity_invert: b.severity_invert,
+        })!
+      : NEUTRAL;
     const stateText = charging
       ? `▲ nabíjení ${formatPower(Math.abs(batP))}`
       : discharging
@@ -907,15 +961,15 @@ export class FveFlowCard extends LitElement {
         : '● klidový stav';
     const stateColor = charging ? C.charge : discharging ? C.discharge : 'rgba(220,235,245,0.55)';
     return svg`
-      ${this._panel(r, socColor, true)}
+      ${this._panel(r, socColor, socKnown)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${b.name || 'Baterie Pylontech'}</text>
       ${this._sparklineNode(b.soc, r, socColor)}
       ${iconBattery(r.x + 30, r.y + 62, 58, 168, soc, socColor)}
       <text class="tiny" x="${r.x + 59}" y="${r.y + 252}" text-anchor="middle">
         ${b.capacity ? formatState(this.hass, b.capacity) : ''}
       </text>
-      <text class="big" x="${r.x + 118}" y="${r.y + 90}" style="fill: ${socColor}">${b.soc ? `${Math.round(soc)} %` : '—'}</text>
-      <text class="medium" x="${r.x + 118}" y="${r.y + 122}" style="fill: ${stateColor}">${b.power ? stateText : ''}</text>
+      <text class="big" x="${r.x + 118}" y="${r.y + 90}" style="fill: ${socColor}">${socKnown ? `${Math.round(soc)} %` : '—'}</text>
+      <text class="medium" x="${r.x + 118}" y="${r.y + 122}" style="fill: ${stateColor}">${!b.power ? '' : hasNum(this.hass, b.power) ? stateText : '—'}</text>
       <text class="small" x="${r.x + 118}" y="${r.y + 152}">
         Napětí <tspan class="strong">${b.voltage ? formatState(this.hass, b.voltage) : '—'}</tspan>
       </text>
@@ -950,6 +1004,7 @@ export class FveFlowCard extends LitElement {
   private _nodeInverter(r: Rect, islandTotal: number): TemplateResult {
     const inv = this._config?.inverter ?? {};
     const p = hasNum(this.hass, inv.power) ? toNum(this.hass, inv.power) : islandTotal;
+    const pKnown = hasNum(this.hass, inv.power) || hasNum(this.hass, inv.load_power);
     const state = formatState(this.hass, inv.state);
     const active = Math.abs(p) >= this._flowBase().deadband || state !== '—';
     const sev = severityColor(p, inv);
@@ -959,7 +1014,7 @@ export class FveFlowCard extends LitElement {
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${inv.name || 'Měnič MultiPlus-II'}</text>
       ${this._sparklineNode(inv.power, r, accent)}
       ${iconInverter(r.x + 18, r.y + 46, 56, active ? accent : 'rgba(148,170,190,0.5)')}
-      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${formatPower(p)}</text>
+      <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">${pKnown ? formatPower(p) : '—'}</text>
       <circle cx="${r.x + 96}" cy="${r.y + 106}" r="4" fill="${state !== '—' ? C.ok : 'rgba(148,170,190,0.4)'}"/>
       <text class="small" x="${r.x + 108}" y="${r.y + 111}">${state}</text>
       ${inv.voltage
@@ -974,12 +1029,12 @@ export class FveFlowCard extends LitElement {
         : nothing}
       ${inv.energy_today
         ? svg`<text class="small" x="${r.x + 90}" y="${r.y + 182}">
-            Energie dnes <tspan class="strong">${formatEnergy(toNum(this.hass, inv.energy_today))}</tspan>
+            Energie dnes <tspan class="strong">${formatEnergyEntity(this.hass, inv.energy_today)}</tspan>
           </text>`
         : nothing}
       ${inv.load_power
         ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + (inv.energy_today ? 204 : 184)}">
-            Kritické zátěže ${formatPower(toNum(this.hass, inv.load_power))}
+            Kritické zátěže ${formatPowerEntity(this.hass, inv.load_power)}
           </text>`
         : nothing}
       ${sev ? this._bar(r, p, inv.bar_max ?? this._flowBase().maxPower, sev) : nothing}
@@ -991,7 +1046,7 @@ export class FveFlowCard extends LitElement {
       ${this._hit(
         r,
         inv.power || inv.load_power
-          ? () => this._openEntity(inv.power ?? inv.load_power, inv.name || 'Měnič MultiPlus-II', accent)
+          ? () => this._openEntity(inv.power || inv.load_power, inv.name || 'Měnič MultiPlus-II', accent)
           : undefined,
       )}
       ${inv.fan_switch
@@ -1014,27 +1069,32 @@ export class FveFlowCard extends LitElement {
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Předpověď Solcast</text>
       ${iconSun(r.x + 16, r.y + 58, 56, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="big" x="${r.x + 90}" y="${r.y + 84}" style="fill: ${accent}">
-        ${s.power_now ? formatPower(p) : '—'}
+        ${formatPowerEntity(this.hass, s.power_now)}
       </text>
       ${sev ? this._bar(r, p, s.bar_max ?? this._flowBase().maxPower, sev) : nothing}
       <text class="small" x="${r.x + 90}" y="${r.y + 112}">
-        Zbývá dnes <tspan class="strong">${s.remaining_today ? formatEnergy(toNum(this.hass, s.remaining_today)) : '—'}</tspan>
+        Zbývá dnes <tspan class="strong">${formatEnergyEntity(this.hass, s.remaining_today)}</tspan>
       </text>
       <text class="small" x="${r.x + 90}" y="${r.y + 134}">
-        Dnes celkem <tspan class="strong">${s.total_today ? formatEnergy(toNum(this.hass, s.total_today)) : '—'}</tspan>
+        Dnes celkem <tspan class="strong">${formatEnergyEntity(this.hass, s.total_today)}</tspan>
       </text>
       <text class="small" x="${r.x + 90}" y="${r.y + 156}">
-        Zítra celkem <tspan class="strong">${s.total_tomorrow ? formatEnergy(toNum(this.hass, s.total_tomorrow)) : '—'}</tspan>
+        Zítra celkem <tspan class="strong">${formatEnergyEntity(this.hass, s.total_tomorrow)}</tspan>
       </text>
       ${this._hit(
         r,
         s.power_now ? () => this._openSolcastHistory(s) : undefined,
+        'Zobrazit 24 h historie a 24 h predikce',
       )}
     `;
   }
 
-  private _nodeGrid(r: Rect, gridTotal: number): TemplateResult {
+  private _nodeGrid(r: Rect, gridTotal: number, gridKnown: boolean): TemplateResult {
     const g = this._config?.grid ?? {};
+    const energyParts = [
+      g.energy_total ? `Celkem ze sítě ${formatEnergyEntity(this.hass, g.energy_total)}` : '',
+      g.energy_today ? `dnes ${formatEnergyEntity(this.hass, g.energy_today)}` : '',
+    ].filter(Boolean);
     const active = Math.abs(gridTotal) >= this._flowBase().deadband;
     const phaseSpecs = this._gridPhases(g);
     const sev = severityColor(gridTotal, g);
@@ -1044,12 +1104,9 @@ export class FveFlowCard extends LitElement {
       ${this._sparklineNode(g.power, r, accent)}
       ${iconPylon(r.x + 16, r.y + 28, 52, active ? accent : 'rgba(148,170,190,0.5)')}
       <text class="node-title" x="${r.x + r.w - 20}" y="${r.y + 24}" text-anchor="end">${g.name || 'Síť ČEZ'}</text>
-      <text class="big" x="${r.x + 90}" y="${r.y + 64}" style="fill: ${accent}">${formatPower(gridTotal)}</text>
+      <text class="big" x="${r.x + 90}" y="${r.y + 64}" style="fill: ${accent}">${gridKnown ? formatPower(gridTotal) : '—'}</text>
       ${sev ? this._bar(r, gridTotal, g.bar_max ?? this._flowBase().maxPower, sev) : nothing}
-      <text class="tiny" x="${r.x + 90}" y="${r.y + 80}">
-        ${g.energy_total ? `Celkem ze sítě ${formatEnergy(toNum(this.hass, g.energy_total))}` : ''}
-        ${g.energy_today ? ` · dnes ${formatEnergy(toNum(this.hass, g.energy_today))}` : ''}
-      </text>
+      <text class="tiny" x="${r.x + 90}" y="${r.y + 80}">${energyParts.join(' · ')}</text>
       ${this._hit(
         r,
         g.power ? () => this._openEntity(g.power, g.name || 'Síť', accent) : undefined,
@@ -1083,7 +1140,7 @@ export class FveFlowCard extends LitElement {
     const hasIsland = !!f.island_power && hasNum(this.hass, f.island_power);
     const islandP = hasIsland ? toNum(this.hass, f.island_power) : 0;
     const phases = this._phases(f);
-    const hasGridSource = !!(f.grid_power || phases.some((p) => p.entity));
+    const hasGridSource = this._floorHasGrid(f);
     const active = Math.abs(gridP) >= this._flowBase().deadband || (hasIsland && Math.abs(islandP) >= this._flowBase().deadband);
     const accent = hasIsland && islandP > gridP ? C.island : C.grid;
     // FVE chip(y) vlevo (kudy vstupuje zelený tok z měniče), grid fáze
@@ -1104,7 +1161,12 @@ export class FveFlowCard extends LitElement {
         isFve ? C.island : chip ? PHASE_STYLE[chip.label]?.color ?? C.grid : C.grid,
       );
     };
-    const fveStyle = { icon: iconSun, iconColor: C.island, borderColor: 'rgba(0,230,118,0.22)' };
+    const fveStyle = {
+      icon: iconSun,
+      iconColor: C.island,
+      borderColor: 'rgba(0,230,118,0.22)',
+      valueColor: C.island,
+    };
     const gridStyle = (ph: PhaseSpec) => ({
       iconColor: PHASE_STYLE[ph.label]?.color ?? C.grid,
       borderColor: PHASE_STYLE[ph.label]?.border,
@@ -1128,11 +1190,11 @@ export class FveFlowCard extends LitElement {
 
     let energyLine = '';
     if (f.grid_energy && f.island_energy) {
-      energyLine = `Celkem z FVE ${formatEnergy(toNum(this.hass, f.island_energy))} · ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
+      energyLine = `Celkem z FVE ${formatEnergyEntity(this.hass, f.island_energy)} · ze sítě ${formatEnergyEntity(this.hass, f.grid_energy)}`;
     } else if (f.island_energy) {
-      energyLine = `Celkem z FVE ${formatEnergy(toNum(this.hass, f.island_energy))}`;
+      energyLine = `Celkem z FVE ${formatEnergyEntity(this.hass, f.island_energy)}`;
     } else if (f.grid_energy) {
-      energyLine = `Celkem ze sítě ${formatEnergy(toNum(this.hass, f.grid_energy))}`;
+      energyLine = `Celkem ze sítě ${formatEnergyEntity(this.hass, f.grid_energy)}`;
     }
 
     const canOpenHistory = !!(f.grid_power || f.island_power || phases.some((p) => p.entity));
@@ -1149,7 +1211,7 @@ export class FveFlowCard extends LitElement {
               : nothing}
             ${hasGridSource && hasIsland ? svg`<tspan class="dim"> · </tspan>` : nothing}
             ${hasGridSource
-              ? svg`<tspan class="dim">síť </tspan><tspan class="val-grid strong">${formatPower(gridP)}</tspan>`
+              ? svg`<tspan class="dim">síť </tspan><tspan class="val-grid strong">${this._floorGridKnown(f) ? formatPower(gridP) : '—'}</tspan>`
               : nothing}
           </text>
         `
@@ -1401,5 +1463,5 @@ window.customCards.push({
   description:
     'Animovaný diagram toků energie pro hybridní instalaci: ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.',
   preview: false,
-  documentationURL: 'https://github.com/elvisek/fve-flow-card',
+  documentationURL: 'https://github.com/elvisek2020/fve-flow-card',
 });

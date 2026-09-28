@@ -2,7 +2,7 @@ import { svg, type TemplateResult } from 'lit';
 import type { HomeAssistant, PhaseSpec } from './types';
 import type { Rect } from './layout';
 import { iconBolt } from './icons';
-import { formatPower, toNum } from './utils';
+import { formatPowerEntity, toNum } from './utils';
 
 /** Nad tímto výkonem (W) se okraj chipu zvýrazní barvou fáze / FVE. */
 const ACTIVE_CHIP_W = 10;
@@ -11,6 +11,17 @@ export interface ChipStyle {
   icon?: (x: number, y: number, size: number, color: string) => TemplateResult;
   iconColor?: string;
   borderColor?: string;
+  /** Barva hodnoty výkonu (default modrá gridu z CSS `.chip-value`). */
+  valueColor?: string;
+}
+
+/** Přibližná šířka znaku názvu chipu (font 10 px) pro zkrácení s „…“. */
+const NAME_CHAR_W = 6;
+
+/** Zkrátí název tak, aby se vešel do šířky chipu; plný název zůstává v `<title>`. */
+function fitName(name: string, width: number): string {
+  const max = Math.max(3, Math.floor((width - 8) / NAME_CHAR_W));
+  return name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name;
 }
 
 export interface PhaseChipsOptions extends ChipStyle {
@@ -59,6 +70,7 @@ export function renderPhaseChips(
     const drawIcon = style?.icon ?? opts?.icon ?? iconBolt;
     const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
     const idleBorder = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
+    const valueColor = style?.valueColor ?? opts?.valueColor;
     const watts = inactive ? 0 : Math.abs(toNum(hass, ph.entity));
     const activeLoad = !inactive && watts > ACTIVE_CHIP_W;
     const borderColor = activeLoad ? iconColor : idleBorder;
@@ -66,7 +78,7 @@ export function renderPhaseChips(
     const strokeOpacity = activeLoad ? 0.85 : 0.45;
     const x = zoneX + i * (chipW + gap);
     const cx = x + chipW / 2;
-    const power = inactive ? '—' : formatPower(toNum(hass, ph.entity));
+    const power = inactive ? '—' : formatPowerEntity(hass, ph.entity);
     const iconSize = 14;
     const iconX = cx - iconSize / 2;
     const iconY = chipY + 12;
@@ -86,8 +98,9 @@ export function renderPhaseChips(
           stroke-opacity="${strokeOpacity}" stroke-width="${strokeWidth}"
           style="${activeLoad ? `filter: drop-shadow(0 0 5px ${borderColor}55)` : ''}"/>
         ${drawIcon(iconX, iconY, iconSize, iconColor)}
-        <text x="${cx}" y="${chipY + 38}" text-anchor="middle" class="chip-value">${power}</text>
-        <text x="${cx}" y="${chipY + 56}" text-anchor="middle" class="chip-name">${ph.name}</text>
+        <text x="${cx}" y="${chipY + 38}" text-anchor="middle" class="chip-value"
+          style="${valueColor ? `fill: ${valueColor}` : ''}">${power}</text>
+        <text x="${cx}" y="${chipY + 56}" text-anchor="middle" class="chip-name">${fitName(ph.name, chipW)}</text>
       </g>`;
   })}`;
 }

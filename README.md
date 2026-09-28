@@ -53,12 +53,14 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=0.7.8`, typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.7.10`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
 
 Kartu přidáš přes výběr karet (**Hybrid Energy Flow Card**) a nakonfiguruješ v GUI editoru.
+Nevyplněná čísla v editoru ukazují šedě výchozí hodnotu (např. 5000 W, 25 W)
+a přepínače animace / sparklin jsou ve výchozím stavu zapnuté.
 Ekvivalentní YAML:
 
 ```yaml
@@ -176,17 +178,30 @@ Poznámky:
   Baterie zobrazuje SoC v %, ostatní numerické uzly výkon ve W. Klik na MPPT
   stav zůstává v nativním HA dialogu. Bez ApexCharts se nativní dialog použije
   automaticky jako fallback.
-- **Solcast graf** je vystředěný na aktuálním čase: vlevo ukazuje 24 hodin
-  skutečné historie výkonu a vpravo 24 hodin predikce z `detailedForecast`.
-  Predikce je přerušovaná a hodnoty Solcastu se převádějí z kW na W.
+- **Solcast graf** je vystředěný na aktuálním čase: „Skutečnost" je reálný
+  výkon FVE (`pv.power`, bez něj historie `solcast.power_now`) za posledních
+  24 hodin, „Predikce" je přerušovaná křivka z `detailedForecast` — pokrývá
+  celý dnešek od půlnoci i zítřek, takže jde porovnat i uplynulé hodiny.
+  Hodnoty Solcastu se převádějí z kW na W.
 - **Patra** jsou dynamický seznam — nové patro (např. 2NP, 1f) přidáš v editoru
   bez zásahu do kódu. Dokud patro nemá `island_power`, ostrovní tok se zobrazuje
   jen souhrnně z měniče a patrové ostrovní číslo je skryté.
+- **Spoj ze sítě do patra** se kreslí jen u pater s gridovou větví
+  (`grid_power` nebo aspoň jedna entita fáze). Patro jen s FVE spoj nemá
+  a svislá linka sítě končí u posledního patra, které síť opravdu má.
+  Fáze zapnuté jen přes „Zobrazit i bez entity" se za grid nepočítají.
+  Bez nakonfigurovaných pater se toky do pater nekreslí vůbec.
 - **Rozdělení patra**: pokud má patro `island_power`, box se svislou linkou
   rozdělí na levou FVE zónu a pravou grid zónu; šířky zón odpovídají počtu
   chipů na každé straně (1 FVE + 3 grid = 1:3). Bez FVE zabírají grid fáze
   celou šířku — jednofázové patro tak má jeden chip přes celý box.
+  Hodnota FVE chipu je zelená, fáze modré; dlouhé názvy se zkrátí s „…"
+  (plný název v tooltipu).
 - **Fáze bez vlastního názvu** se zobrazí jako L1/L2/L3 s ikonou `mdi:flash`.
+- **Nedostupné entity** (`unavailable` / `unknown`) se zobrazí jako „—" a baterie
+  zešedne — nevypadají jako 0 W / 0 %. Mini karta pak gauge vykreslí bez ručičky.
+- **Vypnutá animace** (`options.animation: false`) ruší jen pulzující tečky;
+  aktivní linky zůstávají barevné.
 - **Aktivní chipy**: při |výkon| > 10 W se okraj chipu zvýrazní barvou fáze
   (L1/L2/L3) nebo FVE; pod prahem zůstane tlumený. Platí pro patra i AC-IN.
 - **Grid (AC-IN)**: kompaktnější box než dřív; název sítě je malý titulek
@@ -206,8 +221,10 @@ Poznámky:
   je vyplněné `inverter.energy_yesterday`, případně legacy
   `forecast.daily_load_entity`) otevře modal:
   - **5 dní naměřené historie** (šedé řádky): výroba z `pv.energy_today`,
-    spotřeba z `inverter.energy_today` (denní Utility Meter s LTS; fallback
-    na včerejší entitu). SoC po bilanci u historie = „—“.
+    spotřeba z `inverter.energy_today` (denní Utility Meter s LTS). Bez něj
+    se historie dopočítá z včerejší entity (`inverter.energy_yesterday`):
+    její hodnota během dne X patří dni X−1, včerejšek bere aktuální stav.
+    SoC po bilanci u historie = „—“.
   - **7denní predikce**: Solcast (`total_today` / zítra / D3–D7) − včerejší
     spotřeba → SoC po bilanci. Řádek **Dnes** bere celodenní
     `solcast.total_today`, ne `remaining_today` (v noci by zbývalo 0 kWh).
@@ -223,6 +240,10 @@ Poznámky:
     `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes
     `solcast.total_day3`…`total_day7` (v Solcast často defaultně vypnuté).
     Práh rizika: `forecast.min_soc_pct` (default 10).
+  - Když prognóza nejde otevřít, chip je šedý a důvod (např. „Chybí kapacita
+    baterie") je vypsaný přímo pod ním — viditelné i na dotykovém panelu.
+  - `battery.capacity` může být v kWh, Wh nebo Ah; Ah se přepočte přes
+    `battery.voltage` (bez něj 48 V).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 

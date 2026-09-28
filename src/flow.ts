@@ -32,7 +32,9 @@ const DORMANT_STROKE = 'rgba(148, 170, 190, 0.16)';
 export function renderFlow(id: string, d: string, opts: FlowOptions): TemplateResult | typeof nothing {
   if (opts.hidden) return nothing;
 
-  const active = opts.animate && Math.abs(opts.power) >= opts.deadband;
+  // Aktivita (barva linky) jde podle výkonu; `animate` řídí jen tečky —
+  // s vypnutou animací zůstává aktivní linka barevná, jen statická.
+  const active = Math.abs(opts.power) >= opts.deadband;
   const pathId = `flow-${id}`;
 
   const pathTpl = svg`
@@ -43,7 +45,7 @@ export function renderFlow(id: string, d: string, opts: FlowOptions): TemplateRe
       opacity="${active ? 0.85 : 1}"
       style="${active ? `filter: drop-shadow(0 0 4px ${opts.color})` : ''}"/>`;
 
-  if (!active) return pathTpl;
+  if (!active || !opts.animate) return pathTpl;
 
   const dur = flowDuration(Math.abs(opts.power), opts.maxPower, opts.minDuration, opts.maxDuration);
   const keyPoints = opts.reverse ? '1;0' : '0;1';

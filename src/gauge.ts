@@ -1,4 +1,4 @@
-import { svg, type TemplateResult } from 'lit';
+import { svg, nothing, type TemplateResult } from 'lit';
 
 /** Prahy semaforu gauge — pod `yellowFrom` červená, od `greenFrom` zelená. */
 export interface ArcGaugeThresholds {
@@ -63,6 +63,8 @@ export function renderArcGauge(
   thresholds: ArcGaugeThresholds,
   color: string,
   strokeWidth = 14,
+  /** false = bez ručičky (hodnota není k dispozici). */
+  showNeedle = true,
 ): TemplateResult {
   const span = Math.max(1e-6, max - min);
   const angleFor = (v: number) => 180 + ((Math.max(min, Math.min(max, v)) - min) / span) * 180;
@@ -103,9 +105,11 @@ export function renderArcGauge(
     </defs>
     <path d="${arcPath(cx, cy, r, 180, 360)}" fill="none" stroke="url(#${GRADIENT_ID})"
       stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
-    <g transform="translate(${cx},${cy}) rotate(${needleRotation.toFixed(2)}) scale(${needleScale.toFixed(3)})"
-      fill="rgba(226,240,248,0.95)" stroke="rgba(8,14,20,0.9)" stroke-width="1" stroke-linecap="round"
-      style="filter: drop-shadow(0 0 5px ${color})">
-      <path d="${NEEDLE_PATH}"/>
-    </g>`;
+    ${showNeedle
+      ? svg`<g transform="translate(${cx},${cy}) rotate(${needleRotation.toFixed(2)}) scale(${needleScale.toFixed(3)})"
+          fill="rgba(226,240,248,0.95)" stroke="rgba(8,14,20,0.9)" stroke-width="1" stroke-linecap="round"
+          style="filter: drop-shadow(0 0 5px ${color})">
+          <path d="${NEEDLE_PATH}"/>
+        </g>`
+      : nothing}`;
 }

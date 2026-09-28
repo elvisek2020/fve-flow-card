@@ -22,8 +22,8 @@ const SEVERITY_W = [
 
 /** Prahy semaforu pro baterii (%). */
 const SEVERITY_PCT = [
-  { name: 'yellow_from', selector: numBox(0, 100, 1) },
-  { name: 'green_from', selector: numBox(0, 100, 1) },
+  { name: 'yellow_from', selector: numBox(0, 100, 1), default: 15 },
+  { name: 'green_from', selector: numBox(0, 100, 1), default: 40 },
 ];
 
 /** Schéma hlavního formuláře (vše kromě pater). */
@@ -147,6 +147,7 @@ const SCHEMA = [
       {
         name: 'min_soc_pct',
         selector: numBox(0, 100, 1),
+        default: 10,
         custom_label: 'Minimální SoC pro riziko (%)',
       },
     ],
@@ -156,13 +157,15 @@ const SCHEMA = [
     type: 'expandable',
     icon: 'mdi:tune',
     schema: [
-      { name: 'max_flow_w', selector: numBox(500, 20000, 100) },
-      { name: 'deadband_w', selector: numBox(0, 500, 5) },
-      { name: 'dots', selector: numBox(1, 8) },
-      { name: 'min_duration', selector: numBox(0.5, 10, 0.1) },
-      { name: 'max_duration', selector: numBox(1, 20, 0.5) },
-      { name: 'animation', selector: BOOL },
-      { name: 'sparklines', selector: BOOL },
+      // `default` = placeholder v poli; u přepínačů HA zobrazí zapnuto,
+      // dokud hodnota v configu chybí (odpovídá chování karty).
+      { name: 'max_flow_w', selector: numBox(500, 20000, 100), default: 5000 },
+      { name: 'deadband_w', selector: numBox(0, 500, 5), default: 25 },
+      { name: 'dots', selector: numBox(1, 8), default: 3 },
+      { name: 'min_duration', selector: numBox(0.5, 10, 0.1), default: 1.4 },
+      { name: 'max_duration', selector: numBox(1, 20, 0.5), default: 6 },
+      { name: 'animation', selector: BOOL, default: true },
+      { name: 'sparklines', selector: BOOL, default: true },
     ],
   },
   {
@@ -321,6 +324,7 @@ const HELPERS: Record<string, string> = {
   max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
+  capacity: 'Entita v kWh, Wh nebo Ah (Ah se přepočte přes napětí baterie, jinak 48 V). Potřebná pro prognózu.',
   enabled: 'Pod měničem se zobrazí tlačítko ZPĚT pro návrat na jiný dashboard (typicky hlavní přehled).',
   path: 'Cesta v adresním řádku HA, např. /lovelace/home nebo /lovelace/0. Nech prázdné pro výchozí dashboard (/).',
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',

@@ -1,7 +1,7 @@
 import { LitElement, html, css, svg, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { FveFlowMiniCardConfig, HomeAssistant } from './types';
-import { formatPower, formatState, moreInfo, severityColor, toNum } from './utils';
+import { formatPower, formatPowerEntity, formatState, hasNum, moreInfo, severityColor, toNum } from './utils';
 import { fetchHistory, type HistoryPoint } from './sparkline';
 import { renderArcGauge } from './gauge';
 import { renderMiniChart } from './mini-chart';
@@ -12,6 +12,7 @@ const C_ACTUAL = '#00e676';
 const C_FORECAST = '#ffd54f';
 const C_FVE_LOAD = '#00e676';
 const C_GRID = '#4fc3f7';
+const C_NEUTRAL = 'rgba(148,170,190,0.6)';
 const HISTORY_REFRESH_MS = 5 * 60 * 1000;
 
 /**
@@ -48,6 +49,8 @@ export class FveFlowMiniCard extends LitElement {
       window.clearInterval(this._historyTimer);
       this._historyTimer = undefined;
     }
+    // Po návratu na view (reconnect) se graf načte hned, ne až za 5 min.
+    this._historyEntity = undefined;
   }
 
   protected updated(changed: PropertyValues<this>): void {
@@ -152,18 +155,24 @@ export class FveFlowMiniCard extends LitElement {
 
     const b = cfg.battery ?? {};
     const soc = toNum(this.hass, b.soc, 0);
+    // Nedostupné SoC: „—“, šedá a bez ručičky — ne falešných červených 0 %.
+    const socKnown = hasNum(this.hass, b.soc);
     const yellowFrom = b.yellow_from ?? 15;
     const greenFrom = Math.max(b.green_from ?? 40, yellowFrom);
-    const socColor =
-      severityColor(soc, { yellow_from: yellowFrom, green_from: greenFrom, severity_invert: b.severity_invert }) ??
-      C_ACTUAL;
+    const socColor = socKnown
+      ? severityColor(soc, { yellow_from: yellowFrom, green_from: greenFrom, severity_invert: b.severity_invert }) ??
+        C_ACTUAL
+      : C_NEUTRAL;
 
     const rawBatP = toNum(this.hass, b.power);
     const batP = b.invert ? -rawBatP : rawBatP;
     const chargeThreshold = b.charge_threshold_w ?? 25;
     const charging = batP >= chargeThreshold;
     const discharging = batP <= -chargeThreshold;
-    const stateText = charging
+    const powerKnown = hasNum(this.hass, b.power);
+    const stateText = !powerKnown
+      ? '—'
+      : charging
       ? `Nabíjení ${formatPower(Math.abs(batP))}`
       : discharging
         ? `Vybíjení ${formatPower(Math.abs(batP))}`
@@ -172,9 +181,6 @@ export class FveFlowMiniCard extends LitElement {
     const stateArrow = charging ? 'up' : discharging ? 'down' : undefined;
 
     const pvNow = toNum(this.hass, cfg.pv_power);
-    const solcastNow = toNum(this.hass, cfg.solcast_power_now);
-    const fveLoad = toNum(this.hass, cfg.fve_load);
-    const gridLoad = toNum(this.hass, cfg.grid_power);
     const showFveLoad = !!cfg.fve_load;
     const showGridLoad = !!cfg.grid_power;
     const fveLoadLabel = cfg.fve_load_name || 'FVE';
@@ -222,21 +228,21 @@ export class FveFlowMiniCard extends LitElement {
           ${showFveLoad
             ? svg`
               <text class="side-value" x="${sideXLeft}" y="${sideValueY}" text-anchor="middle"
-                style="fill: ${C_FVE_LOAD}">${formatPower(fveLoad)}</text>
+                style="fill: ${C_FVE_LOAD}">${formatPowerEntity(this.hass, cfg.fve_load)}</text>
               <text class="side-label" x="${sideXLeft}" y="${sideLabelY}" text-anchor="middle">${fveLoadLabel}</text>
             `
             : nothing}
           ${showGridLoad
             ? svg`
               <text class="side-value" x="${sideXRight}" y="${sideValueY}" text-anchor="middle"
-                style="fill: ${C_GRID}">${formatPower(gridLoad)}</text>
+                style="fill: ${C_GRID}">${formatPowerEntity(this.hass, cfg.grid_power)}</text>
               <text class="side-label" x="${sideXRight}" y="${sideLabelY}" text-anchor="middle">${gridLabel}</text>
             `
             : nothing}
 
-          ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor)}
+          ${renderArcGauge(cx, cy, r, soc, 0, 100, { yellowFrom, greenFrom }, socColor, 14, socKnown)}
           <text class="gauge-value" x="${cx}" y="${cy + 6}" text-anchor="middle" style="fill: ${socColor}">
-            ${b.soc ? `${Math.round(soc)} %` : '—'}
+            ${socKnown ? `${Math.round(soc)} %` : '—'}
           </text>
           <text class="gauge-label" x="${cx}" y="${cy + 30}" text-anchor="middle">
             ${b.name || 'Stav baterie'}
@@ -255,12 +261,12 @@ export class FveFlowMiniCard extends LitElement {
               <line x1="24" y1="220" x2="${W - 24}" y2="220" stroke="rgba(148,170,190,0.14)" stroke-width="1"/>
 
               <text class="headline-value" x="${W * 0.28}" y="252" text-anchor="middle" style="fill: ${C_ACTUAL}">
-                ${cfg.pv_power ? formatPower(pvNow) : '—'}
+                ${formatPowerEntity(this.hass, cfg.pv_power)}
               </text>
               <text class="headline-label" x="${W * 0.28}" y="270" text-anchor="middle">Realita</text>
 
               <text class="headline-value" x="${W * 0.72}" y="252" text-anchor="middle" style="fill: ${C_FORECAST}">
-                ${cfg.solcast_power_now ? formatPower(solcastNow) : '—'}
+                ${formatPowerEntity(this.hass, cfg.solcast_power_now)}
               </text>
               <text class="headline-label" x="${W * 0.72}" y="270" text-anchor="middle">Predikce</text>
 
@@ -368,5 +374,5 @@ window.customCards.push({
   description:
     'Kompaktní karta: baterie jako gauge, spotřeba FVE/síť po stranách, výroba vs. Solcast. Klik naviguje na velký Hybrid Energy Flow dashboard.',
   preview: false,
-  documentationURL: 'https://github.com/elvisek/fve-flow-card',
+  documentationURL: 'https://github.com/elvisek2020/fve-flow-card',
 });

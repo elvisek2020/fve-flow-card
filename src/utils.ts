@@ -57,6 +57,16 @@ export function formatEnergy(kwh: number): string {
   return `${nf1.format(kwh)} kWh`;
 }
 
+/** Výkon entity (W) — „—“, když entita chybí nebo není číselná (unavailable). */
+export function formatPowerEntity(hass: HomeAssistant | undefined, entityId: string | undefined): string {
+  return hasNum(hass, entityId) ? formatPower(toNum(hass, entityId)) : '—';
+}
+
+/** Energie entity (kWh) — „—“, když entita chybí nebo není číselná (unavailable). */
+export function formatEnergyEntity(hass: HomeAssistant | undefined, entityId: string | undefined): string {
+  return hasNum(hass, entityId) ? formatEnergy(toNum(hass, entityId)) : '—';
+}
+
 /** Surový / lokalizovaný stav entity + jednotka u číselných senzorů. */
 export function formatState(hass: HomeAssistant | undefined, entityId: string | undefined): string {
   if (!hass || !entityId) return '—';
