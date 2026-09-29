@@ -29,6 +29,29 @@ function yTicks(sc: { lo: number; hi: number; step: number }): number[] {
 const f1 = (n: number) => n.toFixed(1);
 
 // ---------------------------------------------------------------------------
+// Bublina s hodnotami (data-tip → vykreslí okno Analýza)
+// ---------------------------------------------------------------------------
+
+export interface TipRow {
+  /** Barva tečky. */
+  c?: string;
+  l: string;
+  v: string;
+}
+
+export interface Tip {
+  /** Nadpis (čas / den). */
+  h: string;
+  r: TipRow[];
+  /** Poznámka pod hodnotami. */
+  n?: string;
+}
+
+const tipAttr = (t: Tip) => JSON.stringify(t);
+const fmtHm = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+const hhmm = (t: number) => fmtHm.format(t);
+
+// ---------------------------------------------------------------------------
 // Průběh dne
 // ---------------------------------------------------------------------------
 
@@ -43,6 +66,8 @@ export interface TimeSeries {
   stack?: boolean;
   /** Přerušovaná čára (jen kind: 'line'). */
   dash?: string;
+  /** Popisek záporných hodnot v bublině (baterie: „Vybíjení“), hodnota bez znaménka. */
+  negLabel?: string;
 }
 
 export interface TimeChartOptions {
@@ -63,6 +88,10 @@ export interface TimeChartOptions {
   yFormat: (v: number) => string;
   /** Bez popisků osy x (úzký pásek pod jiným grafem). */
   compact?: boolean;
+  /** Formát hodnot v bublině (výchozí yFormat). */
+  valueFormat?: (v: number) => string;
+  /** Formát začátku slotu v nadpisu bubliny (výchozí HH:MM). */
+  timeFormat?: (t: number) => string;
 }
 
 export function renderTimeChart(o: TimeChartOptions): TemplateResult {
@@ -198,10 +227,43 @@ export function renderTimeChart(o: TimeChartOptions): TemplateResult {
     hours.push({ t, label: hh === 0 && t >= o.x1 - 60000 ? '24' : String(hh).padStart(2, '0') });
   }
 
+  // Bublina: průhledný svislý pruh na každý slot (nahoře, zachytává ukazatel).
+  const vf = o.valueFormat ?? o.yFormat;
+  const tf = o.timeFormat ?? hhmm;
+  const slotW = (iw * o.grid.step) / (o.x1 - o.x0);
+  const stacked = o.series.filter((s) => s.stack);
+  const hover: TemplateResult[] = [];
+  for (let i = 0; i < o.grid.n; i++) {
+    const t0 = o.grid.start + i * o.grid.step;
+    if (t0 < o.x0 || t0 >= o.x1) continue;
+    const rows: TipRow[] = [];
+    for (const s of o.series) {
+      const v = s.values[i];
+      if (v == null) continue;
+      const neg = v < 0 && !!s.negLabel;
+      rows.push({ c: v < 0 && s.negColor ? s.negColor : s.color, l: neg ? s.negLabel! : s.label, v: vf(neg ? -v : v) });
+    }
+    if (stacked.length > 1) {
+      const vals = stacked.map((s) => s.values[i]).filter((v): v is number => v != null);
+      if (vals.length > 1) rows.push({ l: 'Celkem', v: vf(vals.reduce((a, v) => a + Math.max(0, v), 0)) });
+    }
+    const tm = mid(i);
+    const fpp = fp.find((p) => tm >= p.start && tm < p.end);
+    if (fpp && o.forecast) {
+      rows.push({ c: o.forecast.color, l: 'Predikce', v: vf(fpp.p50) });
+      if (fpp.p10 != null && fpp.p90 != null) rows.push({ l: 'p10–p90', v: `${vf(fpp.p10)} – ${vf(fpp.p90)}` });
+    }
+    if (!rows.length) continue;
+    const inSpan = (o.spans ?? []).some((sp) => tm >= sp.from && tm < sp.to);
+    const tip: Tip = { h: `${tf(t0)}–${hhmm(t0 + o.grid.step)}`, r: rows, n: inSpan ? o.spanTitle : undefined };
+    hover.push(svg`<rect class="hov-line" x="${f1(x(t0))}" y="${pt}" width="${f1(Math.max(1, slotW))}" height="${ih}"
+      data-tip="${tipAttr(tip)}"/>`);
+  }
+
   return svg`
     ${(o.spans ?? []).map(
       (sp) => svg`<rect x="${f1(x(sp.from))}" y="${pt}" width="${f1(Math.max(1, x(sp.to) - x(sp.from)))}" height="${ih}"
-        fill="${o.spanColor ?? '#69f0ae'}" opacity="0.08"><title>${o.spanTitle ?? ''}</title></rect>`,
+        fill="${o.spanColor ?? '#69f0ae'}" opacity="0.08"/>`,
     )}
     ${yTicks(sc).map(
       (v) => svg`
@@ -225,7 +287,8 @@ export function renderTimeChart(o: TimeChartOptions): TemplateResult {
     ${o.now != null && o.now > o.x0 && o.now < o.x1
       ? svg`<line x1="${f1(x(o.now))}" x2="${f1(x(o.now))}" y1="${pt}" y2="${pt + ih}"
           stroke="rgba(226,240,248,0.45)" stroke-dasharray="3 4"/>`
-      : nothing}`;
+      : nothing}
+    ${hover}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,9 +352,25 @@ export function renderColumns(o: ColumnsOptions): TemplateResult {
       const w = Math.max(1, barW - (o.mode === 'grouped' ? 1 : 0));
       return svg`<rect x="${f1(bx)}" y="${f1(top)}" width="${f1(w)}" height="${f1(h)}" rx="1.5"
         fill="${se.outline ? 'none' : se.color}" fill-opacity="0.75"
-        stroke="${se.color}" stroke-width="${se.outline ? 1.4 : 0}" stroke-dasharray="${se.outline ? '3 2' : ''}">
-        <title>${day.label}${faded ? ' (zatím)' : ''} · ${se.label} ${o.valueFormat(v)}</title></rect>`;
+        stroke="${se.color}" stroke-width="${se.outline ? 1.4 : 0}" stroke-dasharray="${se.outline ? '3 2' : ''}"/>`;
     })}</g>`;
+  });
+
+  // Bublina: průhledný pruh přes celý den se všemi hodnotami.
+  const hover = o.days.map((day, i) => {
+    const rows: TipRow[] = [];
+    for (const se of o.series) {
+      const v = se.values[i];
+      if (v != null) rows.push({ c: se.color, l: se.label, v: o.valueFormat(v) });
+    }
+    if (o.mode === 'stacked' && rows.length > 1) {
+      rows.push({ l: 'Celkem', v: o.valueFormat(o.series.reduce((a, se) => a + (se.values[i] ?? 0), 0)) });
+    }
+    if (!rows.length) return nothing;
+    const faded = o.partialLast && i === n - 1;
+    const tip: Tip = { h: `${day.label}${faded ? ' (zatím)' : ''}`, r: rows, n: o.refLine?.label };
+    return svg`<rect class="hov-band" x="${f1(pl + i * band)}" y="${pt}" width="${f1(band)}" height="${ih}"
+      data-tip="${tipAttr(tip)}"/>`;
   });
 
   return svg`
@@ -314,7 +393,8 @@ export function renderColumns(o: ColumnsOptions): TemplateResult {
       (n - 1 - i) % stride === 0
         ? svg`<text x="${f1(pl + (i + 0.5) * band)}" y="${pt + ih + 15}" text-anchor="middle" class="axis">${day.label}</text>`
         : nothing,
-    )}`;
+    )}
+    ${hover}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -593,6 +673,10 @@ export interface HeatmapOptions {
   markColor: string;
   markLabel: string;
   valueFormat: (v: number) => string;
+  /** Popisek hodnoty v bublině (např. „Výroba“, „SoC“). */
+  tipLabel: string;
+  /** Další řádky bubliny pro buňku (den, hodina). */
+  tipExtra?: (dayKey: string, hour: number) => TipRow[];
 }
 
 /** Sloupce = dny, řádky = hodiny (nahoře ráno), popisky hodin na hranách řádků. */
@@ -621,10 +705,18 @@ export function renderHeatmap(o: HeatmapOptions): { tpl: TemplateResult; height:
       const y = pt + (h - hMin) * cellH;
       const c = v == null ? { color: 'rgba(148,170,190,1)', opacity: 0.03 } : o.cellColor(v);
       const mark = !!marks?.[h];
-      cells.push(svg`<rect x="${f1(x + gap / 2)}" y="${f1(y + gap / 2)}" width="${f1(Math.max(1, cellW - gap))}"
+      const tip: Tip = {
+        h: `${day.label} ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00`,
+        r: [
+          { c: v == null ? undefined : c.color, l: o.tipLabel, v: v == null ? 'bez dat' : o.valueFormat(v) },
+          ...(o.tipExtra?.(day.key, h) ?? []),
+        ],
+        n: mark ? o.markLabel : undefined,
+      };
+      cells.push(svg`<rect class="cell" x="${f1(x + gap / 2)}" y="${f1(y + gap / 2)}" width="${f1(Math.max(1, cellW - gap))}"
         height="${f1(cellH - gap)}" rx="1.5" fill="${c.color}" fill-opacity="${c.opacity.toFixed(3)}"
-        stroke="${mark ? o.markColor : 'none'}" stroke-width="${mark ? 1.2 : 0}" stroke-opacity="0.9">
-        <title>${day.label} ${String(h).padStart(2, '0')}:00 · ${v == null ? 'bez dat' : o.valueFormat(v)}${mark ? ` · ${o.markLabel}` : ''}</title></rect>`);
+        stroke="${mark ? o.markColor : 'none'}" stroke-width="${mark ? 1.2 : 0}" stroke-opacity="0.9"
+        data-tip="${tipAttr(tip)}"/>`);
     }
   });
   const hourLabels: number[] = [];

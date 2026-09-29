@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.8`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.9`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -297,6 +297,11 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   současně); skutečný požadavek na měnič leží mezi nimi. U vícedenních období denní
   špičky. Nejpřesnější v 24 h / Dnes / Včera — krátké rázy statistiky vyhlazují,
   starší dny (> 10 dní) jsou jen hodinové.
+
+Všechny grafy a heatmapy mají **bublinu s hodnotami** — po najetí myší nebo
+klepnutí prstem (na dotyku jde i přejíždět po grafu) ukáže čas / den a hodnoty
+všech řad (u skládaných i celkem, u výroby predikci a pásmo p10–p90, u heatmap
+výrobu i SoC dané hodiny).
 
 Zdroje hodnot (bere se první dostupný):
 

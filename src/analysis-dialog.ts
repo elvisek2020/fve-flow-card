@@ -23,6 +23,7 @@ import {
   renderTimeChart,
   type SankeyLink,
   type SankeyNode,
+  type Tip,
 } from './analysis-charts';
 import { C, NEUTRAL } from './palette';
 import { formatEnergy, formatPower } from './utils';
@@ -52,6 +53,7 @@ const nf1 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 2 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' });
 const fmtDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
+const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short' });
 /** Od kolika % SoC je buňka heatmapy SoC orámovaná (baterie prakticky plná). */
 const SOC_HIGH = 90;
 
@@ -249,7 +251,15 @@ export class FveFlowAnalysisDialog extends LitElement {
           <button type="button" class="icon" title="Zavřít" aria-label="Zavřít" @click=${() => this.close()}>×</button>
         </header>
         <div class="progress${this._loading ? ' on' : ''}"></div>
-        <div class="body${stale ? ' stale' : ''}">
+        <div
+          class="body${stale ? ' stale' : ''}"
+          @pointermove=${(e: PointerEvent) => this._onPointer(e)}
+          @pointerdown=${(e: PointerEvent) => this._onPointer(e)}
+          @pointerleave=${(e: PointerEvent) => {
+            if (e.pointerType !== 'touch') this._hideTip();
+          }}
+          @scroll=${() => this._hideTip()}
+        >
           ${this._error
             ? html`<div class="error">
                 ${this._error}
@@ -258,6 +268,7 @@ export class FveFlowAnalysisDialog extends LitElement {
             : nothing}
           ${d ? this._content(d) : this._skeleton()}
         </div>
+        <div class="tip" role="tooltip" hidden></div>
       </dialog>
     `;
   }
@@ -286,6 +297,98 @@ export class FveFlowAnalysisDialog extends LitElement {
         ? html`<div class="foot">${d.warnings.map((w) => html`<p class="warn">${w}</p>`)}</div>`
         : nothing}
     `;
+  }
+
+  /** Formáty bubliny časových grafů (u klouzavých 24 h i den v týdnu). */
+  private _tipFmt(d: AnalysisData): { valueFormat: (v: number) => string; timeFormat?: (t: number) => string } {
+    return {
+      valueFormat: formatPower,
+      timeFormat: d.range.period === 'last24h' ? (t) => `${fmtWeekday.format(t)} ${fmtTime.format(t)}` : undefined,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Bublina s hodnotami — jeden plovoucí prvek, obsah z data-tip pod ukazatelem.
+  // Mimo Lit render (pohyb myši nesmí překreslovat grafy).
+  // -------------------------------------------------------------------------
+
+  private _tipTarget?: Element;
+
+  private _onPointer(e: PointerEvent): void {
+    const root = this.renderRoot as ShadowRoot;
+    const hit = root.elementFromPoint?.(e.clientX, e.clientY) ?? null;
+    const el = hit?.closest('[data-tip]') ?? null;
+    if (!el) {
+      this._hideTip();
+      return;
+    }
+    this._showTip(el, e.clientX, e.clientY, e.pointerType === 'touch');
+  }
+
+  private _showTip(el: Element, cx: number, cy: number, touch: boolean): void {
+    const root = this.renderRoot as ShadowRoot;
+    const tipEl = root.querySelector<HTMLElement>('.tip');
+    const dlg = root.querySelector('dialog');
+    if (!tipEl || !dlg) return;
+    if (el !== this._tipTarget) {
+      let tip: Tip;
+      try {
+        tip = JSON.parse(el.getAttribute('data-tip') ?? '') as Tip;
+      } catch {
+        this._hideTip();
+        return;
+      }
+      this._tipTarget?.removeAttribute('data-active');
+      el.setAttribute('data-active', '');
+      this._tipTarget = el;
+      const head = document.createElement('div');
+      head.className = 'tip-h';
+      head.textContent = tip.h;
+      const rows = tip.r.map((r) => {
+        const row = document.createElement('div');
+        row.className = 'tip-r';
+        const dot = document.createElement('i');
+        if (r.c) dot.style.background = r.c;
+        else dot.className = 'none';
+        const label = document.createElement('span');
+        label.textContent = r.l;
+        const value = document.createElement('b');
+        value.textContent = r.v;
+        row.append(dot, label, value);
+        return row;
+      });
+      const note = tip.n ? document.createElement('div') : null;
+      if (note) {
+        note.className = 'tip-n';
+        note.textContent = tip.n!;
+      }
+      tipEl.replaceChildren(head, ...rows, ...(note ? [note] : []));
+      tipEl.hidden = false;
+    }
+    const box = dlg.getBoundingClientRect();
+    const x = cx - box.left;
+    const y = cy - box.top;
+    const tw = tipEl.offsetWidth;
+    const th = tipEl.offsetHeight;
+    // Vedle kurzoru; na dotyku nad prstem, ať ho prst nezakrývá.
+    let left = touch ? x - tw / 2 : x + 16;
+    if (!touch && left + tw > box.width - 8) left = x - 16 - tw;
+    left = Math.max(8, Math.min(box.width - tw - 8, left));
+    let top = touch ? y - th - 28 : y - th / 2;
+    if (top < 8) top = touch ? y + 28 : 8;
+    top = Math.min(box.height - th - 8, top);
+    tipEl.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+  }
+
+  private _hideTip(): void {
+    this._tipTarget?.removeAttribute('data-active');
+    this._tipTarget = undefined;
+    const tipEl = this.renderRoot?.querySelector<HTMLElement>('.tip');
+    if (tipEl) tipEl.hidden = true;
+  }
+
+  protected updated(changed: Map<string, unknown>): void {
+    if (changed.has('_data') || changed.has('_chartW') || changed.has('_cols')) this._hideTip();
   }
 
   private _chart(h: number, content: TemplateResult, label: string, width?: number): TemplateResult {
@@ -333,6 +436,7 @@ export class FveFlowAnalysisDialog extends LitElement {
             ],
             now: d.range.period === 'today' ? Date.now() : null,
             yFormat: axisW,
+            ...this._tipFmt(d),
           }),
           'Průběh odběru z FVE a ze sítě',
         )
@@ -484,6 +588,7 @@ export class FveFlowAnalysisDialog extends LitElement {
             spanTitle: `Baterie plná (SoC ≥ ${d.fullSocPct} %)`,
             now: today ? Date.now() : null,
             yFormat: axisW,
+            ...this._tipFmt(d),
           }),
           'Výroba FVE a predikce Solcast',
         )
@@ -605,11 +710,12 @@ export class FveFlowAnalysisDialog extends LitElement {
               x1: d.range.dayEnd,
               series: [
                 { label: 'FVE', color: C.solar, values: s.pv, kind: 'area' },
-                { label: 'Baterie', color: C.charge, negColor: C.discharge, values: s.battery, kind: 'area' },
+                { label: 'Nabíjení', negLabel: 'Vybíjení', color: C.charge, negColor: C.discharge, values: s.battery, kind: 'area' },
                 { label: 'Střídač', color: C.ac, values: s.ac, kind: 'line' },
               ],
               now: d.range.period === 'today' ? Date.now() : null,
               yFormat: axisW,
+              ...this._tipFmt(d),
             }),
             'Výkon FVE, baterie a střídače',
           )}
@@ -627,6 +733,7 @@ export class FveFlowAnalysisDialog extends LitElement {
               compact: true,
               now: d.range.period === 'today' ? Date.now() : null,
               yFormat: (v) => `${nf0.format(v)} %`,
+              timeFormat: this._tipFmt(d).timeFormat,
             }),
             'SoC baterie',
           )}
@@ -731,8 +838,13 @@ export class FveFlowAnalysisDialog extends LitElement {
         opacity: 0.06 + 0.94 * Math.pow(hm.max > 0 ? Math.min(1, v / hm.max) : 0, 0.8),
       }),
       markColor: C.forecast,
-      markLabel: 'baterie plná',
+      markLabel: `Baterie plná (SoC ≥ ${d.fullSocPct} %) — výroba mohla být omezená`,
       valueFormat: formatPower,
+      tipLabel: 'Výroba',
+      tipExtra: (key, h) => {
+        const soc = hm.soc.get(key)?.[h];
+        return soc == null ? [] : [{ l: 'SoC', v: `${nf0.format(soc)} %` }];
+      },
     });
     return html`<h4 class="spaced">Výroba po hodinách</h4>
       ${this._chart(height, tpl, 'Výroba FVE po hodinách')}
@@ -762,8 +874,13 @@ export class FveFlowAnalysisDialog extends LitElement {
       hours: [0, 24],
       cellColor: (v) => ({ color: socScale(v, thresholds.yellow_from, thresholds.green_from), opacity: 0.92 }),
       markColor: '#ffffff',
-      markLabel: `≥ ${SOC_HIGH} %`,
-      valueFormat: (v) => `SoC ${nf0.format(v)} %`,
+      markLabel: `SoC ≥ ${SOC_HIGH} %`,
+      valueFormat: (v) => `${nf0.format(v)} %`,
+      tipLabel: 'SoC (průměr)',
+      tipExtra: (key, h) => {
+        const pv = hm.values.get(key)?.[h];
+        return pv == null ? [] : [{ c: C.solar, l: 'Výroba', v: formatPower(pv) }];
+      },
     });
     return html`<h4 class="spaced">SoC baterie po hodinách</h4>
       ${this._chart(height, tpl, 'SoC baterie po hodinách')}
@@ -812,6 +929,7 @@ export class FveFlowAnalysisDialog extends LitElement {
               ],
               now: d.range.period === 'today' ? Date.now() : null,
               yFormat: axisW,
+              ...this._tipFmt(d),
             }),
             'Zatížení fází',
             wideW,
@@ -1165,11 +1283,81 @@ export class FveFlowAnalysisDialog extends LitElement {
       min-width: 2px;
       opacity: 0.85;
     }
+    .tip {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 5;
+      min-width: 150px;
+      max-width: 280px;
+      padding: 8px 11px;
+      color: #e2f0f8;
+      font-size: 12.5px;
+      pointer-events: none;
+      background: rgba(10, 22, 34, 0.97);
+      border: 1px solid rgba(79, 195, 247, 0.38);
+      border-radius: 10px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    }
+    .tip[hidden] {
+      display: none;
+    }
+    .tip-h {
+      margin-bottom: 4px;
+      color: rgba(226, 240, 248, 0.85);
+      font-weight: 600;
+    }
+    .tip-r {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      line-height: 1.6;
+    }
+    .tip-r i {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .tip-r i.none {
+      background: none;
+    }
+    .tip-r span {
+      flex: 1;
+      color: rgba(226, 240, 248, 0.68);
+    }
+    .tip-r b {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .tip-n {
+      margin-top: 5px;
+      color: rgba(226, 240, 248, 0.55);
+      font-size: 11.5px;
+    }
+    .hov-line,
+    .hov-band {
+      fill: transparent;
+    }
+    .hov-line[data-active] {
+      fill: rgba(226, 240, 248, 0.28);
+    }
+    .hov-band[data-active] {
+      fill: rgba(226, 240, 248, 0.07);
+    }
+    rect.cell[data-active] {
+      stroke: #ffffff;
+      stroke-width: 2;
+      stroke-opacity: 1;
+    }
     svg.chart {
       display: block;
       width: 100%;
       height: auto;
       overflow: visible;
+      /* Vodorovný tah prstem = přejíždění bubliny, svislý = scroll okna. */
+      touch-action: pan-y;
     }
     svg.chart + svg.chart {
       margin-top: 6px;
