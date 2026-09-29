@@ -3,4 +3,5 @@ node_modules/
 .DS_Store
 
 # lokální deník práce, synchronizuje se přes iCloud
-_docs/change-projects-log.md
+_docs/
+.cursor/
