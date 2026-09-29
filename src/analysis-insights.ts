@@ -22,7 +22,14 @@ export function buildInsights(d: AnalysisData): Insight[] {
   const out: Insight[] = [];
   const single = d.range.intraday;
   const when =
-    d.range.period === 'today' ? 'Dnes' : d.range.period === 'yesterday' ? 'Včera' : `Za ${d.range.days.length} dní`;
+    d.range.period === 'last24h'
+      ? 'Za posledních 24 h'
+      : d.range.period === 'today'
+        ? 'Dnes'
+        : d.range.period === 'yesterday'
+          ? 'Včera'
+          : `Za ${d.range.days.length} dní`;
+  const live = d.range.period === 'today' || d.range.period === 'last24h';
 
   // Soběstačnost domu.
   if (d.gridConfigured && d.selfSufficiency != null && d.house != null && d.fve.total != null) {
@@ -37,11 +44,14 @@ export function buildInsights(d: AnalysisData): Insight[] {
   // Výroba vs predikce.
   const f = d.forecast.fulfilment;
   if (f != null && d.pv.total != null) {
-    const ref = d.range.period === 'today' ? 'predikce do teď' : 'predikce den předem';
+    const ref = live ? 'predikce do teď' : 'predikce den předem';
     out.push({
       tone: f >= 0.95 ? 'good' : f >= 0.8 ? 'info' : 'warn',
       prio: 20,
-      text: `Výroba ${kwh(d.pv.total)} = ${pct(f)} ${ref}.`,
+      text:
+        d.range.period === 'last24h'
+          ? `Dnešní výroba je na ${pct(f)} ${ref}.`
+          : `Výroba ${kwh(d.pv.total)} = ${pct(f)} ${ref}.`,
     });
   }
 
@@ -126,7 +136,7 @@ export function buildInsights(d: AnalysisData): Insight[] {
   }
 
   // Zítřek.
-  if (d.range.period === 'today' && d.forecast.tomorrow != null && d.forecast.total != null) {
+  if (live && d.forecast.tomorrow != null && d.forecast.total != null) {
     const t = d.forecast.tomorrow;
     const diff = t - d.forecast.total;
     out.push({

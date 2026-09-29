@@ -22,7 +22,7 @@ import {
   type StatRow,
 } from './analysis-stats';
 
-export type AnalysisPeriod = 'today' | 'yesterday' | 'week' | 'month';
+export type AnalysisPeriod = 'last24h' | 'today' | 'yesterday' | 'week' | 'month';
 
 export interface DayInfo {
   key: string;
@@ -48,12 +48,31 @@ export interface PeriodRange {
 const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric' });
 const fmtDayMonth = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
 
-/** Období podle lokální půlnoci (DST den má 23 / 25 h). */
+/** Období podle lokální půlnoci (DST den má 23 / 25 h); 24 h = klouzavé okno do teď. */
 export function periodRange(period: AnalysisPeriod, now = new Date()): PeriodRange {
   const y = now.getFullYear();
   const m = now.getMonth();
   const d = now.getDate();
   const dayStart = (offset: number) => new Date(y, m, d + offset).getTime();
+  if (period === 'last24h') {
+    const end = now.getTime();
+    // Začátek zarovnaný na 5 min (sloty statistik); okno zasahuje do včerejška.
+    const start = Math.floor((end - 24 * HOUR_MS) / FIVE_MIN_MS) * FIVE_MIN_MS;
+    const days = [-1, 0].map((off) => {
+      const s = dayStart(off);
+      return { key: toLocalDayKey(new Date(s)), start: s, end: dayStart(off + 1), label: off ? 'Včera' : 'Dnes' };
+    });
+    return {
+      period,
+      start,
+      end,
+      dayEnd: end,
+      days: days.filter((x) => x.end > start),
+      intraday: true,
+      includesToday: true,
+      label: 'posledních 24 h',
+    };
+  }
   const count = period === 'week' ? 7 : period === 'month' ? 30 : 1;
   const first = period === 'yesterday' ? -1 : -(count - 1);
   const days: DayInfo[] = [];
@@ -639,7 +658,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
     fetchedMeters: new Set(mIds),
     fetchedPower: new Set(chartIds),
     expectedMs: Math.max(1, (asOf ?? range.end) - range.start),
-    dayKeys: [range.days[0].key],
+    dayKeys: range.days.map((x) => x.key),
   };
   const res = await resolveWithFetch(ctx, st, (ids) =>
     safe(fetchFineRows(hass, ids, range.start, range.end, ['mean']), empty, warnings, 'Statistiky výkonů'),
@@ -660,20 +679,33 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
     fullSpans: fullSpans(grid, socMax, plan.fullSocPct),
   };
 
-  // Predikce.
-  const today = range.period === 'today';
+  // Predikce (Dnes i 24 h berou živou predikci dneška; detailedForecast je jen od půlnoci).
+  const today = range.period === 'today' || range.period === 'last24h';
+  const todayStart = range.days[range.days.length - 1].start;
   const periods = today && plan.solcast.today
     ? parseDetailed(hass.states[plan.solcast.today]?.attributes.detailedForecast, range.start, range.dayEnd)
     : [];
   const until = asOf ?? range.end;
-  const soFar = periods.length ? forecastKwh(periods, range.start, until) : null;
+  const soFar = periods.length ? forecastKwh(periods, Math.max(range.start, todayStart), until) : null;
   let dayAhead = new Map<string, number>();
   if (!today) {
     dayAhead = await safe(fetchDayAhead(hass, plan, range.days), new Map(), warnings, 'Historie predikce Solcast');
     if (plan.solcast.today && !dayAhead.size) warnings.push('Predikce Solcast za včerejšek není v historii.');
   }
   const total = today ? kwhState(hass, plan.solcast.today) : dayAhead.get(range.days[0].key) ?? null;
-  const pvTotal = res.pv.total;
+  // U 24 h se plnění porovnává jen za dnešní část okna (predikce jen od půlnoci).
+  let pvTotal = res.pv.total;
+  if (range.period === 'last24h') {
+    let kwh = 0;
+    let any = false;
+    series.pv.forEach((v, i) => {
+      const t = grid.start + i * grid.step;
+      if (v == null || t < todayStart || t + grid.step > until) return;
+      kwh += (v * grid.step) / HOUR_MS / 1000;
+      any = true;
+    });
+    pvTotal = any ? kwh : null;
+  }
   const ref = today ? soFar : total;
   const fulfilment = pvTotal != null && ref != null && ref > 0.1 ? pvTotal / ref : null;
 
@@ -964,7 +996,8 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
   dc.cycles = dis != null && capacityKwh > 0 ? dis / capacityKwh : null;
 
   // Upozornění, když bilance nejde spočítat za celé období.
-  const totalDays = range.days.length;
+  // 24 h zasahuje do dvou kalendářních dnů jen částečně — pokrytí po dnech tu nedává smysl.
+  const totalDays = range.period === 'last24h' ? 0 : range.days.length;
   const warnings = [...x.warnings];
   const partial = (days: number | null, what: string) => {
     if (days != null && days > 0 && days < totalDays) {

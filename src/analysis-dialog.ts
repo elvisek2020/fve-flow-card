@@ -47,6 +47,7 @@ export interface AnalysisDialogOptions {
 
 const TAG = 'fve-flow-analysis-dialog';
 const PERIODS: Array<[AnalysisPeriod, string]> = [
+  ['last24h', '24 h'],
   ['today', 'Dnes'],
   ['yesterday', 'Včera'],
   ['week', '7 dní'],
@@ -80,7 +81,7 @@ const SOURCE_TEXT: Record<Quantity['source'], string> = {
 export class FveFlowAnalysisDialog extends LitElement {
   public options?: AnalysisDialogOptions;
 
-  @state() private _period: AnalysisPeriod = 'today';
+  @state() private _period: AnalysisPeriod = 'last24h';
   @state() private _data?: AnalysisData;
   @state() private _loading = false;
   @state() private _error?: string;
@@ -105,7 +106,8 @@ export class FveFlowAnalysisDialog extends LitElement {
     // „Teď“ hodnoty každých 5 s, data Dnes každých 5 min.
     this._tick = window.setInterval(() => this.requestUpdate(), 5000);
     this._refresh = window.setInterval(() => {
-      if (this._period === 'today' && !this._loading) void this._load('today', true);
+      const live = this._period === 'today' || this._period === 'last24h';
+      if (live && !this._loading) void this._load(this._period, true);
     }, TODAY_TTL_MS);
   }
 
@@ -124,18 +126,19 @@ export class FveFlowAnalysisDialog extends LitElement {
       this._ro = new ResizeObserver((entries) => {
         const w = entries[0]?.contentRect.width ?? 0;
         if (!w) return;
-        const cols = w >= 900 ? 2 : 1;
+        // Dva sloupce už od šířky tabletu (iPad na šířku).
+        const cols = w >= 760 ? 2 : 1;
         const cell = cols === 2 ? (w - 18) / 2 : w;
         const chartW = Math.max(240, Math.floor((cell - 42) / 10) * 10);
-        // Až v dalším snímku — změna layoutu uvnitř callbacku by hlásila „ResizeObserver loop“.
-        requestAnimationFrame(() => {
+        // Mimo callback — změna layoutu uvnitř by hlásila „ResizeObserver loop“.
+        window.setTimeout(() => {
           if (cols !== this._cols) this._cols = cols;
           if (chartW !== this._chartW) this._chartW = chartW;
-        });
+        }, 0);
       });
       this._ro.observe(grid);
     }
-    void this._load('today');
+    void this._load('last24h');
   }
 
   // -------------------------------------------------------------------------
@@ -159,7 +162,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   private async _load(period: AnalysisPeriod, force = false): Promise<void> {
     if (force) {
       this._cache.delete(period);
-      if (period !== 'yesterday') this._cache.delete('today');
+      if (period === 'week' || period === 'month') this._cache.delete('today');
     }
     const seq = ++this._seq;
     this._period = period;
@@ -229,7 +232,9 @@ export class FveFlowAnalysisDialog extends LitElement {
 
   private _rangeText(d?: AnalysisData): string {
     if (!d || d.range.period !== this._period) return this._loading ? 'načítám…' : '';
-    if (d.range.period === 'today') return d.asOf ? `dnes · data k ${fmtTime.format(d.asOf)}` : 'dnes';
+    if (d.range.period === 'today' || d.range.period === 'last24h') {
+      return d.asOf ? `${d.range.label} · data k ${fmtTime.format(d.asOf)}` : d.range.label;
+    }
     return d.range.label;
   }
 
@@ -430,7 +435,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   /** 3 — FVE a predikce Solcast. */
   private _cardPv(d: AnalysisData, live?: AnalysisLive): TemplateResult {
     const f = d.forecast;
-    const today = d.range.period === 'today';
+    const today = d.range.period === 'today' || d.range.period === 'last24h';
     const s = d.series;
     const cur = f.curtailed;
     const fullHours = s && d.soc.max != null
@@ -486,7 +491,7 @@ export class FveFlowAnalysisDialog extends LitElement {
       <div class="kpis">
         ${this._kpi('Vyrobeno', fmtQ(d.pv), C.solar, this._srcTitle(d.pv))}
         ${today
-          ? this._kpi('Predikce do teď', fmtKwh(f.soFar), C.forecast)
+          ? this._kpi(d.range.period === 'last24h' ? 'Predikce dnes do teď' : 'Predikce do teď', fmtKwh(f.soFar), C.forecast)
           : this._kpi('Predikce den předem', fmtKwh(f.total), C.forecast)}
         ${this._kpi('Plnění predikce', fmtPct(f.fulfilment))}
         ${today ? this._kpi('Predikce dnes', fmtKwh(f.total)) : nothing}
@@ -678,17 +683,17 @@ export class FveFlowAnalysisDialog extends LitElement {
       color: var(--primary-text-color, #e6f4fa);
       font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
     }
-    /* Pevná šířka i výška (ne podle obsahu): WebKit na iPadu jinak ve flex
-       sloupci smrskne tělo okna na nulu a šířku odvodí z hlavičky. */
+    /* Velikost z ukotvení k okrajům obrazovky (inset), ne z vw / obsahu:
+       WebKit v HA aplikaci na iPadu jinak okno zúží a tělo smrskne na nulu. */
     dialog {
       box-sizing: border-box;
-      inset: 0;
+      position: fixed;
+      inset: 12px 16px;
       margin: auto;
-      width: calc(100vw - 32px);
-      min-width: calc(100vw - 32px);
+      width: auto;
+      min-width: 0;
       max-width: 1640px;
-      height: calc(100vh - 24px);
-      height: calc(100dvh - 24px);
+      height: auto;
       max-height: none;
       padding: 0;
       overflow: hidden;
@@ -702,12 +707,6 @@ export class FveFlowAnalysisDialog extends LitElement {
       border-radius: 20px;
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
       box-shadow: 0 0 32px color-mix(in srgb, var(--dialog-accent) 18%, transparent), 0 24px 80px rgba(0, 0, 0, 0.55);
-    }
-    @media (min-width: 1672px) {
-      dialog {
-        width: 1640px;
-        min-width: 1640px;
-      }
     }
     dialog[open] {
       display: flex;
@@ -1105,10 +1104,7 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     @media (max-width: 600px) {
       dialog {
-        width: calc(100vw - 16px);
-        min-width: calc(100vw - 16px);
-        height: calc(100vh - 16px);
-        height: calc(100dvh - 16px);
+        inset: 8px;
         border-radius: 16px;
       }
       header {

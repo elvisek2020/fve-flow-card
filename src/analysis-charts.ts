@@ -185,10 +185,15 @@ export function renderTimeChart(o: TimeChartOptions): TemplateResult {
         stroke-width="1.8" stroke-dasharray="5 4" opacity="0.9"/>`;
   }
 
-  const hours = [0, 6, 12, 18, 24].map((h) => {
-    const d0 = new Date(o.x0);
-    return { h, t: new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), h).getTime() };
-  });
+  // Značky po 6 h v lokálním čase — funguje pro den (00–24) i klouzavých 24 h.
+  const d0 = new Date(o.x0);
+  const hours: Array<{ label: string; t: number }> = [];
+  for (let h = 0; h <= 48; h += 6) {
+    const t = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), h).getTime();
+    if (t < o.x0 - 60000 || t > o.x1 + 60000) continue;
+    const hh = new Date(t).getHours();
+    hours.push({ t, label: hh === 0 && t >= o.x1 - 60000 ? '24' : String(hh).padStart(2, '0') });
+  }
 
   return svg`
     ${(o.spans ?? []).map(
@@ -203,9 +208,9 @@ export function renderTimeChart(o: TimeChartOptions): TemplateResult {
     ${o.compact
       ? nothing
       : hours.map(
-          ({ h, t }) => svg`
+          ({ label, t }) => svg`
             <line x1="${f1(x(t))}" x2="${f1(x(t))}" y1="${pt}" y2="${pt + ih}" stroke="${GRID_LINE}"/>
-            <text x="${f1(x(t))}" y="${pt + ih + 14}" text-anchor="middle" class="axis">${String(h).padStart(2, '0')}</text>`,
+            <text x="${f1(x(t))}" y="${pt + ih + 14}" text-anchor="middle" class="axis">${label}</text>`,
         )}
     ${sc.lo < 0 ? svg`<line x1="${pl}" x2="${pl + iw}" y1="${f1(yZero)}" y2="${f1(yZero)}" stroke="rgba(226,240,248,0.3)"/>` : nothing}
     ${o.refLine

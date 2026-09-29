@@ -17,7 +17,7 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast a DC bilance MPPT · baterie · střídač za
-  Dnes / Včera / 7 / 30 dní
+  posledních 24 h / Dnes / Včera / 7 / 30 dní
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
@@ -148,7 +148,7 @@ back_button:
   enabled: true
   path: /lovelace/home  # prázdné = výchozí dashboard (/)
 analysis:
-  enabled: true         # tlačítko Analýza nad ZPĚT (default zapnuto)
+  enabled: true         # tlačítko Analýza pod ZPĚT (default zapnuto)
   full_soc_pct: 98      # od jakého SoC je baterie „plná" (odhad nevyužité výroby)
 ```
 
@@ -256,9 +256,14 @@ Poznámky:
 
 ### Okno Analýza
 
-Tlačítko **ANALÝZA** pod měničem (nad ZPĚT) otevře přehled za **Dnes / Včera /
-7 dní / 30 dní**. Karta k tomu nepotřebuje žádné nové entity — bere ty, které
-už má, a jejich dlouhodobé statistiky z recorderu HA.
+Tlačítko **ANALÝZA** pod měničem (pod ZPĚT, spodní hranou lícuje s posledním
+patrem) otevře přehled za **24 h / Dnes / Včera / 7 dní / 30 dní** — výchozí je
+klouzavých posledních 24 hodin. Karta k tomu nepotřebuje žádné nové entity —
+bere ty, které už má, a jejich dlouhodobé statistiky z recorderu HA. Okno
+zabírá skoro celou obrazovku (max. 1640 px), dva sloupce karet od šířky tabletu.
+
+U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
+(`detailedForecast` začíná o půlnoci).
 
 - **Shrnutí** — automatické postřehy: soběstačnost, plnění predikce, možná
   nevyužitá výroba při plné baterii, patro s největší spotřebou, neměřená
