@@ -233,7 +233,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
     phases,
     solcast: { today: clean(s.total_today), tomorrow: clean(s.total_tomorrow), remaining: clean(s.remaining_today) },
     batteryInvert: !!b.invert,
-    fullSocPct: cfg.analysis?.full_soc_pct ?? 98,
+    fullSocPct: cfg.analysis?.full_soc_pct ?? 99,
     minSocPct: cfg.forecast?.min_soc_pct ?? 10,
     gridName: g.name || 'Síť',
   };
@@ -675,7 +675,9 @@ async function loadPvHeatmap(
       arr[d.getHours()] = row.mean;
       soc.set(key, arr);
     }
-    if (row.max == null || row.max < plan.fullSocPct) continue;
+    // Hodina je „plná“, jen když SoC v průměru drží na prahu — krátký dotyk
+    // maxima (např. večer před poklesem) rámeček nevyvolá.
+    if (row.mean == null || row.mean < plan.fullSocPct) continue;
     const arr = full.get(key) ?? new Array<boolean>(24).fill(false);
     arr[d.getHours()] = true;
     full.set(key, arr);

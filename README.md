@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.6`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.8`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -150,7 +150,7 @@ back_button:
   path: /lovelace/home  # prázdné = výchozí dashboard (/)
 analysis:
   enabled: true         # tlačítko Analýza pod ZPĚT (default zapnuto)
-  full_soc_pct: 98      # od jakého SoC je baterie „plná" (odhad nevyužité výroby)
+  full_soc_pct: 99      # od jakého SoC je baterie „plná" (odhad nevyužité výroby)
 ```
 
 ### Barevné prahy (semafor)
@@ -276,7 +276,8 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   nevyužité výroby (predikce − skutečnost v době, kdy SoC ≥ `full_soc_pct`).
   U minulých dní se porovnává s predikcí den předem. Pod grafem **heatmapa
   výroby po hodinách** (sloupce = dny, řádky = hodiny 4–22, barva = hodinový
-  průměr výkonu FVE); hodiny s plnou baterií jsou orámované — tam se výroba
+  průměr výkonu FVE); hodiny s plnou baterií (hodinový průměr SoC ≥
+  `full_soc_pct`, výchozí 99 %) jsou orámované — tam se výroba
   mohla omezovat. Heatmapy vždy odpovídají vybranému období (u 24 h dva
   sloupce Včera / Dnes jen s hodinami uvnitř okna).
 - **MPPT · baterie · střídač** — DC bilance: FVE → baterie / střídač,
@@ -285,10 +286,11 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   kapacita × počet dní, vybito, využití kapacity a kolik spotřeby z FVE
   pokryla baterie; u vícedenních období denní sloupce vybito vs. spotřeba z FVE
   s čárou kapacity baterie. Dole **heatmapa SoC po hodinách** (0–24 h):
-  plynulá škála navázaná na semafor baterie (0 % červená → `yellow_from`
-  žlutá → `green_from` světle zelená → 100 % sytě zelená), hodiny s plnou
-  baterií (≥ `full_soc_pct`) mají bílý rámeček.
-- **Zatížení fází · dimenzování měniče** (přes celou šířku) — fáze sítě L1–L3
+  výrazné barevné přechody SoC — do `yellow_from` (15 %) červená, do
+  `green_from` (40 %) sytá oranžová, 40–60 % přes fialovou k modré, 60–80 %
+  k světle zelené, 80–100 % do tmavě zelené; hodiny s průměrným SoC ≥ 90 %
+  mají navíc bílý rámeček.
+- **Zatížení fází** (přes celou šířku, pro dimenzování měniče) — fáze sítě L1–L3
   (`grid.phase_a/b/c`, jinak součet fází pater) a výstup měniče složené nad
   sebou. **Špička současně** = nejvyšší součet 5min průměrů (spodní odhad),
   **Horní odhad** = nejvyšší součet 5min maxim fází (nemusela nastat

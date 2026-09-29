@@ -244,7 +244,7 @@ export interface BackButtonConfig {
 export interface AnalysisConfig {
   /** Zobrazit tlačítko Analýza. Default zapnuto. */
   enabled?: boolean;
-  /** SoC (%), od kterého je baterie „plná“ — odhad nevyužité výroby. Default 98. */
+  /** SoC (%), od kterého je baterie „plná“ — odhad nevyužité výroby. Default 99. */
   full_soc_pct?: number;
 }
 

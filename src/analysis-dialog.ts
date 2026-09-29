@@ -52,28 +52,49 @@ const nf1 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 2 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' });
 const fmtDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
+/** Od kolika % SoC je buňka heatmapy SoC orámovaná (baterie prakticky plná). */
+const SOC_HIGH = 90;
+
+type Rgb = [number, number, number];
+
 /**
- * Plynulá škála SoC navázaná na semafor baterie: 0 % červená → žlutá na
- * `yellow` → světle zelená na `green` → sytě zelená na 100 %.
+ * Barevné zastávky SoC pro heatmapu — sytý přechod mezi výraznými odstíny,
+ * ať se sousední hodnoty neslévají: do `yellow` červená (konec), do `green`
+ * sytá oranžová, 40–60 % přes fialovou k modré, 60–80 % k světle zelené,
+ * 80–100 % do tmavě zelené (≥ 90 % navíc bílý rámeček). Dvě zastávky na
+ * stejné pozici = ostrý přechod.
  */
-function socScale(soc: number, yellow: number, green: number): string {
-  const stops: Array<[number, [number, number, number]]> = [
-    [0, [255, 82, 82]],
-    [yellow, [255, 215, 64]],
-    [green, [178, 255, 89]],
-    [100, [0, 230, 118]],
+function socStops(yellow: number, green: number): Array<[number, Rgb]> {
+  const mid = green + (60 - green) / 2;
+  return [
+    [0, [183, 28, 28]],
+    [yellow, [255, 82, 82]],
+    [yellow, [255, 109, 0]],
+    [green, [255, 160, 0]],
+    [mid, [171, 71, 188]],
+    [60, [41, 121, 255]],
+    [80, [118, 255, 3]],
+    [90, [0, 200, 83]],
+    [100, [0, 121, 58]],
   ];
+}
+
+function socScale(soc: number, yellow: number, green: number): string {
+  const stops = socStops(yellow, green);
   const v = Math.min(100, Math.max(0, soc));
-  for (let i = 1; i < stops.length; i++) {
-    const [p1, c1] = stops[i];
-    const [p0, c0] = stops[i - 1];
-    if (v <= p1 || i === stops.length - 1) {
-      const t = p1 > p0 ? Math.min(1, Math.max(0, (v - p0) / (p1 - p0))) : 1;
-      const c = c0.map((x, k) => Math.round(x + (c1[k] - x) * t));
-      return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-    }
-  }
-  return 'rgb(0, 230, 118)';
+  let i = stops.findIndex(([p], k) => k > 0 && v < p);
+  if (i < 0) i = stops.length - 1;
+  const [p0, c0] = stops[i - 1];
+  const [p1, c1] = stops[i];
+  const t = p1 > p0 ? Math.min(1, Math.max(0, (v - p0) / (p1 - p0))) : 1;
+  const c = c0.map((x, k) => Math.round(x + (c1[k] - x) * t));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+/** CSS gradient legendy ze stejných zastávek jako `socScale`. */
+function socGradient(yellow: number, green: number): string {
+  const parts = socStops(yellow, green).map(([p, c]) => `rgb(${c.join(', ')}) ${p}%`);
+  return `linear-gradient(90deg, ${parts.join(', ')})`;
 }
 
 /** Barvy fází jako na scéně karty (L2 grafitová místo černé). */
@@ -722,32 +743,38 @@ export class FveFlowAnalysisDialog extends LitElement {
   }
 
   /**
-   * Heatmapa SoC baterie (dny × 0–24 h): barva podle semaforu baterie jako na
-   * scéně karty (prahy battery.yellow_from / green_from), sytost podle SoC;
-   * hodiny s plnou baterií (max SoC ≥ full_soc_pct) orámované.
+   * Heatmapa SoC baterie (dny × 0–24 h): přechody podle `socStops` (hranice
+   * červené a oranžové = battery.yellow_from / green_from), hodiny s průměrným
+   * SoC ≥ 90 % mají bílý rámeček.
    */
   private _socHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
     const hm = d.pvHeatmap;
     if (!hm || !hm.soc.size) return nothing;
     const b = this.options?.config.battery ?? {};
     const thresholds = { yellow_from: b.yellow_from ?? 15, green_from: b.green_from ?? 40, severity_invert: b.severity_invert };
+    const high = new Map<string, boolean[]>();
+    for (const [key, arr] of hm.soc) high.set(key, arr.map((v) => v != null && v >= SOC_HIGH));
     const { tpl, height } = renderHeatmap({
       width: this._chartW,
       days: hm.days,
       values: hm.soc,
-      marks: hm.full,
+      marks: high,
       hours: [0, 24],
       cellColor: (v) => ({ color: socScale(v, thresholds.yellow_from, thresholds.green_from), opacity: 0.92 }),
       markColor: '#ffffff',
-      markLabel: `plná (≥ ${d.fullSocPct} %)`,
+      markLabel: `≥ ${SOC_HIGH} %`,
       valueFormat: (v) => `SoC ${nf0.format(v)} %`,
     });
     return html`<h4 class="spaced">SoC baterie po hodinách</h4>
       ${this._chart(height, tpl, 'SoC baterie po hodinách')}
       <div class="legend">
-        <span><i class="soc-scale" style="--y:${socScale(thresholds.yellow_from, thresholds.yellow_from, thresholds.green_from)};--g:${socScale(thresholds.green_from, thresholds.yellow_from, thresholds.green_from)}"></i>
-          0 % → ${thresholds.yellow_from} % → ${thresholds.green_from} % → 100 %</span>
-        <span><i class="outline" style="--c:#ffffff"></i>plná baterie (≥ ${d.fullSocPct} %)</span>
+        <span class="soc-legend">
+          <i class="soc-bar" style="background:${socGradient(thresholds.yellow_from, thresholds.green_from)}"></i>
+          ${[0, thresholds.yellow_from, thresholds.green_from, 60, 80, 100].map(
+            (p) => html`<b style="left:${p}%">${p}</b>`,
+          )}
+        </span>
+        <span><i class="outline" style="--c:#ffffff"></i>≥ ${SOC_HIGH} %</span>
       </div>`;
   }
 
@@ -765,6 +792,9 @@ export class FveFlowAnalysisDialog extends LitElement {
     const when = (t: number) =>
       d.range.intraday ? fmtTime.format(t) : `${fmtDate.format(t)} ${fmtTime.format(t)}`;
     const s = pl.slots;
+    // KPI ve skupinách (špičky · průměr · fáze · měnič) s mezerou mezi skupinami.
+    const inverter = pl.perSeries.filter((x) => x.label.startsWith('FVE'));
+    const phases = pl.perSeries.filter((x) => !x.label.startsWith('FVE'));
     // Karta přes oba sloupce: 2 × (šířka grafu + padding karty 42) + mezera 18 − padding.
     const wideW = this._cols === 2 ? 2 * this._chartW + 60 : this._chartW;
     const chart = s && d.series
@@ -813,8 +843,9 @@ export class FveFlowAnalysisDialog extends LitElement {
             ['Horní odhad (součet maxim)', C.crit, 'outline'],
           ])}`;
     return html`<article class="card wide">
-      <h3>Zatížení fází · dimenzování měniče</h3>
-      <div class="kpis">
+      <h3>Zatížení fází</h3>
+      <div class="kpi-groups">
+        <div class="kgroup" style="flex-grow:2">
         ${this._kpi(
           'Špička současně',
           pl.peak ? formatPower(pl.peak.value) : '—',
@@ -829,15 +860,20 @@ export class FveFlowAnalysisDialog extends LitElement {
           'Nejvyšší součet 5min maxim fází — maxima nemusela nastat současně (horní odhad)',
           pl.upper ? when(pl.upper.at) : undefined,
         )}
-        ${this._kpi('Průměrné zatížení', fmtW(pl.avg))}
-        ${pl.perSeries.map((x) =>
-          this._kpi(
-            `${x.label} špička`,
-            fmtW(x.peak),
-            colorOf(x.label),
-            'Nejvyšší 5min průměr / maximum dané fáze',
-            x.upper != null ? `max ${formatPower(x.upper)}` : undefined,
-          ),
+        </div>
+        <div class="kgroup">${this._kpi('Průměrné zatížení', fmtW(pl.avg))}</div>
+        ${[phases, inverter].filter((g) => g.length).map(
+          (g) => html`<div class="kgroup" style="flex-grow:${g.length}">
+            ${g.map((x) =>
+              this._kpi(
+                `${x.label} špička`,
+                fmtW(x.peak),
+                colorOf(x.label),
+                'Nejvyšší 5min průměr / maximum dané fáze',
+                x.upper != null ? `max ${formatPower(x.upper)}` : undefined,
+              ),
+            )}
+          </div>`,
         )}
       </div>
       ${chart}
@@ -1015,11 +1051,31 @@ export class FveFlowAnalysisDialog extends LitElement {
     h4.spaced {
       margin-top: 22px;
     }
-    .legend i.soc-scale {
-      width: 64px;
+    .legend .soc-legend {
+      position: relative;
+      display: inline-block;
+      width: 220px;
+      height: 26px;
+      margin-right: 10px;
+    }
+    .legend i.soc-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
       height: 10px;
       border-radius: 2px;
-      background: linear-gradient(90deg, rgb(255, 82, 82), var(--y), var(--g), rgb(0, 230, 118));
+    }
+    .legend .soc-legend b {
+      position: absolute;
+      top: 12px;
+      transform: translateX(-50%);
+      font-size: 11px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+    .legend .soc-legend b:last-child::after {
+      content: ' %';
     }
     .legend i.scale {
       width: 42px;
@@ -1055,6 +1111,22 @@ export class FveFlowAnalysisDialog extends LitElement {
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
       gap: 10px;
       margin-bottom: 16px;
+    }
+    .kpi-groups {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 28px;
+      margin-bottom: 16px;
+    }
+    .kgroup {
+      display: flex;
+      flex: 1 1 auto;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .kgroup .kpi {
+      flex: 1 1 0;
+      min-width: 120px;
     }
     .kpi {
       display: flex;

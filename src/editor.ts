@@ -185,7 +185,7 @@ const SCHEMA = [
       {
         name: 'full_soc_pct',
         selector: numBox(80, 100, 1),
-        default: 98,
+        default: 99,
         custom_label: 'Plná baterie od SoC (%)',
       },
     ],
@@ -349,7 +349,7 @@ const HELPERS: Record<string, string> = {
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
   capacity: 'Entita v kWh, Wh nebo Ah (Ah se přepočte přes napětí baterie, jinak 48 V). Potřebná pro prognózu.',
   full_soc_pct:
-    'Od tohoto SoC se baterie v Analýze bere jako plná: podbarví se v grafu a z rozdílu predikce a skutečnosti se odhadne možná nevyužitá výroba. Výchozí 98 %.',
+    'Od tohoto SoC se baterie v Analýze bere jako plná: podbarví se v grafu a z rozdílu predikce a skutečnosti se odhadne možná nevyužitá výroba. Výchozí 99 %.',
   enabled: 'Pod měničem se zobrazí tlačítko ZPĚT pro návrat na jiný dashboard (typicky hlavní přehled).',
   path: 'Cesta v adresním řádku HA, např. /lovelace/home nebo /lovelace/0. Nech prázdné pro výchozí dashboard (/).',
   phase_a_show: 'Když je zapnuto a chybí entita L1, zobrazí se ztlumený neaktivní chip s „—“. S entitou je chip vždy aktivní.',
