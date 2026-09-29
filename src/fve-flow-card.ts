@@ -25,7 +25,7 @@ import {
   iconSun,
 } from './icons';
 import { openConfirmDialog } from './confirm-dialog';
-import { openAnalysisDialog, type AnalysisLive, type FveFlowAnalysisDialog } from './analysis-dialog';
+import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
 import { C, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import {
@@ -508,32 +508,10 @@ export class FveFlowCard extends LitElement {
 
   private _analysisDialog?: FveFlowAnalysisDialog;
 
-  /** Živé hodnoty „Teď“ pro okno Analýza — stejná pravidla jako scéna. */
-  private _liveSnapshot(): AnalysisLive {
-    const cfg = this._config;
-    const num = (id?: string) => (hasNum(this.hass, id) ? toNum(this.hass, id) : null);
-    const floors = cfg?.floors ?? [];
-    const bat = num(cfg?.battery?.power);
-    return {
-      fveW: num(cfg?.inverter?.load_power) ?? num(cfg?.inverter?.power),
-      gridW:
-        num(cfg?.grid?.power) ??
-        (floors.some((f) => this._floorGridKnown(f))
-          ? floors.reduce((sum, f) => sum + this._floorGridPower(f), 0)
-          : null),
-      pvW: num(cfg?.pv?.power),
-      batteryW: bat == null ? null : cfg?.battery?.invert ? -bat : bat,
-      inverterW: num(cfg?.inverter?.power) ?? num(cfg?.inverter?.load_power),
-      soc: num(cfg?.battery?.soc),
-      solcastNowW: num(cfg?.solcast?.power_now),
-    };
-  }
-
   private _openAnalysis(): void {
     if (!this.hass || !this._config || this._analysisDialog?.isConnected) return;
     this._analysisDialog = openAnalysisDialog({
       getHass: () => this.hass,
-      getLive: () => this._liveSnapshot(),
       config: this._config,
       getCapacityKwh: () => this._batteryCapacityKwh(),
     });

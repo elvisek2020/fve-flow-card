@@ -11,11 +11,13 @@ import {
   loadDay,
   loadRange,
   periodRange,
+  PERIOD_DAYS,
   type AnalysisData,
   type AnalysisPeriod,
   type Quantity,
 } from './analysis-data';
 import {
+  renderHeatmap,
   renderColumns,
   renderSankey,
   renderTimeChart,
@@ -25,21 +27,8 @@ import {
 import { C, NEUTRAL } from './palette';
 import { formatEnergy, formatPower } from './utils';
 
-/** Živé hodnoty „Teď“ se stejným významem jako scéna karty. */
-export interface AnalysisLive {
-  fveW: number | null;
-  gridW: number | null;
-  pvW: number | null;
-  /** + = nabíjení. */
-  batteryW: number | null;
-  inverterW: number | null;
-  soc: number | null;
-  solcastNowW: number | null;
-}
-
 export interface AnalysisDialogOptions {
   getHass: () => HomeAssistant | undefined;
-  getLive: () => AnalysisLive;
   config: FveFlowCardConfig;
   getCapacityKwh: () => number;
 }
@@ -50,7 +39,10 @@ const PERIODS: Array<[AnalysisPeriod, string]> = [
   ['today', 'Dnes'],
   ['yesterday', 'Včera'],
   ['week', '7 dní'],
+  ['d14', '14 dní'],
   ['month', '30 dní'],
+  ['d60', '60 dní'],
+  ['d90', '90 dní'],
 ];
 const TODAY_TTL_MS = 5 * 60 * 1000;
 const FLOOR_COLOR = '#b0bec5';
@@ -89,7 +81,6 @@ export class FveFlowAnalysisDialog extends LitElement {
 
   private _cache = new Map<AnalysisPeriod, { at: number; promise: Promise<AnalysisData> }>();
   private _seq = 0;
-  private _tick?: number;
   private _refresh?: number;
   private _ro?: ResizeObserver;
 
@@ -102,8 +93,7 @@ export class FveFlowAnalysisDialog extends LitElement {
 
   public connectedCallback(): void {
     super.connectedCallback();
-    // „Teď“ hodnoty každých 5 s, data Dnes každých 5 min.
-    this._tick = window.setInterval(() => this.requestUpdate(), 5000);
+    // Data 24 h / Dnes se obnovují každých 5 min.
     this._refresh = window.setInterval(() => {
       const live = this._period === 'today' || this._period === 'last24h';
       if (live && !this._loading) void this._load(this._period, true);
@@ -112,7 +102,6 @@ export class FveFlowAnalysisDialog extends LitElement {
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
-    window.clearInterval(this._tick);
     window.clearInterval(this._refresh);
     this._ro?.disconnect();
     this._seq++;
@@ -161,7 +150,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   private async _load(period: AnalysisPeriod, force = false): Promise<void> {
     if (force) {
       this._cache.delete(period);
-      if (period === 'week' || period === 'month') this._cache.delete('today');
+      if (PERIOD_DAYS[period]) this._cache.delete('today');
     }
     const seq = ++this._seq;
     this._period = period;
@@ -184,7 +173,6 @@ export class FveFlowAnalysisDialog extends LitElement {
 
   protected render(): TemplateResult {
     const d = this._data;
-    const live = this.options?.getLive();
     const stale = !!d && (this._loading || d.range.period !== this._period);
     return html`
       <dialog
@@ -223,7 +211,7 @@ export class FveFlowAnalysisDialog extends LitElement {
                 <button type="button" @click=${() => void this._load(this._period, true)}>Zkusit znovu</button>
               </div>`
             : nothing}
-          ${d ? this._content(d, live) : this._skeleton()}
+          ${d ? this._content(d) : this._skeleton()}
         </div>
       </dialog>
     `;
@@ -243,10 +231,10 @@ export class FveFlowAnalysisDialog extends LitElement {
     </div>`;
   }
 
-  private _content(d: AnalysisData, live?: AnalysisLive): TemplateResult {
+  private _content(d: AnalysisData): TemplateResult {
     return html`
       <div class="grid cols-${this._cols}">
-        ${this._cardSources(d, live)} ${this._cardFloors(d)} ${this._cardPv(d, live)} ${this._cardDc(d, live)}
+        ${this._cardSources(d)} ${this._cardFloors(d)} ${this._cardPv(d)} ${this._cardDc(d)}
         ${this._cardPhases(d)}
       </div>
       ${d.warnings.length
@@ -281,7 +269,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   }
 
   /** 1 — Zdroje domu: FVE vs síť, soběstačnost. */
-  private _cardSources(d: AnalysisData, live?: AnalysisLive): TemplateResult {
+  private _cardSources(d: AnalysisData): TemplateResult {
     const fShare = d.house && d.fve.total != null ? d.fve.total / d.house : null;
     const gShare = d.house && d.grid.total != null ? d.grid.total / d.house : null;
     const s = d.series;
@@ -324,10 +312,6 @@ export class FveFlowAnalysisDialog extends LitElement {
         );
     return html`<article class="card">
       <h3>Zdroje domu</h3>
-      <div class="now">
-        Teď · <b style="color:${C.island}">FVE ${fmtW(live?.fveW)}</b>
-        ${d.gridConfigured ? html`· <b style="color:${C.grid}">síť ${fmtW(live?.gridW)}</b>` : nothing}
-      </div>
       <div class="kpis">
         ${this._kpi('Spotřeba domu', fmtKwh(d.house))}
         ${this._kpi('Z FVE', fmtQ(d.fve), C.island, this._srcTitle(d.fve), fShare != null ? `${fmtPct(fShare)} spotřeby` : undefined)}
@@ -426,7 +410,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   }
 
   /** 3 — FVE a predikce Solcast. */
-  private _cardPv(d: AnalysisData, live?: AnalysisLive): TemplateResult {
+  private _cardPv(d: AnalysisData): TemplateResult {
     const f = d.forecast;
     const today = d.range.period === 'today' || d.range.period === 'last24h';
     const s = d.series;
@@ -477,10 +461,6 @@ export class FveFlowAnalysisDialog extends LitElement {
         );
     return html`<article class="card">
       <h3>FVE a predikce</h3>
-      <div class="now">
-        Teď · <b style="color:${C.solar}">výroba ${fmtW(live?.pvW)}</b> ·
-        <b style="color:${C.forecast}">predikce ${fmtW(live?.solcastNowW)}</b>
-      </div>
       <div class="kpis">
         ${this._kpi('Vyrobeno', fmtQ(d.pv), C.solar, this._srcTitle(d.pv))}
         ${today
@@ -523,11 +503,12 @@ export class FveFlowAnalysisDialog extends LitElement {
             ['Skutečnost', C.solar],
             ['Predikce den předem', C.forecast, 'outline'],
           ])}
+      ${this._pvHeatmap(d)}
     </article>`;
   }
 
   /** 4 — MPPT · baterie · střídač: DC bilance. */
-  private _cardDc(d: AnalysisData, live?: AnalysisLive): TemplateResult {
+  private _cardDc(d: AnalysisData): TemplateResult {
     const s = d.series;
     // Diagram a ztráty jen za společné dny všech čtyř veličin (viz dc.days).
     const dc = d.dc;
@@ -539,9 +520,6 @@ export class FveFlowAnalysisDialog extends LitElement {
     const approxKwh = (v: number | null, q: Quantity) =>
       v == null ? '—' : `${q.approx && !dcPartial ? '≈ ' : ''}${formatEnergy(v)}`;
     const lossPct = dc.losses != null && dc.inverterIn ? dc.losses / dc.inverterIn : null;
-    const bat = live?.batteryW;
-    const batText =
-      bat == null ? '—' : bat > 25 ? `+${formatPower(bat)} nabíjení` : bat < -25 ? `−${formatPower(-bat)} vybíjení` : 'klid';
 
     let sankey: TemplateResult | typeof nothing = nothing;
     if (pv != null && ch != null && dis != null && ac != null) {
@@ -649,12 +627,6 @@ export class FveFlowAnalysisDialog extends LitElement {
 
     return html`<article class="card">
       <h3>MPPT · baterie · střídač</h3>
-      <div class="now">
-        Teď · <b style="color:${C.solar}">FVE ${fmtW(live?.pvW)}</b> ·
-        <b style="color:${bat != null && bat < -25 ? C.discharge : C.charge}">baterie ${batText}</b> ·
-        <b style="color:${C.ac}">střídač ${fmtW(live?.inverterW)}</b> · SoC
-        ${live?.soc == null ? '—' : `${nf0.format(live.soc)} %`}
-      </div>
       <div class="kpis">
         ${this._kpi('FVE (MPPT)', fmtQ(d.pv), C.solar, this._srcTitle(d.pv))}
         ${this._kpi('Nabito', fmtQ(d.charge), C.charge, this._srcTitle(d.charge))}
@@ -696,6 +668,28 @@ export class FveFlowAnalysisDialog extends LitElement {
       </div>
       ${sankey} ${charts}
     </article>`;
+  }
+
+  /** Heatmapa výroby FVE po hodinách (dny × hodiny), plná baterie orámovaná. */
+  private _pvHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
+    const hm = d.pvHeatmap;
+    if (!hm) return nothing;
+    const { tpl, height } = renderHeatmap({
+      width: this._chartW,
+      days: hm.days,
+      values: hm.values,
+      marks: hm.full,
+      max: hm.max,
+      color: C.solar,
+      markColor: C.forecast,
+      valueFormat: formatPower,
+    });
+    return html`<h4 class="spaced">Výroba po hodinách${hm.context ? ' · posledních 7 dní' : ''}</h4>
+      ${this._chart(height, tpl, 'Výroba FVE po hodinách')}
+      <div class="legend">
+        <span><i class="scale" style="--c:${C.solar}"></i>0 → ${formatPower(hm.max)} (hodinový průměr)</span>
+        <span><i class="outline" style="--c:${C.forecast}"></i>baterie plná — výroba mohla být omezená</span>
+      </div>`;
   }
 
   /** 5 — Zatížení fází: kolik musí měnič utáhnout současně (dimenzování). */
@@ -959,6 +953,15 @@ export class FveFlowAnalysisDialog extends LitElement {
     .card.wide {
       grid-column: 1 / -1;
     }
+    h4.spaced {
+      margin-top: 22px;
+    }
+    .legend i.scale {
+      width: 42px;
+      height: 10px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, rgba(0, 230, 118, 0.08), var(--c));
+    }
     h4 {
       margin: 4px 0 10px;
       color: rgba(226, 240, 248, 0.55);
@@ -975,20 +978,12 @@ export class FveFlowAnalysisDialog extends LitElement {
       border-radius: 16px;
     }
     h3 {
-      margin: 0 0 8px;
+      margin: 0 0 14px;
       color: rgba(226, 240, 248, 0.55);
       font-size: 13.5px;
       font-weight: 600;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-    }
-    .now {
-      margin-bottom: 14px;
-      color: rgba(226, 240, 248, 0.65);
-      font-size: 14px;
-    }
-    .now b {
-      font-weight: 650;
     }
     .kpis {
       display: grid;
@@ -1225,12 +1220,13 @@ export class FveFlowAnalysisDialog extends LitElement {
       }
       .periods {
         order: 5;
+        flex-wrap: wrap;
         width: 100%;
         margin-left: 0;
         justify-content: space-between;
       }
       .periods button {
-        flex: 1;
+        flex: 1 0 22%;
         padding: 7px 4px;
       }
       .body {

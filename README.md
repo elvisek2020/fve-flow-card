@@ -17,7 +17,7 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast a DC bilance MPPT · baterie · střídač za
-  posledních 24 h / Dnes / Včera / 7 / 30 dní
+  posledních 24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
@@ -257,7 +257,7 @@ Poznámky:
 ### Okno Analýza
 
 Tlačítko **ANALÝZA** pod měničem (pod ZPĚT, spodní hranou lícuje s posledním
-patrem) otevře přehled za **24 h / Dnes / Včera / 7 dní / 30 dní** — výchozí je
+patrem) otevře přehled za **24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní** — výchozí je
 klouzavých posledních 24 hodin. Karta k tomu nepotřebuje žádné nové entity —
 bere ty, které už má, a jejich dlouhodobé statistiky z recorderu HA. Okno
 zabírá skoro celou obrazovku (max. 1640 px), dva sloupce karet od šířky tabletu.
@@ -266,25 +266,28 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
 (`detailedForecast` začíná o půlnoci).
 
 - **Zdroje domu** — spotřeba z FVE (výstup měniče) vs. ze sítě, soběstačnost,
-  průběh dne (u 7 / 30 dní denní sloupce).
+  průběh dne (u vícedenních období denní sloupce).
 - **Patra** — tokový diagram FVE (měnič) a síť → patra + **Neměřeno**
   (hlavní dodávka − součet pater) a tabulka FVE / síť / celkem / podíl.
   Když patra naměří víc než hlavní měřák, okno upozorní na nesoulad měřáků.
 - **FVE a predikce** — skutečná výroba vs. Solcast (`detailedForecast`, p50
   a pásmo p10–p90), plnění predikce, doba s plnou baterií a odhad možné
   nevyužité výroby (predikce − skutečnost v době, kdy SoC ≥ `full_soc_pct`).
-  U minulých dní se porovnává s predikcí den předem.
+  U minulých dní se porovnává s predikcí den předem. Pod grafem **heatmapa
+  výroby po hodinách** (sloupce = dny, řádky = hodiny, barva = hodinový průměr
+  výkonu FVE); hodiny s plnou baterií jsou orámované — tam se výroba mohla
+  omezovat. U 24 h / Dnes / Včera ukazuje posledních 7 dní.
 - **MPPT · baterie · střídač** — DC bilance: FVE → baterie / střídač,
   baterie → střídač, střídač → dům a ztráty; účinnost, SoC min–max,
   ekvivalentní cykly, průběh výkonů a SoC. Blok **Baterie vs. spotřeba**:
   kapacita × počet dní, vybito, využití kapacity a kolik spotřeby z FVE
-  pokryla baterie; u 7 / 30 dní denní sloupce vybito vs. spotřeba z FVE
+  pokryla baterie; u vícedenních období denní sloupce vybito vs. spotřeba z FVE
   s čárou kapacity baterie.
 - **Zatížení fází · dimenzování měniče** (přes celou šířku) — fáze sítě L1–L3
   (`grid.phase_a/b/c`, jinak součet fází pater) a výstup měniče složené nad
   sebou. **Špička současně** = nejvyšší součet 5min průměrů (spodní odhad),
   **Horní odhad** = nejvyšší součet 5min maxim fází (nemusela nastat
-  současně); skutečný požadavek na měnič leží mezi nimi. U 7 / 30 dní denní
+  současně); skutečný požadavek na měnič leží mezi nimi. U vícedenních období denní
   špičky. Nejpřesnější v 24 h / Dnes / Včera — krátké rázy statistiky vyhlazují,
   starší dny (> 10 dní) jsou jen hodinové.
 
@@ -311,7 +314,7 @@ Poznámky:
   data všechny zúčastněné měřáky — okno pak napíše „za X z Y dní".
 - Statistiky vznikají jen u entit se `state_class` (`measurement` u výkonu,
   `total_increasing` u energie).
-- Recorder drží 5min statistiky standardně 10 dní — u 30 dní se starší část
+- Recorder drží 5min statistiky standardně 10 dní — u delších období se starší část
   baterie počítá z hodinových průměrů. Historie predikce Solcast je omezená
   retencí recorderu (`purge_keep_days`).
 - DC bilance předpokládá, že se baterie nabíjí jen z FVE a síť nevede přes

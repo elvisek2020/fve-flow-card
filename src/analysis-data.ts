@@ -22,7 +22,10 @@ import {
   type StatRow,
 } from './analysis-stats';
 
-export type AnalysisPeriod = 'last24h' | 'today' | 'yesterday' | 'week' | 'month';
+export type AnalysisPeriod = 'last24h' | 'today' | 'yesterday' | 'week' | 'd14' | 'month' | 'd60' | 'd90';
+
+/** Počet dní vícedenních období (včetně dneška). */
+export const PERIOD_DAYS: Partial<Record<AnalysisPeriod, number>> = { week: 7, d14: 14, month: 30, d60: 60, d90: 90 };
 
 export interface DayInfo {
   key: string;
@@ -73,7 +76,7 @@ export function periodRange(period: AnalysisPeriod, now = new Date()): PeriodRan
       label: 'posledních 24 h',
     };
   }
-  const count = period === 'week' ? 7 : period === 'month' ? 30 : 1;
+  const count = PERIOD_DAYS[period] ?? 1;
   const first = period === 'yesterday' ? -1 : -(count - 1);
   const days: DayInfo[] = [];
   for (let k = 0; k < count; k++) {
@@ -617,6 +620,69 @@ function mergePhaseLoad(past: PhaseLoad | null, today: PhaseLoad | null | undefi
   return out;
 }
 
+/** Výroba FVE po hodinách (dny × 24 h) + hodiny s plnou baterií. */
+export interface PvHeatmap {
+  days: DayInfo[];
+  /** dayKey → 24 hodinových průměrů výkonu FVE (W). */
+  values: Map<string, Array<number | null>>;
+  /** dayKey → 24 příznaků „baterie plná“ (max SoC v hodině ≥ práh). */
+  full: Map<string, boolean[]>;
+  max: number;
+  /** Jednodenní období ukazují posledních 7 dní. */
+  context: boolean;
+}
+
+/** Posledních N dní (včetně dneška) jako DayInfo. */
+function lastDays(n: number, now = new Date()): DayInfo[] {
+  const fmt = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric' });
+  return Array.from({ length: n }, (_, k) => {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (n - 1 - k)).getTime();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (n - 2 - k)).getTime();
+    return { key: toLocalDayKey(new Date(start)), start, end, label: fmt.format(start) };
+  });
+}
+
+/** Hodinové statistiky výkonu FVE (a SoC) → heatmapa. Dlouhodobé statistiky drží HA trvale. */
+async function loadPvHeatmap(
+  hass: HomeAssistant,
+  plan: AnalysisPlan,
+  days: DayInfo[],
+  context: boolean,
+  warnings: string[],
+): Promise<PvHeatmap | null> {
+  if (!plan.chart.pv || !days.length) return null;
+  const ids = [plan.chart.pv, ...(plan.chart.soc ? [plan.chart.soc] : [])];
+  const rows = await safe(
+    fetchStats(hass, ids, days[0].start, Math.min(Date.now(), days[days.length - 1].end), 'hour', ['mean', 'max']),
+    new Map() as RowMap,
+    warnings,
+    'Hodinové statistiky výroby',
+  );
+  const pvRows = rows.get(plan.chart.pv);
+  if (!pvRows?.length) return null;
+  const values = new Map<string, Array<number | null>>();
+  const full = new Map<string, boolean[]>();
+  let max = 0;
+  for (const row of pvRows) {
+    if (row.mean == null) continue;
+    const d = new Date(row.start);
+    const key = toLocalDayKey(d);
+    const arr = values.get(key) ?? new Array<number | null>(24).fill(null);
+    arr[d.getHours()] = Math.max(0, row.mean);
+    values.set(key, arr);
+    max = Math.max(max, row.mean);
+  }
+  for (const row of rows.get(plan.chart.soc ?? '') ?? []) {
+    if (row.max == null || row.max < plan.fullSocPct) continue;
+    const d = new Date(row.start);
+    const key = toLocalDayKey(d);
+    const arr = full.get(key) ?? new Array<boolean>(24).fill(false);
+    arr[d.getHours()] = true;
+    full.set(key, arr);
+  }
+  return { days, values, full, max, context };
+}
+
 export interface AnalysisData {
   range: PeriodRange;
   /** Čas, ke kterému jsou data (konec posledního statistického řádku). */
@@ -664,6 +730,7 @@ export interface AnalysisData {
   };
   series: IntradaySeries | null;
   phaseLoad: PhaseLoad | null;
+  pvHeatmap: PvHeatmap | null;
   warnings: string[];
   minSocPct: number;
   fullSocPct: number;
@@ -862,6 +929,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
   const soc = socRange(plan.chart.soc ? power.rows.get(plan.chart.soc) : undefined);
   return derive(ctx, range, res, {
     phaseLoad: computePhaseLoad(plan, power.rows, power.usedHourly, grid),
+    pvHeatmap: await loadPvHeatmap(hass, plan, lastDays(7), true, warnings),
     asOf,
     soc,
     fullDays: null,
@@ -996,6 +1064,7 @@ export async function loadRange(
 
   return derive(ctx, range, res, {
     phaseLoad: mergePhaseLoad(computePhaseLoad(plan, phaseRows.rows, phaseRows.usedHourly), today?.phaseLoad, todayKey),
+    pvHeatmap: await loadPvHeatmap(hass, plan, range.days, false, warnings),
     asOf: today?.asOf ?? null,
     soc,
     fullDays,
@@ -1024,6 +1093,7 @@ function floorQuantity(d: AnalysisData, i: number, part: 'fve' | 'grid'): Quanti
 
 interface DeriveExtra {
   phaseLoad: PhaseLoad | null;
+  pvHeatmap: PvHeatmap | null;
   asOf: number | null;
   soc: { min: number | null; max: number | null };
   fullDays: number | null;
@@ -1162,6 +1232,7 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
     forecast: x.forecast,
     series: x.series,
     phaseLoad: x.phaseLoad,
+    pvHeatmap: x.pvHeatmap,
     warnings: [...new Set(warnings)],
     minSocPct: plan.minSocPct,
     fullSocPct: plan.fullSocPct,
