@@ -678,20 +678,36 @@ export class FveFlowAnalysisDialog extends LitElement {
       color: var(--primary-text-color, #e6f4fa);
       font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
     }
+    /* Pevná šířka i výška (ne podle obsahu): WebKit na iPadu jinak ve flex
+       sloupci smrskne tělo okna na nulu a šířku odvodí z hlavičky. */
     dialog {
-      width: min(1640px, calc(100vw - 32px));
+      box-sizing: border-box;
+      inset: 0;
+      margin: auto;
+      width: calc(100vw - 32px);
+      min-width: calc(100vw - 32px);
       max-width: 1640px;
-      max-height: calc(100vh - 24px);
-      max-height: calc(100dvh - 24px);
+      height: calc(100vh - 24px);
+      height: calc(100dvh - 24px);
+      max-height: none;
       padding: 0;
       overflow: hidden;
       color: inherit;
+      background: rgba(7, 16, 25, 0.98);
       background:
         radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--dialog-accent) 10%, transparent), transparent 38%),
         rgba(7, 16, 25, 0.98);
+      border: 1px solid rgba(79, 195, 247, 0.48);
       border: 1px solid color-mix(in srgb, var(--dialog-accent) 48%, transparent);
       border-radius: 20px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
       box-shadow: 0 0 32px color-mix(in srgb, var(--dialog-accent) 18%, transparent), 0 24px 80px rgba(0, 0, 0, 0.55);
+    }
+    @media (min-width: 1672px) {
+      dialog {
+        width: 1640px;
+        min-width: 1640px;
+      }
     }
     dialog[open] {
       display: flex;
@@ -803,8 +819,9 @@ export class FveFlowAnalysisDialog extends LitElement {
       }
     }
     .body {
-      flex: 1;
+      flex: 1 1 auto;
       min-height: 0;
+      -webkit-overflow-scrolling: touch;
       padding: 16px 18px 18px;
       overflow: auto;
       overscroll-behavior: contain;
@@ -987,7 +1004,8 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .legend i.band {
       border-radius: 2px;
-      background: color-mix(in srgb, var(--c) 25%, transparent);
+      background: var(--c);
+      opacity: 0.35;
     }
     .legend i.outline {
       border-radius: 2px;
@@ -1088,8 +1106,9 @@ export class FveFlowAnalysisDialog extends LitElement {
     @media (max-width: 600px) {
       dialog {
         width: calc(100vw - 16px);
-        max-height: calc(100vh - 16px);
-        max-height: calc(100dvh - 16px);
+        min-width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+        height: calc(100dvh - 16px);
         border-radius: 16px;
       }
       header {
