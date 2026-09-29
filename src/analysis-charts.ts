@@ -582,73 +582,58 @@ export function renderSankey(o: SankeyOptions): TemplateResult {
 export interface HeatmapOptions {
   width: number;
   days: DayInfo[];
-  /** dayKey → 24 hodnot (W). */
+  /** dayKey → 24 hodnot. */
   values: Map<string, Array<number | null>>;
   /** dayKey → 24 příznaků zvýraznění (baterie plná). */
   marks: Map<string, boolean[]>;
-  max: number;
-  color: string;
+  /** Pevný rozsah hodin [od, do) — např. [4, 22] nebo [0, 24]. */
+  hours: [number, number];
+  /** Barva a sytost buňky podle hodnoty. */
+  cellColor: (v: number) => { color: string; opacity: number };
   markColor: string;
+  markLabel: string;
   valueFormat: (v: number) => string;
 }
 
-/**
- * Sloupce = dny, řádky = hodiny (nahoře ráno). Zobrazí jen hodiny, kdy se
- * v období vůbec vyrábělo (± 1 h), aby mřížka nebyla z poloviny prázdná.
- */
+/** Sloupce = dny, řádky = hodiny (nahoře ráno), popisky hodin na hranách řádků. */
 export function renderHeatmap(o: HeatmapOptions): { tpl: TemplateResult; height: number } {
   const pl = 40;
   const pr = 10;
-  const pt = 6;
+  const pt = 8;
   const pb = 22;
-  const threshold = o.max * 0.02;
-  let hMin = 24;
-  let hMax = -1;
-  for (const arr of o.values.values()) {
-    arr.forEach((v, h) => {
-      if (v != null && v > threshold) {
-        hMin = Math.min(hMin, h);
-        hMax = Math.max(hMax, h);
-      }
-    });
-  }
-  if (hMax < 0) {
-    return { tpl: svg`<text x="${o.width / 2}" y="30" text-anchor="middle" class="empty">Žádná výroba za období</text>`, height: 50 };
-  }
-  hMin = Math.max(0, hMin - 1);
-  hMax = Math.min(23, hMax + 1);
-  const rows = hMax - hMin + 1;
+  const [hMin, hTo] = o.hours;
+  const rows = hTo - hMin;
   const n = o.days.length;
   const iw = Math.max(10, o.width - pl - pr);
   const cellW = iw / n;
-  const cellH = Math.max(9, Math.min(16, 260 / rows));
+  const cellH = Math.max(9, Math.min(16, 280 / rows));
   const height = pt + rows * cellH + pb;
   const gap = cellW > 6 ? 1 : 0;
   const stride = Math.max(1, Math.ceil((n * 44) / iw));
+  const labelStep = rows > 18 ? 3 : 2;
   const cells: TemplateResult[] = [];
   o.days.forEach((day, i) => {
     const vals = o.values.get(day.key);
     const marks = o.marks.get(day.key);
-    for (let h = hMin; h <= hMax; h++) {
+    for (let h = hMin; h < hTo; h++) {
       const v = vals?.[h];
       const x = pl + i * cellW;
       const y = pt + (h - hMin) * cellH;
-      const ratio = v != null && o.max > 0 ? Math.min(1, v / o.max) : 0;
-      const opacity = v == null ? 0.03 : 0.06 + 0.94 * Math.pow(ratio, 0.8);
-      const full = !!marks?.[h];
+      const c = v == null ? { color: 'rgba(148,170,190,1)', opacity: 0.03 } : o.cellColor(v);
+      const mark = !!marks?.[h];
       cells.push(svg`<rect x="${f1(x + gap / 2)}" y="${f1(y + gap / 2)}" width="${f1(Math.max(1, cellW - gap))}"
-        height="${f1(cellH - gap)}" rx="1.5" fill="${v == null ? 'rgba(148,170,190,1)' : o.color}" fill-opacity="${opacity.toFixed(3)}"
-        stroke="${full ? o.markColor : 'none'}" stroke-width="${full ? 1.2 : 0}" stroke-opacity="0.9">
-        <title>${day.label} ${String(h).padStart(2, '0')}:00 · ${v == null ? 'bez dat' : o.valueFormat(v)}${full ? ' · baterie plná' : ''}</title></rect>`);
+        height="${f1(cellH - gap)}" rx="1.5" fill="${c.color}" fill-opacity="${c.opacity.toFixed(3)}"
+        stroke="${mark ? o.markColor : 'none'}" stroke-width="${mark ? 1.2 : 0}" stroke-opacity="0.9">
+        <title>${day.label} ${String(h).padStart(2, '0')}:00 · ${v == null ? 'bez dat' : o.valueFormat(v)}${mark ? ` · ${o.markLabel}` : ''}</title></rect>`);
     }
   });
+  const hourLabels: number[] = [];
+  for (let h = hMin; h <= hTo; h++) if (h % labelStep === 0) hourLabels.push(h);
   const tpl = svg`
     ${cells}
-    ${Array.from({ length: rows }, (_, k) => hMin + k)
-      .filter((h) => h % 3 === 0)
-      .map(
-        (h) => svg`<text x="${pl - 6}" y="${f1(pt + (h - hMin + 0.5) * cellH + 3.5)}" text-anchor="end" class="axis">${String(h).padStart(2, '0')}</text>`,
-      )}
+    ${hourLabels.map(
+      (h) => svg`<text x="${pl - 6}" y="${f1(pt + (h - hMin) * cellH + 3.5)}" text-anchor="end" class="axis">${String(h).padStart(2, '0')}</text>`,
+    )}
     ${o.days.map((day, i) =>
       (n - 1 - i) % stride === 0
         ? svg`<text x="${f1(pl + (i + 0.5) * cellW)}" y="${f1(pt + rows * cellH + 15)}" text-anchor="middle" class="axis">${day.label}</text>`

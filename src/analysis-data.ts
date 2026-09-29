@@ -627,39 +627,33 @@ export interface PvHeatmap {
   values: Map<string, Array<number | null>>;
   /** dayKey → 24 příznaků „baterie plná“ (max SoC v hodině ≥ práh). */
   full: Map<string, boolean[]>;
+  /** dayKey → 24 hodinových průměrů SoC (%). */
+  soc: Map<string, Array<number | null>>;
   max: number;
-  /** Jednodenní období ukazují posledních 7 dní. */
-  context: boolean;
 }
 
-/** Posledních N dní (včetně dneška) jako DayInfo. */
-function lastDays(n: number, now = new Date()): DayInfo[] {
-  const fmt = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric' });
-  return Array.from({ length: n }, (_, k) => {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (n - 1 - k)).getTime();
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (n - 2 - k)).getTime();
-    return { key: toLocalDayKey(new Date(start)), start, end, label: fmt.format(start) };
-  });
-}
-
-/** Hodinové statistiky výkonu FVE (a SoC) → heatmapa. Dlouhodobé statistiky drží HA trvale. */
+/**
+ * Hodinové statistiky výkonu FVE (a SoC) → heatmapa pro vybrané období
+ * (dny období; u 24 h jen hodiny uvnitř okna). Dlouhodobé statistiky drží HA trvale.
+ */
 async function loadPvHeatmap(
   hass: HomeAssistant,
   plan: AnalysisPlan,
-  days: DayInfo[],
-  context: boolean,
+  range: PeriodRange,
   warnings: string[],
 ): Promise<PvHeatmap | null> {
-  if (!plan.chart.pv || !days.length) return null;
-  const ids = [plan.chart.pv, ...(plan.chart.soc ? [plan.chart.soc] : [])];
+  const days = range.days;
+  if ((!plan.chart.pv && !plan.chart.soc) || !days.length) return null;
+  const ids = [plan.chart.pv, plan.chart.soc].filter((x): x is string => !!x);
+  const from = Math.floor(range.start / HOUR_MS) * HOUR_MS;
   const rows = await safe(
-    fetchStats(hass, ids, days[0].start, Math.min(Date.now(), days[days.length - 1].end), 'hour', ['mean', 'max']),
+    fetchStats(hass, ids, from, Math.min(Date.now(), range.dayEnd), 'hour', ['mean', 'max']),
     new Map() as RowMap,
     warnings,
     'Hodinové statistiky výroby',
   );
-  const pvRows = rows.get(plan.chart.pv);
-  if (!pvRows?.length) return null;
+  const pvRows = plan.chart.pv ? rows.get(plan.chart.pv) ?? [] : [];
+  if (!pvRows.length && !rows.get(plan.chart.soc ?? '')?.length) return null;
   const values = new Map<string, Array<number | null>>();
   const full = new Map<string, boolean[]>();
   let max = 0;
@@ -672,15 +666,21 @@ async function loadPvHeatmap(
     values.set(key, arr);
     max = Math.max(max, row.mean);
   }
+  const soc = new Map<string, Array<number | null>>();
   for (const row of rows.get(plan.chart.soc ?? '') ?? []) {
-    if (row.max == null || row.max < plan.fullSocPct) continue;
     const d = new Date(row.start);
     const key = toLocalDayKey(d);
+    if (row.mean != null) {
+      const arr = soc.get(key) ?? new Array<number | null>(24).fill(null);
+      arr[d.getHours()] = row.mean;
+      soc.set(key, arr);
+    }
+    if (row.max == null || row.max < plan.fullSocPct) continue;
     const arr = full.get(key) ?? new Array<boolean>(24).fill(false);
     arr[d.getHours()] = true;
     full.set(key, arr);
   }
-  return { days, values, full, max, context };
+  return { days, values, full, soc, max };
 }
 
 export interface AnalysisData {
@@ -929,7 +929,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
   const soc = socRange(plan.chart.soc ? power.rows.get(plan.chart.soc) : undefined);
   return derive(ctx, range, res, {
     phaseLoad: computePhaseLoad(plan, power.rows, power.usedHourly, grid),
-    pvHeatmap: await loadPvHeatmap(hass, plan, lastDays(7), true, warnings),
+    pvHeatmap: await loadPvHeatmap(hass, plan, range, warnings),
     asOf,
     soc,
     fullDays: null,
@@ -1064,7 +1064,7 @@ export async function loadRange(
 
   return derive(ctx, range, res, {
     phaseLoad: mergePhaseLoad(computePhaseLoad(plan, phaseRows.rows, phaseRows.usedHourly), today?.phaseLoad, todayKey),
-    pvHeatmap: await loadPvHeatmap(hass, plan, range.days, false, warnings),
+    pvHeatmap: await loadPvHeatmap(hass, plan, range, warnings),
     asOf: today?.asOf ?? null,
     soc,
     fullDays,

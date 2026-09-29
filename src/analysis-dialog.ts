@@ -52,6 +52,30 @@ const nf1 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 2 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' });
 const fmtDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
+/**
+ * Plynulá škála SoC navázaná na semafor baterie: 0 % červená → žlutá na
+ * `yellow` → světle zelená na `green` → sytě zelená na 100 %.
+ */
+function socScale(soc: number, yellow: number, green: number): string {
+  const stops: Array<[number, [number, number, number]]> = [
+    [0, [255, 82, 82]],
+    [yellow, [255, 215, 64]],
+    [green, [178, 255, 89]],
+    [100, [0, 230, 118]],
+  ];
+  const v = Math.min(100, Math.max(0, soc));
+  for (let i = 1; i < stops.length; i++) {
+    const [p1, c1] = stops[i];
+    const [p0, c0] = stops[i - 1];
+    if (v <= p1 || i === stops.length - 1) {
+      const t = p1 > p0 ? Math.min(1, Math.max(0, (v - p0) / (p1 - p0))) : 1;
+      const c = c0.map((x, k) => Math.round(x + (c1[k] - x) * t));
+      return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+    }
+  }
+  return 'rgb(0, 230, 118)';
+}
+
 /** Barvy fází jako na scéně karty (L2 grafitová místo černé). */
 const PHASE_COLORS: Record<string, string> = { L1: '#e0e0e0', L2: '#78909c', L3: '#b87333', Síť: '#4fc3f7' };
 
@@ -667,28 +691,63 @@ export class FveFlowAnalysisDialog extends LitElement {
         )}
       </div>
       ${sankey} ${charts}
+      ${this._socHeatmap(d)}
     </article>`;
   }
 
   /** Heatmapa výroby FVE po hodinách (dny × hodiny), plná baterie orámovaná. */
   private _pvHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
     const hm = d.pvHeatmap;
-    if (!hm) return nothing;
+    if (!hm || !hm.values.size) return nothing;
     const { tpl, height } = renderHeatmap({
       width: this._chartW,
       days: hm.days,
       values: hm.values,
       marks: hm.full,
-      max: hm.max,
-      color: C.solar,
+      hours: [4, 22],
+      cellColor: (v) => ({
+        color: C.solar,
+        opacity: 0.06 + 0.94 * Math.pow(hm.max > 0 ? Math.min(1, v / hm.max) : 0, 0.8),
+      }),
       markColor: C.forecast,
+      markLabel: 'baterie plná',
       valueFormat: formatPower,
     });
-    return html`<h4 class="spaced">Výroba po hodinách${hm.context ? ' · posledních 7 dní' : ''}</h4>
+    return html`<h4 class="spaced">Výroba po hodinách</h4>
       ${this._chart(height, tpl, 'Výroba FVE po hodinách')}
       <div class="legend">
         <span><i class="scale" style="--c:${C.solar}"></i>0 → ${formatPower(hm.max)} (hodinový průměr)</span>
         <span><i class="outline" style="--c:${C.forecast}"></i>baterie plná — výroba mohla být omezená</span>
+      </div>`;
+  }
+
+  /**
+   * Heatmapa SoC baterie (dny × 0–24 h): barva podle semaforu baterie jako na
+   * scéně karty (prahy battery.yellow_from / green_from), sytost podle SoC;
+   * hodiny s plnou baterií (max SoC ≥ full_soc_pct) orámované.
+   */
+  private _socHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
+    const hm = d.pvHeatmap;
+    if (!hm || !hm.soc.size) return nothing;
+    const b = this.options?.config.battery ?? {};
+    const thresholds = { yellow_from: b.yellow_from ?? 15, green_from: b.green_from ?? 40, severity_invert: b.severity_invert };
+    const { tpl, height } = renderHeatmap({
+      width: this._chartW,
+      days: hm.days,
+      values: hm.soc,
+      marks: hm.full,
+      hours: [0, 24],
+      cellColor: (v) => ({ color: socScale(v, thresholds.yellow_from, thresholds.green_from), opacity: 0.92 }),
+      markColor: '#ffffff',
+      markLabel: `plná (≥ ${d.fullSocPct} %)`,
+      valueFormat: (v) => `SoC ${nf0.format(v)} %`,
+    });
+    return html`<h4 class="spaced">SoC baterie po hodinách</h4>
+      ${this._chart(height, tpl, 'SoC baterie po hodinách')}
+      <div class="legend">
+        <span><i class="soc-scale" style="--y:${socScale(thresholds.yellow_from, thresholds.yellow_from, thresholds.green_from)};--g:${socScale(thresholds.green_from, thresholds.yellow_from, thresholds.green_from)}"></i>
+          0 % → ${thresholds.yellow_from} % → ${thresholds.green_from} % → 100 %</span>
+        <span><i class="outline" style="--c:#ffffff"></i>plná baterie (≥ ${d.fullSocPct} %)</span>
       </div>`;
   }
 
@@ -955,6 +1014,12 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     h4.spaced {
       margin-top: 22px;
+    }
+    .legend i.soc-scale {
+      width: 64px;
+      height: 10px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, rgb(255, 82, 82), var(--y), var(--g), rgb(0, 230, 118));
     }
     .legend i.scale {
       width: 42px;

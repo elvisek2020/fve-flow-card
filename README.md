@@ -16,8 +16,9 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
 - Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
-  výroba vs predikce Solcast a DC bilance MPPT · baterie · střídač za
-  posledních 24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní
+  výroba vs predikce Solcast s heatmapou po hodinách, DC bilance MPPT ·
+  baterie · střídač, baterie vs. spotřeba a zatížení fází pro dimenzování
+  měniče — za posledních 24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní
 - Klik na uzel / fázi otevře vlastní průběžný graf za posledních 48 hodin
 - Plně konfigurovatelná přes GUI editor (entity pickery, dynamický seznam pater)
 - Responzivní SVG scéna — ideální pro fullscreen `panel` view
@@ -56,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.7.10`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.6`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -274,15 +275,19 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   a pásmo p10–p90), plnění predikce, doba s plnou baterií a odhad možné
   nevyužité výroby (predikce − skutečnost v době, kdy SoC ≥ `full_soc_pct`).
   U minulých dní se porovnává s predikcí den předem. Pod grafem **heatmapa
-  výroby po hodinách** (sloupce = dny, řádky = hodiny, barva = hodinový průměr
-  výkonu FVE); hodiny s plnou baterií jsou orámované — tam se výroba mohla
-  omezovat. U 24 h / Dnes / Včera ukazuje posledních 7 dní.
+  výroby po hodinách** (sloupce = dny, řádky = hodiny 4–22, barva = hodinový
+  průměr výkonu FVE); hodiny s plnou baterií jsou orámované — tam se výroba
+  mohla omezovat. Heatmapy vždy odpovídají vybranému období (u 24 h dva
+  sloupce Včera / Dnes jen s hodinami uvnitř okna).
 - **MPPT · baterie · střídač** — DC bilance: FVE → baterie / střídač,
   baterie → střídač, střídač → dům a ztráty; účinnost, SoC min–max,
   ekvivalentní cykly, průběh výkonů a SoC. Blok **Baterie vs. spotřeba**:
   kapacita × počet dní, vybito, využití kapacity a kolik spotřeby z FVE
   pokryla baterie; u vícedenních období denní sloupce vybito vs. spotřeba z FVE
-  s čárou kapacity baterie.
+  s čárou kapacity baterie. Dole **heatmapa SoC po hodinách** (0–24 h):
+  plynulá škála navázaná na semafor baterie (0 % červená → `yellow_from`
+  žlutá → `green_from` světle zelená → 100 % sytě zelená), hodiny s plnou
+  baterií (≥ `full_soc_pct`) mají bílý rámeček.
 - **Zatížení fází · dimenzování měniče** (přes celou šířku) — fáze sítě L1–L3
   (`grid.phase_a/b/c`, jinak součet fází pater) a výstup měniče složené nad
   sebou. **Špička současně** = nejvyšší součet 5min průměrů (spodní odhad),
@@ -416,6 +421,12 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
   Bez long-term statistics u `pv.energy_today` / `inverter.energy_today` jsou
   historické řádky (až 5 dní) u výroby nebo spotřeby prázdné (`—`).
 - SoC po bilanci u historických dní se nezobrazuje (jen u predikce).
+- Analýza stojí na dlouhodobých statistikách HA: 5min data drží recorder
+  standardně ~10 dní, starší dny jsou hodinové (špičky fází a nabíjení /
+  vybíjení baterie jsou tam hrubší). Krátké rázy pod 5 min statistiky vyhlazují.
+- DC bilance v Analýze předpokládá nabíjení baterie jen z FVE; když
+  `inverter.energy_today` neměří přesně AC výstup měniče, vyjdou ztráty
+  nereálně (např. 0 %).
 
 ## Autor
 
