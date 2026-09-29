@@ -139,6 +139,8 @@ export interface AnalysisPlan {
   fveConfigured: boolean;
   gridConfigured: boolean;
   chart: { pv?: string; battery?: string; ac?: string; grid: string[]; soc?: string };
+  /** Řady zatížení fází (síť po fázích + výstup měniče) pro dimenzování měniče. */
+  phases: Array<{ label: string; ids: string[] }>;
   solcast: { today?: string; tomorrow?: string; remaining?: string };
   batteryInvert: boolean;
   fullSocPct: number;
@@ -192,6 +194,20 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
     .map(clean)
     .filter((x): x is string => !!x);
 
+  // Zatížení fází: fáze AC-IN, jinak součet fází pater po L1–L3, jinak celkový výkon sítě.
+  const labels = ['L1', 'L2', 'L3'];
+  const acInIds = acInPhases.map(clean);
+  const floorPhaseIds = (k: number) =>
+    (cfg.floors ?? [])
+      .map((f) => clean([f.phase_a_entity, f.phase_b_entity, f.phase_c_entity][k]))
+      .filter((x): x is string => !!x);
+  let phases: Array<{ label: string; ids: string[] }> = acInIds.some(Boolean)
+    ? labels.map((label, k) => ({ label, ids: acInIds[k] ? [acInIds[k]!] : [] }))
+    : labels.map((label, k) => ({ label, ids: floorPhaseIds(k) }));
+  phases = phases.filter((x) => x.ids.length);
+  if (!phases.length && clean(g.power)) phases = [{ label: 'Síť', ids: [clean(g.power)!] }];
+  if (acId) phases.push({ label: 'FVE (měnič)', ids: [acId] });
+
   const fve = [...meter(inv.energy_today, true), ...integral([acId])];
   const grid = [...meter(g.energy_total, false), ...meter(g.energy_today, true), ...integral(gridPowerIds)];
 
@@ -211,6 +227,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
       grid: chartGrid,
       soc: clean(b.soc),
     },
+    phases,
     solcast: { today: clean(s.total_today), tomorrow: clean(s.total_tomorrow), remaining: clean(s.remaining_today) },
     batteryInvert: !!b.invert,
     fullSocPct: cfg.analysis?.full_soc_pct ?? 98,
@@ -496,6 +513,110 @@ export interface IntradaySeries {
   fullSpans: Array<{ from: number; to: number }>;
 }
 
+/**
+ * Zatížení fází: `peak` = nejvyšší současný součet 5min (u starších dnů hodinových)
+ * průměrů — spodní odhad; `upper` = nejvyšší součet maxim fází, která nemusela nastat
+ * současně — horní odhad pro dimenzování měniče.
+ */
+export interface PhaseLoad {
+  peak: { value: number; at: number } | null;
+  upper: { value: number; at: number } | null;
+  avg: number | null;
+  durMs: number;
+  perSeries: Array<{ label: string; peak: number | null; upper: number | null }>;
+  byDay: Map<string, { peak: number; upper: number }>;
+  hourly: boolean;
+  /** Jen jeden den: průběh po slotech pro graf. */
+  slots?: { series: Array<{ label: string; mean: Slots }>; totalMax: Slots };
+}
+
+function computePhaseLoad(plan: AnalysisPlan, rows: RowMap, hourly: Set<string>, grid?: SlotGrid): PhaseLoad | null {
+  const series = plan.phases.filter((ph) => ph.ids.some((id) => rows.has(id)));
+  if (!series.length) return null;
+  const total = new Map<number, { mean: number; max: number; dur: number }>();
+  const perSeries = series.map((ph) => {
+    let peak: number | null = null;
+    let upper: number | null = null;
+    const byT = new Map<number, { mean: number; max: number; dur: number }>();
+    for (const id of ph.ids) {
+      for (const row of rows.get(id) ?? []) {
+        const e = byT.get(row.start) ?? { mean: 0, max: 0, dur: row.end - row.start };
+        e.mean += Math.max(0, row.mean ?? 0);
+        e.max += Math.max(0, row.max ?? row.mean ?? 0);
+        byT.set(row.start, e);
+      }
+    }
+    for (const [t, e] of byT) {
+      peak = Math.max(peak ?? 0, e.mean);
+      upper = Math.max(upper ?? 0, e.max);
+      const tot = total.get(t) ?? { mean: 0, max: 0, dur: e.dur };
+      tot.mean += e.mean;
+      tot.max += e.max;
+      total.set(t, tot);
+    }
+    return { label: ph.label, peak, upper };
+  });
+  let peak: PhaseLoad['peak'] = null;
+  let upper: PhaseLoad['upper'] = null;
+  let energy = 0;
+  let durMs = 0;
+  const byDay = new Map<string, { peak: number; upper: number }>();
+  for (const [t, e] of total) {
+    if (!peak || e.mean > peak.value) peak = { value: e.mean, at: t };
+    if (!upper || e.max > upper.value) upper = { value: e.max, at: t };
+    energy += e.mean * e.dur;
+    durMs += e.dur;
+    const k = dayKeyOf(t);
+    const d = byDay.get(k) ?? { peak: 0, upper: 0 };
+    d.peak = Math.max(d.peak, e.mean);
+    d.upper = Math.max(d.upper, e.max);
+    byDay.set(k, d);
+  }
+  const out: PhaseLoad = {
+    peak,
+    upper,
+    avg: durMs ? energy / durMs : null,
+    durMs,
+    perSeries,
+    byDay,
+    hourly: series.some((ph) => ph.ids.some((id) => hourly.has(id))),
+  };
+  if (grid) {
+    const slotsOf = (ids: string[], field: 'mean' | 'max') => addSlots(ids.map((id) => rowsToSlots(rows.get(id), grid, field)), grid.n);
+    out.slots = {
+      series: series.map((ph) => ({ label: ph.label, mean: slotsOf(ph.ids, 'mean') })),
+      totalMax: slotsOf(series.flatMap((ph) => ph.ids), 'max'),
+    };
+  }
+  return out;
+}
+
+/** Sloučí minulé dny se dneškem (vícedenní období). */
+function mergePhaseLoad(past: PhaseLoad | null, today: PhaseLoad | null | undefined, todayKey: string): PhaseLoad | null {
+  if (!past && !today) return null;
+  if (!past) return { ...today!, slots: undefined, byDay: new Map(today!.peak ? [[todayKey, { peak: today!.peak.value, upper: today!.upper?.value ?? today!.peak.value }]] : []) };
+  const out: PhaseLoad = { ...past, byDay: new Map(past.byDay), perSeries: past.perSeries.map((x) => ({ ...x })) };
+  if (today?.peak) {
+    out.byDay.set(todayKey, { peak: today.peak.value, upper: today.upper?.value ?? today.peak.value });
+    if (!out.peak || today.peak.value > out.peak.value) out.peak = today.peak;
+    if (today.upper && (!out.upper || today.upper.value > out.upper.value)) out.upper = today.upper;
+    for (const t of today.perSeries) {
+      const p = out.perSeries.find((x) => x.label === t.label);
+      if (!p) out.perSeries.push({ ...t });
+      else {
+        p.peak = Math.max(p.peak ?? 0, t.peak ?? 0);
+        p.upper = Math.max(p.upper ?? 0, t.upper ?? 0);
+      }
+    }
+    if (today.avg != null) {
+      const dur = out.durMs + today.durMs;
+      out.avg = dur ? ((out.avg ?? 0) * out.durMs + today.avg * today.durMs) / dur : null;
+      out.durMs = dur;
+    }
+  }
+  return out;
+}
+
 export interface AnalysisData {
   range: PeriodRange;
   /** Čas, ke kterému jsou data (konec posledního statistického řádku). */
@@ -542,6 +663,7 @@ export interface AnalysisData {
     curtailed: { p50: number; p10: number | null } | null;
   };
   series: IntradaySeries | null;
+  phaseLoad: PhaseLoad | null;
   warnings: string[];
   minSocPct: number;
   fullSocPct: number;
@@ -623,9 +745,13 @@ function fullSpans(grid: SlotGrid, socMax: Slots, fullSoc: number): Array<{ from
 export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise<AnalysisData> {
   const { hass, plan } = ctx;
   const warnings: string[] = [];
-  const chartIds = [plan.chart.pv, plan.chart.battery, plan.chart.ac, plan.chart.soc, ...plan.chart.grid].filter(
-    (x): x is string => !!x,
-  );
+  const chartIds = [
+    ...new Set(
+      [plan.chart.pv, plan.chart.battery, plan.chart.ac, plan.chart.soc, ...plan.chart.grid, ...plan.phases.flatMap((p) => p.ids)].filter(
+        (x): x is string => !!x,
+      ),
+    ),
+  ];
   const mIds = meterIds(plan);
   const empty = { rows: new Map() as RowMap, usedHourly: new Set<string>() };
   const [meters, power] = await Promise.all([
@@ -735,6 +861,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
 
   const soc = socRange(plan.chart.soc ? power.rows.get(plan.chart.soc) : undefined);
   return derive(ctx, range, res, {
+    phaseLoad: computePhaseLoad(plan, power.rows, power.usedHourly, grid),
     asOf,
     soc,
     fullDays: null,
@@ -768,7 +895,8 @@ export async function loadRange(
   const mIds = meterIds(plan);
   const batteryIds = plan.chart.battery ? [plan.chart.battery] : [];
   const empty = { rows: new Map() as RowMap, usedHourly: new Set<string>() };
-  const [meters, socRows, battery, dayAhead] = await Promise.all([
+  const phaseIds = [...new Set(plan.phases.flatMap((p) => p.ids))];
+  const [meters, socRows, battery, dayAhead, phaseRows] = await Promise.all([
     safe(fetchStats(hass, mIds, range.start, todayStart, 'day', ['change', 'state']), new Map() as RowMap, warnings, 'Denní statistiky'),
     safe(
       fetchStats(hass, plan.chart.soc ? [plan.chart.soc] : [], range.start, todayStart, 'day', ['min', 'max']),
@@ -778,6 +906,7 @@ export async function loadRange(
     ),
     safe(fetchFineRows(hass, batteryIds, range.start, todayStart, ['mean']), empty, warnings, 'Statistiky baterie'),
     safe(fetchDayAhead(hass, plan, range.days), new Map<string, number>(), warnings, 'Historie predikce Solcast'),
+    safe(fetchFineRows(hass, phaseIds, range.start, todayStart, ['mean', 'max']), empty, warnings, 'Statistiky fází'),
   ]);
   const st: Store = {
     dayRows: true,
@@ -866,6 +995,7 @@ export async function loadRange(
   const pastForecast = pastKeys.reduce((s, k) => s + (dayAhead.get(k) ?? 0), 0);
 
   return derive(ctx, range, res, {
+    phaseLoad: mergePhaseLoad(computePhaseLoad(plan, phaseRows.rows, phaseRows.usedHourly), today?.phaseLoad, todayKey),
     asOf: today?.asOf ?? null,
     soc,
     fullDays,
@@ -893,6 +1023,7 @@ function floorQuantity(d: AnalysisData, i: number, part: 'fve' | 'grid'): Quanti
 }
 
 interface DeriveExtra {
+  phaseLoad: PhaseLoad | null;
   asOf: number | null;
   soc: { min: number | null; max: number | null };
   fullDays: number | null;
@@ -1030,6 +1161,7 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
     fullDays: x.fullDays,
     forecast: x.forecast,
     series: x.series,
+    phaseLoad: x.phaseLoad,
     warnings: [...new Set(warnings)],
     minSocPct: plan.minSocPct,
     fullSocPct: plan.fullSocPct,

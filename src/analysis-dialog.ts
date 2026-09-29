@@ -1,5 +1,5 @@
 /**
- * Okno Analýza: Shrnutí + 4 karty (Zdroje domu, Patra, FVE a predikce,
+ * Okno Analýza: 4 karty (Zdroje domu, Patra, FVE a predikce,
  * MPPT · baterie · střídač) za Dnes / Včera / 7 / 30 dní.
  * LitElement s nativním `<dialog>`, ve stejném skleněném stylu jako grafy.
  */
@@ -15,7 +15,6 @@ import {
   type AnalysisPeriod,
   type Quantity,
 } from './analysis-data';
-import { buildInsights } from './analysis-insights';
 import {
   renderColumns,
   renderSankey,
@@ -55,14 +54,14 @@ const PERIODS: Array<[AnalysisPeriod, string]> = [
 ];
 const TODAY_TTL_MS = 5 * 60 * 1000;
 const FLOOR_COLOR = '#b0bec5';
-const ASSUMPTIONS =
-  'Předpoklad: baterie se nabíjí jen z FVE a síť nevede přes střídač. Ztráty zahrnují vlastní spotřebu měniče, ' +
-  'DC vedení a chyby měření. ≈ = odhad z výkonu nebo neúplná data. Dny podle časové zóny prohlížeče.';
 
 const nf0 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 2 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+const fmtDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
+/** Barvy fází jako na scéně karty (L2 grafitová místo černé). */
+const PHASE_COLORS: Record<string, string> = { L1: '#e0e0e0', L2: '#78909c', L3: '#b87333', Síť: '#4fc3f7' };
 
 const fmtKwh = (v: number | null | undefined) => (v == null ? '—' : formatEnergy(v));
 const fmtQ = (q: Quantity) => (q.total == null ? '—' : `${q.approx ? '≈ ' : ''}${formatEnergy(q.total)}`);
@@ -245,25 +244,19 @@ export class FveFlowAnalysisDialog extends LitElement {
   }
 
   private _content(d: AnalysisData, live?: AnalysisLive): TemplateResult {
-    const insights = buildInsights(d);
     return html`
-      ${insights.length
-        ? html`<section class="summary" aria-label="Shrnutí">
-            ${insights.map((i) => html`<div class="insight ${i.tone}">${i.text}</div>`)}
-          </section>`
-        : nothing}
       <div class="grid cols-${this._cols}">
         ${this._cardSources(d, live)} ${this._cardFloors(d)} ${this._cardPv(d, live)} ${this._cardDc(d, live)}
+        ${this._cardPhases(d)}
       </div>
-      <div class="foot">
-        ${d.warnings.map((w) => html`<p class="warn">${w}</p>`)}
-        <p>${ASSUMPTIONS}</p>
-      </div>
+      ${d.warnings.length
+        ? html`<div class="foot">${d.warnings.map((w) => html`<p class="warn">${w}</p>`)}</div>`
+        : nothing}
     `;
   }
 
-  private _chart(h: number, content: TemplateResult, label: string): TemplateResult {
-    const w = this._chartW;
+  private _chart(h: number, content: TemplateResult, label: string, width?: number): TemplateResult {
+    const w = width ?? this._chartW;
     return html`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label=${label}>${content}</svg>`;
   }
 
@@ -630,20 +623,29 @@ export class FveFlowAnalysisDialog extends LitElement {
               mode: 'grouped',
               partialLast: true,
               series: [
-                { label: 'FVE', color: C.solar, values: d.range.days.map((x) => d.pv.byDay.get(x.key) ?? null) },
                 { label: 'Z baterie', color: C.discharge, values: d.range.days.map((x) => d.discharge.byDay.get(x.key) ?? null) },
-                { label: 'AC výstup', color: C.ac, values: d.range.days.map((x) => d.fve.byDay.get(x.key) ?? null) },
+                { label: 'Spotřeba z FVE', color: C.ac, values: d.range.days.map((x) => d.fve.byDay.get(x.key) ?? null) },
               ],
+              refLine:
+                d.capacityKwh > 0
+                  ? { value: d.capacityKwh, color: C.charge, label: `kapacita ${formatEnergy(d.capacityKwh)}` }
+                  : undefined,
               yFormat: axisKwh,
               valueFormat: formatEnergy,
             }),
-            'Denní DC bilance',
+            'Denně z baterie vs. spotřeba z FVE',
           )}
           ${this._legend([
-            ['FVE', C.solar],
             ['Z baterie', C.discharge],
-            ['AC výstup', C.ac],
+            ['Spotřeba z FVE (AC)', C.ac],
+            ...(d.capacityKwh > 0 ? [['Kapacita baterie / den', C.charge, 'dash'] as [string, string, string]] : []),
           ])}`;
+
+    // Baterie vs. spotřeba: kolik z teoretické kapacity za období se opravdu vybilo.
+    const periodDays = d.range.intraday ? 1 : d.range.days.length;
+    const capTotal = d.capacityKwh > 0 ? d.capacityKwh * periodDays : null;
+    const utilization = capTotal && d.discharge.total != null ? d.discharge.total / capTotal : null;
+    const batShare = d.discharge.total != null && d.fve.total ? d.discharge.total / d.fve.total : null;
 
     return html`<article class="card">
       <h3>MPPT · baterie · střídač</h3>
@@ -673,7 +675,124 @@ export class FveFlowAnalysisDialog extends LitElement {
         )}
         ${this._kpi('Ekv. cyklů', dc.cycles == null ? '—' : nf2.format(dc.cycles), undefined, 'Vybitá energie / kapacita baterie')}
       </div>
+      <h4>Baterie vs. spotřeba</h4>
+      <div class="kpis">
+        ${this._kpi(
+          periodDays > 1 ? `Kapacita × ${periodDays} dní` : 'Kapacita baterie',
+          fmtKwh(capTotal),
+          C.charge,
+          'Kolik energie by baterie dodala, kdyby se každý den vybila celá',
+          d.capacityKwh > 0 && periodDays > 1 ? `${formatEnergy(d.capacityKwh)} / den` : undefined,
+        )}
+        ${this._kpi('Vybito z baterie', fmtQ(d.discharge), C.discharge, this._srcTitle(d.discharge))}
+        ${this._kpi('Využití kapacity', fmtPct(utilization), undefined, 'Vybito / (kapacita × počet dní)')}
+        ${this._kpi(
+          'Baterie pokryla',
+          fmtPct(batShare),
+          undefined,
+          'Podíl vybité energie na spotřebě domu z FVE; zbytek šel přímo ze slunce',
+          batShare != null ? 'spotřeby z FVE' : undefined,
+        )}
+      </div>
       ${sankey} ${charts}
+    </article>`;
+  }
+
+  /** 5 — Zatížení fází: kolik musí měnič utáhnout současně (dimenzování). */
+  private _cardPhases(d: AnalysisData): TemplateResult {
+    const pl = d.phaseLoad;
+    if (!pl) {
+      return html`<article class="card wide">
+        <h3>Zatížení fází</h3>
+        <p class="muted">Chybí výkony fází — doplň síť L1–L3 (nebo fáze pater) a výkon měniče.</p>
+      </article>`;
+    }
+    const colorOf = (label: string) =>
+      PHASE_COLORS[label] ?? (label.startsWith('FVE') ? C.island : C.grid);
+    const when = (t: number) =>
+      d.range.intraday ? fmtTime.format(t) : `${fmtDate.format(t)} ${fmtTime.format(t)}`;
+    const s = pl.slots;
+    // Karta přes oba sloupce: 2 × (šířka grafu + padding karty 42) + mezera 18 − padding.
+    const wideW = this._cols === 2 ? 2 * this._chartW + 60 : this._chartW;
+    const chart = s && d.series
+      ? html`${this._chart(
+            280,
+            renderTimeChart({
+              width: wideW,
+              height: 280,
+              grid: d.series.grid,
+              x0: d.range.start,
+              x1: d.range.dayEnd,
+              series: [
+                ...s.series.map((x) => ({ label: x.label, color: colorOf(x.label), values: x.mean, kind: 'area' as const, stack: true })),
+                { label: 'Horní odhad', color: C.crit, values: s.totalMax, kind: 'line' as const, dash: '4 4' },
+              ],
+              now: d.range.period === 'today' ? Date.now() : null,
+              yFormat: axisW,
+            }),
+            'Zatížení fází',
+            wideW,
+          )}
+          ${this._legend([
+            ...s.series.map((x) => [x.label, colorOf(x.label)] as [string, string]),
+            ['Horní odhad (součet 5min maxim)', C.crit, 'dash'],
+          ])}`
+      : html`${this._chart(
+            240,
+            renderColumns({
+              width: wideW,
+              height: 240,
+              days: d.range.days,
+              mode: 'grouped',
+              partialLast: true,
+              series: [
+                { label: 'Špička současně', color: C.warn, values: d.range.days.map((x) => pl.byDay.get(x.key)?.peak ?? null) },
+                { label: 'Horní odhad', color: C.crit, outline: true, values: d.range.days.map((x) => pl.byDay.get(x.key)?.upper ?? null) },
+              ],
+              yFormat: axisW,
+              valueFormat: formatPower,
+            }),
+            'Denní špičky zatížení',
+            wideW,
+          )}
+          ${this._legend([
+            ['Špička současně (5min průměr)', C.warn],
+            ['Horní odhad (součet maxim)', C.crit, 'outline'],
+          ])}`;
+    return html`<article class="card wide">
+      <h3>Zatížení fází · dimenzování měniče</h3>
+      <div class="kpis">
+        ${this._kpi(
+          'Špička současně',
+          pl.peak ? formatPower(pl.peak.value) : '—',
+          C.warn,
+          'Nejvyšší součet 5min průměrů všech fází ve stejném okamžiku (spodní odhad)',
+          pl.peak ? when(pl.peak.at) : undefined,
+        )}
+        ${this._kpi(
+          'Horní odhad',
+          pl.upper ? formatPower(pl.upper.value) : '—',
+          C.crit,
+          'Nejvyšší součet 5min maxim fází — maxima nemusela nastat současně (horní odhad)',
+          pl.upper ? when(pl.upper.at) : undefined,
+        )}
+        ${this._kpi('Průměrné zatížení', fmtW(pl.avg))}
+        ${pl.perSeries.map((x) =>
+          this._kpi(
+            `${x.label} špička`,
+            fmtW(x.peak),
+            colorOf(x.label),
+            'Nejvyšší 5min průměr / maximum dané fáze',
+            x.upper != null ? `max ${formatPower(x.upper)}` : undefined,
+          ),
+        )}
+      </div>
+      ${chart}
+      <p class="note">
+        Skutečný požadavek na měnič leží mezi špičkou současně a horním odhadem. Krátké rázy
+        (rozběh motorů, varná konvice) mohou být ještě vyšší — 5min statistiky je vyhlazují.
+        ${pl.hourly ? ' Starší dny jsou jen z hodinových statistik, špičky jsou tam podhodnocené.' : ''}
+      </p>
     </article>`;
   }
 
@@ -829,32 +948,6 @@ export class FveFlowAnalysisDialog extends LitElement {
     .body.stale {
       opacity: 0.5;
     }
-    .summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .insight {
-      flex: 1 1 320px;
-      padding: 11px 14px;
-      font-size: 14.5px;
-      line-height: 1.4;
-      background: rgba(255, 255, 255, 0.035);
-      border: 1px solid rgba(130, 190, 220, 0.12);
-      border-left: 3px solid var(--tone);
-      border-radius: 10px;
-      --tone: #4fc3f7;
-    }
-    .insight.good {
-      --tone: #69f0ae;
-    }
-    .insight.warn {
-      --tone: #ffb74d;
-    }
-    .insight.bad {
-      --tone: #ff5252;
-    }
     .grid {
       display: grid;
       gap: 18px;
@@ -862,6 +955,17 @@ export class FveFlowAnalysisDialog extends LitElement {
     }
     .grid.cols-2 {
       grid-template-columns: 1fr 1fr;
+    }
+    .card.wide {
+      grid-column: 1 / -1;
+    }
+    h4 {
+      margin: 4px 0 10px;
+      color: rgba(226, 240, 248, 0.55);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
     }
     .card {
       min-width: 0;

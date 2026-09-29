@@ -41,6 +41,8 @@ export interface TimeSeries {
   negColor?: string;
   /** Skládaná plocha (jen nezáporné hodnoty). */
   stack?: boolean;
+  /** Přerušovaná čára (jen kind: 'line'). */
+  dash?: string;
 }
 
 export interface TimeChartOptions {
@@ -160,7 +162,8 @@ export function renderTimeChart(o: TimeChartOptions): TemplateResult {
       );
     }
     return segments(s.values).map(
-      (seg) => svg`<path d="${line(seg)}" fill="none" stroke="${s.color}" stroke-width="1.8" stroke-linejoin="round"/>`,
+      (seg) => svg`<path d="${line(seg)}" fill="none" stroke="${s.color}" stroke-width="1.8" stroke-linejoin="round"
+        stroke-dasharray="${s.dash ?? ''}"/>`,
     );
   });
 
@@ -245,6 +248,8 @@ export interface ColumnsOptions {
   mode: 'stacked' | 'grouped';
   /** Poslední sloupec (dnešek) je rozpracovaný → ztlumit. */
   partialLast?: boolean;
+  /** Vodorovná referenční čára (např. kapacita baterie). */
+  refLine?: { value: number; color: string; label?: string };
   yFormat: (v: number) => string;
   valueFormat: (v: number) => string;
 }
@@ -263,6 +268,7 @@ export function renderColumns(o: ColumnsOptions): TemplateResult {
     if (o.mode === 'stacked') max = Math.max(max, o.series.reduce((s, se) => s + (se.values[i] ?? 0), 0));
     else for (const se of o.series) max = Math.max(max, se.values[i] ?? 0);
   }
+  if (o.refLine) max = Math.max(max, o.refLine.value);
   const sc = niceScale(0, max > 0 ? max : 10);
   const y = (v: number) => pt + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
   const stride = Math.max(1, Math.ceil((n * 44) / iw));
@@ -295,6 +301,15 @@ export function renderColumns(o: ColumnsOptions): TemplateResult {
         <text x="${pl - 6}" y="${f1(y(v) + 3.5)}" text-anchor="end" class="axis">${o.yFormat(v)}</text>`,
     )}
     ${bars}
+    ${o.refLine
+      ? svg`<line x1="${pl}" x2="${pl + iw}" y1="${f1(y(o.refLine.value))}" y2="${f1(y(o.refLine.value))}"
+          stroke="${o.refLine.color}" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.85">
+          <title>${o.refLine.label ?? ''}</title></line>
+        ${o.refLine.label
+          ? svg`<text x="${pl + iw}" y="${f1(y(o.refLine.value) - 5)}" text-anchor="end" class="axis"
+              style="fill:${o.refLine.color}">${o.refLine.label}</text>`
+          : nothing}`
+      : nothing}
     ${o.days.map((day, i) =>
       (n - 1 - i) % stride === 0
         ? svg`<text x="${f1(pl + (i + 0.5) * band)}" y="${pt + ih + 15}" text-anchor="middle" class="axis">${day.label}</text>`

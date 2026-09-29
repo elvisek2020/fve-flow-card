@@ -265,9 +265,6 @@ zabírá skoro celou obrazovku (max. 1640 px), dva sloupce karet od šířky tab
 U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
 (`detailedForecast` začíná o půlnoci).
 
-- **Shrnutí** — automatické postřehy: soběstačnost, plnění predikce, možná
-  nevyužitá výroba při plné baterii, patro s největší spotřebou, neměřená
-  spotřeba, nesoulad měřáků, ztráty a cykly baterie.
 - **Zdroje domu** — spotřeba z FVE (výstup měniče) vs. ze sítě, soběstačnost,
   průběh dne (u 7 / 30 dní denní sloupce).
 - **Patra** — tokový diagram FVE (měnič) a síť → patra + **Neměřeno**
@@ -279,7 +276,17 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   U minulých dní se porovnává s predikcí den předem.
 - **MPPT · baterie · střídač** — DC bilance: FVE → baterie / střídač,
   baterie → střídač, střídač → dům a ztráty; účinnost, SoC min–max,
-  ekvivalentní cykly, průběh výkonů a SoC.
+  ekvivalentní cykly, průběh výkonů a SoC. Blok **Baterie vs. spotřeba**:
+  kapacita × počet dní, vybito, využití kapacity a kolik spotřeby z FVE
+  pokryla baterie; u 7 / 30 dní denní sloupce vybito vs. spotřeba z FVE
+  s čárou kapacity baterie.
+- **Zatížení fází · dimenzování měniče** (přes celou šířku) — fáze sítě L1–L3
+  (`grid.phase_a/b/c`, jinak součet fází pater) a výstup měniče složené nad
+  sebou. **Špička současně** = nejvyšší součet 5min průměrů (spodní odhad),
+  **Horní odhad** = nejvyšší součet 5min maxim fází (nemusela nastat
+  současně); skutečný požadavek na měnič leží mezi nimi. U 7 / 30 dní denní
+  špičky. Nejpřesnější v 24 h / Dnes / Včera — krátké rázy statistiky vyhlazují,
+  starší dny (> 10 dní) jsou jen hodinové.
 
 Zdroje hodnot (bere se první dostupný):
 
