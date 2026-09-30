@@ -892,7 +892,6 @@ export class FveFlowAnalysisDialog extends LitElement {
             (p) => html`<b style="left:${p}%">${p}</b>`,
           )}
         </span>
-        <span><i class="outline" style="--c:#ffffff"></i>≥ ${SOC_HIGH} %</span>
       </div>`;
   }
 
