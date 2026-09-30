@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.9`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.10`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -288,7 +288,7 @@ U **24 h** se plnění predikce Solcast počítá jen za dnešní část okna
   s čárou kapacity baterie. Dole **heatmapa SoC po hodinách** (0–24 h):
   výrazné barevné přechody SoC — do `yellow_from` (15 %) červená, do
   `green_from` (40 %) sytá oranžová, 40–60 % přes fialovou k modré, 60–80 %
-  k světle zelené, 80–100 % do tmavě zelené; hodiny s průměrným SoC ≥ 90 %
+  k světle zelené, 80–100 % do tmavě zelené; hodiny s průměrným SoC ≥ 98 %
   mají navíc bílý rámeček.
 - **Zatížení fází** (přes celou šířku, pro dimenzování měniče) — fáze sítě L1–L3
   (`grid.phase_a/b/c`, jinak součet fází pater) a výstup měniče složené nad

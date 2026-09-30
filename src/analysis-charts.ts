@@ -711,7 +711,7 @@ export function renderHeatmap(o: HeatmapOptions): { tpl: TemplateResult; height:
           { c: v == null ? undefined : c.color, l: o.tipLabel, v: v == null ? 'bez dat' : o.valueFormat(v) },
           ...(o.tipExtra?.(day.key, h) ?? []),
         ],
-        n: mark ? o.markLabel : undefined,
+        n: mark && o.markLabel ? o.markLabel : undefined,
       };
       cells.push(svg`<rect class="cell" x="${f1(x + gap / 2)}" y="${f1(y + gap / 2)}" width="${f1(Math.max(1, cellW - gap))}"
         height="${f1(cellH - gap)}" rx="1.5" fill="${c.color}" fill-opacity="${c.opacity.toFixed(3)}"

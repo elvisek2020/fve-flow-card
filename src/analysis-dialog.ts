@@ -55,7 +55,7 @@ const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-d
 const fmtDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
 const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short' });
 /** Od kolika % SoC je buňka heatmapy SoC orámovaná (baterie prakticky plná). */
-const SOC_HIGH = 90;
+const SOC_HIGH = 98;
 
 type Rgb = [number, number, number];
 
@@ -63,7 +63,7 @@ type Rgb = [number, number, number];
  * Barevné zastávky SoC pro heatmapu — sytý přechod mezi výraznými odstíny,
  * ať se sousední hodnoty neslévají: do `yellow` červená (konec), do `green`
  * sytá oranžová, 40–60 % přes fialovou k modré, 60–80 % k světle zelené,
- * 80–100 % do tmavě zelené (≥ 90 % navíc bílý rámeček). Dvě zastávky na
+ * 80–100 % do tmavě zelené (≥ 98 % navíc bílý rámeček). Dvě zastávky na
  * stejné pozici = ostrý přechod.
  */
 function socStops(yellow: number, green: number): Array<[number, Rgb]> {
@@ -857,7 +857,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   /**
    * Heatmapa SoC baterie (dny × 0–24 h): přechody podle `socStops` (hranice
    * červené a oranžové = battery.yellow_from / green_from), hodiny s průměrným
-   * SoC ≥ 90 % mají bílý rámeček.
+   * SoC ≥ 98 % mají bílý rámeček.
    */
   private _socHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
     const hm = d.pvHeatmap;
@@ -874,7 +874,8 @@ export class FveFlowAnalysisDialog extends LitElement {
       hours: [0, 24],
       cellColor: (v) => ({ color: socScale(v, thresholds.yellow_from, thresholds.green_from), opacity: 0.92 }),
       markColor: '#ffffff',
-      markLabel: `SoC ≥ ${SOC_HIGH} %`,
+      // Bez poznámky v bublině — hodnota SoC je v ní vidět.
+      markLabel: '',
       valueFormat: (v) => `${nf0.format(v)} %`,
       tipLabel: 'SoC (průměr)',
       tipExtra: (key, h) => {
