@@ -75,6 +75,7 @@ const SCHEMA = [
       { name: 'cycles', selector: ENTITY },
       { name: 'time_to_full', selector: ENTITY },
       { name: 'capacity', selector: ENTITY },
+      { name: 'nominal_voltage', selector: numBox(12, 60, 0.1), default: 48 },
       { name: 'invert', selector: BOOL },
       { name: 'name', selector: TEXT, custom_label: 'Vlastní název baterie' },
       ...SEVERITY_PCT,
@@ -282,6 +283,7 @@ const LABELS: Record<string, string> = {
   cycles: 'Počet nabíjecích cyklů',
   time_to_full: 'Doba do plného nabití',
   capacity: 'Instalovaná kapacita',
+  nominal_voltage: 'Jmenovité napětí baterie (V)',
   invert: 'Obrátit znaménko výkonu baterie',
   state: 'Stav měniče',
   load_power: 'Ostrovní spotřeba — kritické zátěže (W)',
@@ -347,7 +349,9 @@ const HELPERS: Record<string, string> = {
   max_duration: 'Čas v sekundách, za který jedna tečka oběhne celou linku, když je výkon jen kousek nad `deadband_w` (nejpomalejší, "sotva tekoucí" pohyb).',
   animation: 'Vypnutím se pulzující tečky nekreslí vůbec — čísla, barvy a stavy uzlů se ale dál aktualizují normálně. Vhodné na slabší zařízení nebo pokud animace nechceš.',
   sparklines: 'Malá křivka trendu za poslední hodinu v pravém horním rohu uzlů FVE, baterie (SoC), měnič a síť. Data se tahají z historie HA a obnovují se každých 5 minut.',
-  capacity: 'Entita v kWh, Wh nebo Ah (Ah se přepočte přes napětí baterie, jinak 48 V). Potřebná pro prognózu.',
+  capacity: 'Entita v kWh, Wh nebo Ah (Ah se přepočte přes jmenovité napětí níže). Potřebná pro prognózu, Analýzu a pruh energie.',
+  nominal_voltage:
+    'Pro přepočet kapacity z Ah na kWh (kapacita × napětí). Jmenovité napětí sady, ne aktuální — Pylontech / 15S LiFePO4 = 48 V. Výchozí 48 V.',
   full_soc_pct:
     'Od tohoto SoC se baterie v Analýze bere jako plná: podbarví se v grafu a z rozdílu predikce a skutečnosti se odhadne možná nevyužitá výroba. Výchozí 99 %.',
   enabled: 'Pod měničem se zobrazí tlačítko ZPĚT pro návrat na jiný dashboard (typicky hlavní přehled).',

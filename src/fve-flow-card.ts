@@ -545,14 +545,17 @@ export class FveFlowCard extends LitElement {
     window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
   }
 
-  /** Kapacita baterie v kWh (Ah převod přes napětí entity / 48 V). */
+  /**
+   * Kapacita baterie v kWh. Ah se přepočte přes jmenovité napětí
+   * (battery.nominal_voltage, default 48 V) — ne přes aktuální napětí,
+   * jinak by kapacita „dýchala“ s nabitím (49–53 V ≈ ±5 %).
+   */
   private _batteryCapacityKwh(): number {
     const b = this._config?.battery;
     if (!b?.capacity || !hasNum(this.hass, b.capacity)) return 0;
     const st = this.hass!.states[b.capacity];
     const unit = st?.attributes.unit_of_measurement as string | undefined;
-    const voltage = hasNum(this.hass, b.voltage) ? toNum(this.hass, b.voltage) : 48;
-    return capacityToKwh(toNum(this.hass, b.capacity), unit, voltage);
+    return capacityToKwh(toNum(this.hass, b.capacity), unit, b.nominal_voltage ?? 48);
   }
 
   /** Včerejší spotřeba domu (kWh) — prognóza; fallback na legacy forecast.daily_load_entity. */

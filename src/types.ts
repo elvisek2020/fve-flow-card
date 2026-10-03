@@ -85,6 +85,8 @@ export interface BatteryConfig extends SeverityFields {
   cycles?: string;
   /** Instalovaná kapacita (kWh / Ah). */
   capacity?: string;
+  /** Jmenovité napětí pro přepočet kapacity z Ah na kWh. Default 48 V. */
+  nominal_voltage?: number;
   /** Obrátit znaménko výkonu (kladný = vybíjení). */
   invert?: boolean;
   /** Zobrazovaný název, default "Baterie Pylontech". */

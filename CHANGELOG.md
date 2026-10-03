@@ -5,6 +5,29 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.9.0 — 2026-10-03
+
+### ✨ Novinky
+
+- Nové nastavení **`battery.nominal_voltage`** (výchozí 48 V) — jmenovité napětí
+  pro přepočet kapacity baterie z Ah na kWh. V editoru „Jmenovité napětí
+  baterie (V)“ pod kapacitou.
+
+### 🐛 Opravy
+
+- Kapacita baterie v Ah se už nepřepočítává přes **aktuální** napětí — dřív
+  kolísala s nabitím a byla nadsazená (např. 400 Ah × 49,8–52,3 V =
+  19,9–20,9 kWh). Nově stabilně 400 Ah × 48 V = **19,2 kWh** v prognóze výdrže,
+  Analýze (cykly, využití kapacity, čára kapacity) i v pruhu energie baterie.
+
+> [!NOTE]
+> Hodnoty kapacity a odvozená čísla mohou být po aktualizaci o pár procent nižší —
+> odpovídají jmenovité kapacitě sady. Pokud máš jiné jmenovité napětí než 48 V,
+> nastav `battery.nominal_voltage`.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.8.15 — 2026-10-03
 
 ### ✨ Novinky

@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.15`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.9.0`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -92,6 +92,7 @@ battery:
   cycles: sensor.fve_baterie_pocet_cyklu
   time_to_full: sensor.baterie_doba_do_nabiti
   capacity: sensor.baterie_kapacita
+  nominal_voltage: 48                          # jmenovité napětí pro přepočet Ah → kWh (default 48)
   invert: false                                # true = kladné znamená vybíjení
   name: Baterie Pylontech                      # vlastní název baterie
 inverter:
@@ -249,10 +250,12 @@ Poznámky:
     `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes
     `solcast.total_day3`…`total_day7` (v Solcast často defaultně vypnuté).
     Práh rizika: `forecast.min_soc_pct` (default 10).
-  - Když prognóza nejde otevřít, chip je šedý a důvod (např. „Chybí kapacita
-    baterie") je vypsaný přímo pod ním — viditelné i na dotykovém panelu.
+  - Když prognóza nejde otevřít, tlačítko je ztlumené a důvod (např. „Chybí
+    kapacita baterie (kWh / Ah)") je vypsaný přímo v něm — viditelné i na
+    dotykovém panelu.
   - `battery.capacity` může být v kWh, Wh nebo Ah; Ah se přepočte přes
-    `battery.voltage` (bez něj 48 V).
+    jmenovité napětí `battery.nominal_voltage` (default 48 V) — ne přes
+    aktuální napětí, aby kapacita nekolísala s nabitím (400 Ah × 48 V = 19,2 kWh).
 - Fullscreen: použij view `type: panel` s jedinou touto kartou
   (ukázka v `lovelace/fve_flow/fve-flow.yaml` v nadřazeném repu konfigurace).
 
