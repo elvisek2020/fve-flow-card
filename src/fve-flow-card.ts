@@ -38,6 +38,7 @@ import {
 } from './battery-forecast';
 import { fetchDailyEnergyKwh, fetchYesterdaySensorKwh, localDayKeyOffset } from './daily-stats';
 import {
+  formatEnergy,
   formatEnergyEntity,
   formatPower,
   formatPowerEntity,
@@ -1017,6 +1018,7 @@ export class FveFlowCard extends LitElement {
       <text class="tiny" x="${r.x + 118}" y="${r.y + 282}">
         ${charging && b.time_to_full ? `Do nabití ${formatState(this.hass, b.time_to_full)}` : ''}
       </text>
+      ${this._batteryEnergyBar(r, socKnown ? soc : null, socColor)}
       ${this._hit(
         r,
         b.soc
@@ -1024,6 +1026,36 @@ export class FveFlowCard extends LitElement {
           : undefined,
       )}
     `;
+  }
+
+  /**
+   * Pruh energie dole v boxu baterie: nad ním aktuální energie (SoC × kapacita)
+   * a celková kapacita v kWh, ryska na prahu prognózy (min_soc_pct).
+   */
+  private _batteryEnergyBar(r: Rect, soc: number | null, color: string): TemplateResult | typeof nothing {
+    const cap = this._batteryCapacityKwh();
+    if (cap <= 0) return nothing;
+    const x = r.x + 20;
+    const w = r.w - 40;
+    const y = r.y + r.h - 24;
+    const pct = soc == null ? 0 : Math.min(100, Math.max(0, soc));
+    const minPct = this._config?.forecast?.min_soc_pct ?? 10;
+    return svg`
+      <text class="small" x="${x}" y="${y - 9}">
+        V baterii <tspan class="strong" style="fill: ${color}">${soc == null ? '—' : formatEnergy((cap * pct) / 100)}</tspan>
+      </text>
+      <text class="small" x="${x + w}" y="${y - 9}" text-anchor="end">
+        z <tspan class="strong">${formatEnergy(cap)}</tspan>
+      </text>
+      <rect x="${x}" y="${y}" width="${w}" height="8" rx="4" fill="rgba(148,170,190,0.16)"/>
+      ${pct > 0
+        ? svg`<rect x="${x}" y="${y}" width="${Math.max(8, (w * pct) / 100)}" height="8" rx="4" fill="${color}"
+            style="filter: drop-shadow(0 0 4px ${color}80)"/>`
+        : nothing}
+      <line x1="${x + (w * minPct) / 100}" x2="${x + (w * minPct) / 100}" y1="${y - 2}" y2="${y + 10}"
+        stroke="rgba(226,240,248,0.55)" stroke-width="1.5">
+        <title>Práh prognózy ${minPct} %</title>
+      </line>`;
   }
 
   private _nodeInverter(r: Rect, islandTotal: number): TemplateResult {

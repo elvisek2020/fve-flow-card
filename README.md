@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.14`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.15`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -383,6 +383,10 @@ Poznámky:
 - **Výdrž / doba do nabití**: `battery.runtime` se zobrazí vždy, `battery.time_to_full`
   jen dokud baterie nabíjí (výkon ≥ `battery.charge_threshold_w`, default 25 W — sniž,
   pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
+- **Pruh energie baterie**: dole v boxu baterie „V baterii X kWh · z Y kWh“
+  (SoC × kapacita) s pruhem v barvě SoC a ryskou na prahu prognózy
+  (`forecast.min_soc_pct`, default 10 %). Jen když je známá kapacita
+  (`battery.capacity` v kWh / Wh / Ah).
 - **Graf jen při výrobě**: celá spodní sekce (hodnoty „Realita"/„Predikce" i graf) je
   vidět jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň `chart_min_power_w`
   (default 50 W) — v noci nebo při zanedbatelné výrobě se úplně skryje (žádný

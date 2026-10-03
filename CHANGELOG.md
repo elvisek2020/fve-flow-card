@@ -5,6 +5,22 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.8.15 — 2026-10-03
+
+### ✨ Novinky
+
+- **Pruh energie baterie** dole v boxu baterie: „V baterii X kWh · z Y kWh“
+  (SoC × kapacita), pruh v barvě SoC a ryska na prahu prognózy
+  (`forecast.min_soc_pct`, výchozí 10 %). Zobrazí se, když je známá kapacita.
+
+### 🎨 Vzhled
+
+- Box baterie bez prázdného místa po přesunu Prognózy; výška scény počítá
+  i se spodkem baterie (při 1–2 patrech se neořízne).
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.8.14 — 2026-10-03
 
 ### ✨ Novinky

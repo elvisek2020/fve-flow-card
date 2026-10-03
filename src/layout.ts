@@ -75,7 +75,8 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
 
   const pv: Rect = { x: 50, y: 40, w: 300, h: 190 };
   const mppt: Rect = { x: 50, y: 280, w: 300, h: 150 };
-  const battery: Rect = { x: 50, y: 480, w: 300, h: 320 };
+  // Výška = poslední řádek („Do nabití“, y+282) + pruh energie v kWh pod ním.
+  const battery: Rect = { x: 50, y: 480, w: 300, h: 340 };
   // Střední sloupec (měnič + Solcast) vycentrovaný mezi pravou hranu
   // levého sloupce a levou hranu boxů pater — stejná mezera vlevo i vpravo.
   const LEFT_EDGE = 350;
@@ -147,7 +148,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
 
   return {
     width: 1440,
-    height: Math.max(820, floorsBottom + 40, buttonsBottom + 40),
+    height: Math.max(820, floorsBottom + 40, buttonsBottom + 40, battery.y + battery.h + 40),
     pv,
     mppt,
     battery,
@@ -194,7 +195,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   y += solcast.h + MOBILE_GAP;
   const mppt: Rect = { x, y, w, h: 150 };
   y += mppt.h + MOBILE_GAP;
-  const battery: Rect = { x, y, w, h: 320 };
+  const battery: Rect = { x, y, w, h: 340 };
   y += battery.h + MOBILE_GAP;
   const inverter: Rect = { x, y, w, h: 260 };
   y += inverter.h + MOBILE_GAP;
