@@ -5,6 +5,21 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.8.14 — 2026-10-03
+
+### ✨ Novinky
+
+- Samostatné tlačítko **PROGNÓZA** pod měničem, nad Analýzou — stejný styl
+  jako ANALÝZA, s ikonou kalendáře. Nahrazuje malý chip „Prognóza“ u baterie.
+  Bez potřebných entit je ztlumené a ukáže, co chybí.
+
+### 🐛 Opravy
+
+- Tabulka prognózy na mobilu: datum a hodnoty se už nezalamují na dva řádky.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.8.13 — 2026-10-03
 
 ### 🐛 Opravy

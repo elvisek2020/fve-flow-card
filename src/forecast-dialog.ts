@@ -146,6 +146,19 @@ class FveFlowForecastDialog extends HTMLElement {
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
+        td {
+          /* „po 28. 9.“ a „26,5 kWh“ na jeden řádek i na úzkém mobilu. */
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        @media (max-width: 420px) {
+          th, td {
+            padding: 8px 4px;
+          }
+          table {
+            font-size: 12.5px;
+          }
+        }
         td.muted {
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.45));
         }

@@ -363,7 +363,7 @@ const HELPERS: Record<string, string> = {
   daily_load_entity:
     'Legacy: přesuň entitu do Měnič → Včerejší spotřeba domu. Stále funguje jako fallback pro prognózu.',
   energy_yesterday:
-    'Utility Meter last_period (včerejší kWh). Povinné pro chip Prognóza u baterie.',
+    'Utility Meter last_period (včerejší kWh). Povinné pro tlačítko Prognóza pod měničem.',
   min_soc_pct:
     'SoC po bilanci není entita — karta ho počítá: start = aktuální SoC baterie, každý den SoC += (PV − spotřeba) / kapacita × 100 (0–100 %). Pod tímto prahem (%) se hlásí riziko. Výchozí 10 %.',
 };

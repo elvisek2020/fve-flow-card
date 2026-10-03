@@ -135,6 +135,22 @@ export function iconChart(x: number, y: number, size: number, color: string): Te
     </g>`;
 }
 
+/** Kalendář s baterií — prognóza výdrže na dny dopředu. */
+export function iconForecast(x: number, y: number, size: number, color: string): TemplateResult {
+  const s = size / 64;
+  return svg`
+    <g transform="translate(${x},${y}) scale(${s})" stroke="${color}" fill="none"
+       stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+       style="filter: drop-shadow(0 0 5px ${color})">
+      <rect x="8" y="12" width="48" height="44" rx="6"/>
+      <path d="M8 24 L56 24"/>
+      <path d="M20 6 L20 16 M44 6 L44 16"/>
+      <rect x="18" y="33" width="24" height="13" rx="2"/>
+      <path d="M45 37 L45 42"/>
+      <path d="M22 37 L22 42 M28 37 L28 42"/>
+    </g>`;
+}
+
 /** Blesk pro drobné akcenty. */
 export function iconBolt(x: number, y: number, size: number, color: string): TemplateResult {
   const s = size / 64;

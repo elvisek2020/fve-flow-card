@@ -19,6 +19,8 @@ export interface Layout {
   backButton?: Rect;
   /** Tlačítko Analýza pod měničem (nad ZPĚT) — default zapnuté. */
   analysisButton?: Rect;
+  /** Tlačítko Prognóza nad Analýzou — když je nastavená včerejší spotřeba. */
+  forecastButton?: Rect;
   paths: {
     pvMppt: string;
     mpptInv: string;
@@ -35,6 +37,8 @@ export interface LayoutOptions {
   backButton?: boolean;
   /** Rezervovat místo pro tlačítko Analýza (nad ZPĚT). */
   analysisButton?: boolean;
+  /** Rezervovat místo pro tlačítko Prognóza (nad Analýzou). */
+  forecastButton?: boolean;
 }
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
@@ -99,17 +103,22 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   const backButton: Rect | undefined = opts.backButton
     ? { x: inverter.x, y: btnTop, w: inverter.w, h: BACK_BTN_H }
     : undefined;
-  const analysisMinY = backButton ? backButton.y + backButton.h + BTN_STACK_GAP : btnTop;
+  // Prognóza + Analýza tvoří skupinu (Prognóza nahoře), která spodní hranou
+  // lícuje s posledním patrem — při málo patrech aspoň pod ZPĚT.
+  const stackMinY = backButton ? backButton.y + backButton.h + BTN_STACK_GAP : btnTop;
+  const stack = [opts.forecastButton, opts.analysisButton].filter(Boolean).length;
+  const stackH = stack * ANALYSIS_BTN_H + Math.max(0, stack - 1) * BTN_STACK_GAP;
+  let stackY = Math.max(stackMinY, floorsBottom - stackH);
+  const forecastButton: Rect | undefined = opts.forecastButton
+    ? { x: inverter.x, y: stackY, w: inverter.w, h: ANALYSIS_BTN_H }
+    : undefined;
+  if (forecastButton) stackY += ANALYSIS_BTN_H + BTN_STACK_GAP;
   const analysisButton: Rect | undefined = opts.analysisButton
-    ? {
-        x: inverter.x,
-        y: Math.max(analysisMinY, floorsBottom - ANALYSIS_BTN_H),
-        w: inverter.w,
-        h: ANALYSIS_BTN_H,
-      }
+    ? { x: inverter.x, y: stackY, w: inverter.w, h: ANALYSIS_BTN_H }
     : undefined;
   const buttonsBottom = Math.max(
     analysisButton ? analysisButton.y + analysisButton.h : 0,
+    forecastButton ? forecastButton.y + forecastButton.h : 0,
     backButton ? backButton.y + backButton.h : 0,
   );
 
@@ -148,6 +157,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     floors,
     backButton,
     analysisButton,
+    forecastButton,
     paths,
   };
 }
@@ -167,7 +177,7 @@ const MOBILE_GRID_TRUNK_X = MOBILE_X + MOBILE_NODE_W + 10;
 
 /**
  * Vertikální layout pro úzké obrazovky (< 640 px). Pořadí shora:
- * FVE → Solcast → MPPT → Baterie → Měnič → Síť (AC-IN) → patra.
+ * FVE → Solcast → MPPT → Baterie → Měnič → (ZPĚT → Prognóza → Analýza) → Síť (AC-IN) → patra.
  * Toky mezi uzly, které nejsou v pořadí bezprostředně za sebou
  * (FVE→MPPT přeskakuje Solcast, MPPT→Měnič přeskakuje Baterii), obchází
  * mezilehlý box krátkou odbočkou k pravému okraji scény.
@@ -192,6 +202,10 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     ? { x, y, w, h: BACK_BTN_H }
     : undefined;
   if (backButton) y += backButton.h + MOBILE_GAP;
+  const forecastButton: Rect | undefined = opts.forecastButton
+    ? { x, y, w, h: ANALYSIS_BTN_H }
+    : undefined;
+  if (forecastButton) y += forecastButton.h + MOBILE_GAP;
   const analysisButton: Rect | undefined = opts.analysisButton
     ? { x, y, w, h: ANALYSIS_BTN_H }
     : undefined;
@@ -247,6 +261,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     floors,
     backButton,
     analysisButton,
+    forecastButton,
     paths: { pvMppt, mpptInv, batInv, pvSolcast, islandTaps, gridTaps },
   };
 }

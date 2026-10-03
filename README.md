@@ -14,7 +14,7 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
   mrtvá linka pod prahem zešedne
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
-- Prognóza výdrže baterie — 5 dní historie + 7denní predikce (Solcast − spotřeba)
+- Prognóza výdrže baterie (tlačítko pod měničem) — 5 dní historie + 7denní predikce (Solcast − spotřeba)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast s heatmapou po hodinách, DC bilance MPPT ·
   baterie · střídač, baterie vs. spotřeba a zatížení fází pro dimenzování
@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.13`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.8.14`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -225,9 +225,10 @@ Poznámky:
   Analýza (`back_button.enabled`).
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
-- **Prognóza výdrže baterie**: chip **Prognóza** pod ikonou baterie (jen když
-  je vyplněné `inverter.energy_yesterday`, případně legacy
-  `forecast.daily_load_entity`) otevře modal:
+- **Prognóza výdrže baterie**: tlačítko **PROGNÓZA** pod měničem, nad Analýzou
+  (jen když je vyplněné `inverter.energy_yesterday`, případně legacy
+  `forecast.daily_load_entity`; bez SoC, kapacity nebo Solcastu je ztlumené
+  a ukáže, co chybí) otevře modal:
   - **5 dní naměřené historie** (šedé řádky): výroba z `pv.energy_today`,
     spotřeba z `inverter.energy_today` (denní Utility Meter s LTS). Bez něj
     se historie dopočítá z včerejší entity (`inverter.energy_yesterday`):
@@ -257,8 +258,8 @@ Poznámky:
 
 ### Okno Analýza
 
-Tlačítko **ANALÝZA** pod měničem (pod ZPĚT, spodní hranou lícuje s posledním
-patrem) otevře přehled za **24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní** — výchozí je
+Tlačítko **ANALÝZA** pod měničem (pod ZPĚT a Prognózou, spodní hranou lícuje
+s posledním patrem) otevře přehled za **24 h / Dnes / Včera / 7 / 14 / 30 / 60 / 90 dní** — výchozí je
 klouzavých posledních 24 hodin. Karta k tomu nepotřebuje žádné nové entity —
 bere ty, které už má, a jejich dlouhodobé statistiky z recorderu HA. Okno
 zabírá skoro celou obrazovku (max. 1640 px), dva sloupce karet od šířky tabletu.

@@ -15,6 +15,7 @@ import {
   iconBattery,
   iconChart,
   iconFan,
+  iconForecast,
   iconGear,
   iconHome,
   iconInverter,
@@ -686,35 +687,31 @@ export class FveFlowCard extends LitElement {
   }
 
   /**
-   * Chip Prognóza v panelu baterie — jen když je v nastavení denní spotřeba domu.
-   * Sedí vlevo pod ikonou baterie (mimo sloupec metrik vpravo).
-   * stopPropagation, aby neotevíral historii SoC.
+   * Tlačítko Prognóza nad Analýzou — jen když je v nastavení včerejší spotřeba
+   * domu. Bez potřebných entit je ztlumené a pod nápisem ukáže, co chybí.
    */
-  private _forecastChip(r: Rect): TemplateResult | typeof nothing {
-    if (!this._yesterdayLoadEntity()) return nothing;
+  private _forecastButton(r: Rect): TemplateResult {
     const reason = this._forecastBlockReason();
     const enabled = !reason;
-    const accent = enabled ? C.warn : 'rgba(148,170,190,0.45)';
-    const w = 92;
-    const h = 28;
-    // Střed ikony baterie je x+59; kapacita (Ah) končí kolem y+252.
-    const x = r.x + 59 - w / 2;
-    const y = r.y + 262;
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    const color = enabled ? C.warn : 'rgba(148,170,190,0.5)';
     return svg`
-      <g class="forecast-chip${enabled ? '' : ' disabled'}" @click=${(e: Event) => {
+      <g class="forecast-btn${enabled ? '' : ' disabled'}" @click=${(e: Event) => {
         e.stopPropagation();
         if (enabled) void this._openBatteryForecast();
       }}>
-        <title>${reason ?? 'Prognóza výdrže baterie'}</title>
-        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9"
-          fill="rgba(255,255,255,0.05)" stroke="${accent}" stroke-opacity="${enabled ? 0.7 : 0.3}"
-          stroke-width="1" style="${enabled ? `filter: drop-shadow(0 0 6px ${accent}50)` : ''}"/>
-        <text class="forecast-label" x="${x + w / 2}" y="${y + 18}" text-anchor="middle"
-          style="fill: ${enabled ? '#ffe0b2' : 'rgba(226,240,248,0.4)'}">Prognóza</text>
-      </g>
-      ${reason
-        ? svg`<text class="tiny" x="${x}" y="${y + h + 16}">${reason}</text>`
-        : nothing}`;
+        <title>${reason ?? 'Prognóza výdrže baterie — historie a 7 dní dopředu'}</title>
+        <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"
+          fill="rgba(14, 24, 34, 0.72)"
+          stroke="rgba(148,170,190,0.4)" stroke-width="1.5"/>
+        ${iconForecast(cx - 64, cy - 15, 30, color)}
+        <text class="back-label" x="${cx - 24}" y="${reason ? cy - 2 : cy + 5}"
+          style="${enabled ? '' : 'fill: rgba(226,240,248,0.45)'}">PROGNÓZA</text>
+        ${reason
+          ? svg`<text class="tiny" x="${cx}" y="${r.y + r.h - 9}" text-anchor="middle">${reason}</text>`
+          : nothing}
+      </g>`;
   }
 
   /**
@@ -769,6 +766,7 @@ export class FveFlowCard extends LitElement {
     const buttons = {
       backButton: !!cfg.back_button?.enabled,
       analysisButton: cfg.analysis?.enabled !== false,
+      forecastButton: !!this._yesterdayLoadEntity(),
     };
     const layout = this._narrow
       ? computeMobileLayout(Math.max(1, floors.length), buttons)
@@ -850,6 +848,7 @@ export class FveFlowCard extends LitElement {
           ${this._nodeMppt(layout.mppt)}
           ${this._nodeBattery(layout.battery, batP, charging, discharging)}
           ${this._nodeInverter(layout.inverter, islandTotal)}
+          ${layout.forecastButton ? this._forecastButton(layout.forecastButton) : nothing}
           ${layout.analysisButton ? this._analysisButton(layout.analysisButton) : nothing}
           ${layout.backButton ? this._backButton(layout.backButton) : nothing}
           ${this._nodeSolcast(layout.solcast)}
@@ -1024,7 +1023,6 @@ export class FveFlowCard extends LitElement {
           ? () => this._openEntity(b.soc, `${b.name || 'Baterie Pylontech'} · SoC`, socColor)
           : undefined,
       )}
-      ${this._forecastChip(r)}
     `;
   }
 
@@ -1417,22 +1415,8 @@ export class FveFlowCard extends LitElement {
       font-weight: 650;
       letter-spacing: 0.03em;
     }
-    .forecast-chip {
-      cursor: pointer;
-    }
-    .forecast-chip.disabled {
+    .forecast-btn.disabled {
       cursor: not-allowed;
-    }
-    .forecast-chip rect {
-      transition: fill 0.15s ease, stroke 0.15s ease;
-    }
-    .forecast-chip:not(.disabled):hover rect {
-      fill: rgba(255, 255, 255, 0.1);
-    }
-    .forecast-label {
-      font-size: 12px;
-      font-weight: 650;
-      letter-spacing: 0.03em;
     }
     .settings-btn {
       cursor: pointer;
@@ -1445,15 +1429,18 @@ export class FveFlowCard extends LitElement {
       stroke: rgba(79, 195, 247, 0.55);
     }
     .back-btn,
-    .analysis-btn {
+    .analysis-btn,
+    .forecast-btn:not(.disabled) {
       cursor: pointer;
     }
     .back-btn > rect:first-of-type,
-    .analysis-btn > rect:first-of-type {
+    .analysis-btn > rect:first-of-type,
+    .forecast-btn > rect:first-of-type {
       transition: fill 0.15s ease, stroke 0.15s ease;
     }
     .back-btn:hover > rect:first-of-type,
-    .analysis-btn:hover > rect:first-of-type {
+    .analysis-btn:hover > rect:first-of-type,
+    .forecast-btn:not(.disabled):hover > rect:first-of-type {
       fill: rgba(255, 255, 255, 0.08);
       stroke: rgba(148, 170, 190, 0.65);
     }
