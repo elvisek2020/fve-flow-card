@@ -49,7 +49,7 @@ class FveFlowForecastDialog extends HTMLElement {
         }
         dialog {
           width: min(560px, calc(100vw - 32px));
-          max-height: calc(100vh - 32px);
+          max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           padding: 0;
           overflow: hidden;
           color: inherit;
@@ -110,7 +110,7 @@ class FveFlowForecastDialog extends HTMLElement {
         .body {
           padding: 16px 22px 22px;
           overflow: auto;
-          max-height: calc(100vh - 100px);
+          max-height: calc(100vh - 100px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
         }
         .meta {
           margin: 0 0 16px;

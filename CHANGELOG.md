@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.8.13 — 2026-10-03
+
+### 🐛 Opravy
+
+- iPhone / aplikace HA: okno **Analýza** už nezasahuje pod stavový řádek
+  (hodiny, signál) ani pod domovskou lištu — respektuje bezpečné okraje displeje.
+- Stejně ohraničená výška oken historie a prognózy.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.8.12 — 2026-10-01
 
 ### 🛠️ Pod kapotou

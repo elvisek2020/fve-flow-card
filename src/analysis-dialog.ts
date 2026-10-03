@@ -1015,6 +1015,9 @@ export class FveFlowAnalysisDialog extends LitElement {
       box-sizing: border-box;
       position: fixed;
       inset: 12px 16px;
+      /* iPhone / HA aplikace: nezasahovat pod stavový řádek a domovskou lištu. */
+      inset: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+        calc(12px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
       margin: auto;
       width: auto;
       min-width: 0;
@@ -1529,6 +1532,8 @@ export class FveFlowAnalysisDialog extends LitElement {
     @media (max-width: 600px) {
       dialog {
         inset: 8px;
+        inset: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px))
+          calc(8px + env(safe-area-inset-bottom, 0px)) calc(8px + env(safe-area-inset-left, 0px));
         border-radius: 16px;
       }
       header {

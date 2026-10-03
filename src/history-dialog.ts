@@ -38,7 +38,7 @@ class FveFlowHistoryDialog extends HTMLElement {
         dialog {
           width: min(920px, calc(100vw - 32px));
           max-width: 920px;
-          max-height: calc(100vh - 32px);
+          max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           padding: 0;
           overflow: hidden;
           color: inherit;
@@ -118,7 +118,7 @@ class FveFlowHistoryDialog extends HTMLElement {
         @media (max-width: 600px) {
           dialog {
             width: calc(100vw - 16px);
-            max-height: calc(100vh - 16px);
+            max-height: calc(100vh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
             border-radius: 16px;
           }
           header {
