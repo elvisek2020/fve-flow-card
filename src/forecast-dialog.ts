@@ -190,18 +190,19 @@ class FveFlowForecastDialog extends HTMLElement {
         tr.future td {
           color: rgba(220, 235, 245, 0.62);
         }
+        /* Stav dne jako výrazný čtvereček (zelená / oranžová / šedá / červená). */
         .dot {
           display: inline-block;
-          width: 9px;
-          height: 9px;
-          border-radius: 50%;
+          width: 13px;
+          height: 13px;
+          border-radius: 3px;
           vertical-align: middle;
         }
-        .dot.ok { background: #69f0ae; box-shadow: 0 0 8px #69f0ae88; }
-        .dot.part { background: #ffb74d; box-shadow: 0 0 8px #ffb74d88; }
+        .dot.ok { background: #00e676; box-shadow: 0 0 10px #00e676aa; }
+        .dot.part { background: #ffa726; box-shadow: 0 0 10px #ffa726aa; }
         .dot.none { background: #90a4ae; }
-        .dot.bad { background: #ff5252; box-shadow: 0 0 8px #ff525288; }
-        tr.past .dot { opacity: 0.45; box-shadow: none; }
+        .dot.bad { background: #ff1744; box-shadow: 0 0 10px #ff1744aa; }
+        tr.past .dot { opacity: 0.6; box-shadow: none; }
         .note {
           margin: 14px 0 0;
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.5));

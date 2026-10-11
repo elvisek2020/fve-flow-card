@@ -5,6 +5,26 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v1.0.0 — 2026-10-11
+
+První stabilní verze. Karta umí všechno, co jsem od ní chtěl:
+
+- animované toky energie z ostrovní FVE a ze sítě do jednotlivých pater a fází,
+- pruh energie baterie v kWh,
+- **Prognózu výdrže** — ranní minimum a jestli / kdy se baterie nabije na 100 %,
+  simulace po 15 minutách na 7 dní,
+- okno **Analýza** — zdroje domu, patra, výroba vs. predikce, heatmapy výroby
+  a SoC, DC bilance a zatížení fází, za 24 h až 90 dní,
+- mini kartu pro hlavní dashboard.
+
+### 🎨 Vzhled
+
+- Stav dne v prognóze jako výraznější **čtvereček** se sytými barvami
+  (zelená = nabije se na 100 %, oranžová = jen částečně, červená = ráno pod prahem).
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.10.2 — 2026-10-11
 
 ### 🎨 Vzhled
