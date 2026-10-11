@@ -5,6 +5,33 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.10.0 — 2026-10-11
+
+### ✨ Novinky
+
+- **Nová prognóza výdrže baterie** — odpovídá na ranní otázku:
+  - nahoře souhrn: jak hluboko baterie v noci klesla, jestli a **kdy se dnes
+    nabije na 100 %** (jinak na kolik) a kolik bude mít **zítra ráno**,
+  - tabulka se sloupci **Ráno** (nejnižší SoC před začátkem nabíjení, s časem)
+    a **Max** (nejvyšší SoC dne, u 100 % čas nabití),
+  - barevná tečka: zelená = nabije se na 100 %, oranžová = jen částečně,
+    šedá = nenabíjí se, červená = ráno pod prahem.
+- Historie (5 dní) ukazuje naměřené ranní minimum a maximum z hodinových
+  statistik SoC.
+
+### 🛠️ Pod kapotou
+
+- Místo denní bilance **simulace SoC po 15 minutách** na 7 dní: výroba podle
+  průběhu dne ze Solcastu (`detailedForecast`) minus hodinový profil odběru
+  z baterie (průměr posledních 7 dní, včetně ztrát měniče).
+
+> [!NOTE]
+> Sloupec „SoC po bilanci“ nahradily sloupce Ráno a Max. Pokud máš baterii
+> v Ah, zkontroluj `battery.nominal_voltage` — kapacita přímo ovlivňuje výsledek.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.9.0 — 2026-10-03
 
 ### ✨ Novinky

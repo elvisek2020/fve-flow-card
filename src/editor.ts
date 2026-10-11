@@ -369,7 +369,7 @@ const HELPERS: Record<string, string> = {
   energy_yesterday:
     'Utility Meter last_period (včerejší kWh). Povinné pro tlačítko Prognóza pod měničem.',
   min_soc_pct:
-    'SoC po bilanci není entita — karta ho počítá: start = aktuální SoC baterie, každý den SoC += (PV − spotřeba) / kapacita × 100 (0–100 %). Pod tímto prahem (%) se hlásí riziko. Výchozí 10 %.',
+    'Prognóza simuluje SoC po 15 min (Solcast − průměrný hodinový odběr). Když ranní minimum (SoC před začátkem nabíjení) spadne pod tento práh (%), den se označí jako riziko. Výchozí 10 %.',
 };
 
 @customElement('fve-flow-card-editor')

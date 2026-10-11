@@ -1,10 +1,8 @@
-import type { BatteryForecastDayResult, BatteryForecastResult } from './battery-forecast';
+import type { BatteryForecastResult, ForecastDayResult } from './battery-forecast';
 import { formatEnergy } from './utils';
 
 export interface ForecastDialogOptions {
   result: BatteryForecastResult;
-  /** Denní spotřeba použitá v modelu (kWh). */
-  dailyLoadKwh: number;
   /** Kapacita v kWh použitá v modelu. */
   capacityKwh: number;
   /** Aktuální SoC %. */
@@ -26,15 +24,68 @@ function formatPv(kwh: number | null): string {
   return formatEnergy(kwh);
 }
 
-/** Past: loadKwh < 0 = chybí data. Forward: vždy ≥ 0. */
-function formatLoad(day: BatteryForecastDayResult): string {
-  if (day.kind === 'past' && day.loadKwh < 0) return '—';
-  return formatEnergy(Math.max(0, day.loadKwh));
+const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: 'numeric', minute: '2-digit' });
+
+/** Čas z historie (už proběhlý) je jen po hodinách → „~7:00“. */
+function formatAt(t: number | null): string {
+  if (t == null) return '';
+  return `${t < Date.now() ? '~' : ''}${fmtTime.format(t)}`;
 }
+
+/** Stav dne: pod prahem / nabije se na 100 % / jen částečně / nenabíjí se. */
+function dayState(day: ForecastDayResult): { cls: string; title: string } {
+  if (day.trough == null) return { cls: '', title: '' };
+  if (day.risk) return { cls: 'bad', title: 'Ráno pod prahem' };
+  if (day.fullAt != null) return { cls: 'ok', title: 'Nabije se na 100 %' };
+  if (day.charges) return { cls: 'part', title: 'Nenabije se na 100 %' };
+  return { cls: 'none', title: 'Nenabíjí se' };
+}
+
+/** Hlavní odpověď nahoře: jak dopadla noc, jestli se dnes nabije a jak bude zítra ráno. */
+function summary(result: BatteryForecastResult): string[] {
+  const today = result.days.find((d) => d.kind === 'today');
+  const tomorrow = result.days.find((d) => d.kind === 'tomorrow');
+  const lines: string[] = [];
+  if (today?.trough != null && today.troughAt != null) {
+    lines.push(
+      today.troughAt <= Date.now()
+        ? `Noc: ranní minimum ${formatSoc(today.trough)} (${formatAt(today.troughAt)}).`
+        : `Ráno ještě klesne na ~${formatSoc(today.trough)} (kolem ${fmtTime.format(today.troughAt)}), pak se začne nabíjet.`,
+    );
+  }
+  if (today) {
+    if (today.fullAt != null) {
+      lines.push(
+        today.fullAt <= Date.now()
+          ? `Dnes už je baterie nabitá na 100 % (od ${formatAt(today.fullAt)}).`
+          : `Dnes se baterie nabije na 100 % kolem ${fmtTime.format(today.fullAt)}.`,
+      );
+    } else if (today.peak != null) {
+      lines.push(`Dnes se nabije jen na ~${formatSoc(today.peak)} (kolem ${fmtTime.format(today.peakAt!)}).`);
+    } else {
+      lines.push('Dnes se baterie podle predikce nenabije — výroba nepřekročí odběr.');
+    }
+  }
+  if (tomorrow?.trough != null) {
+    lines.push(
+      `Zítra ráno ~${formatSoc(tomorrow.trough)}${tomorrow.troughAt != null ? ` (kolem ${fmtTime.format(tomorrow.troughAt)})` : ''}` +
+        (tomorrow.risk ? ` — pod prahem ${formatSoc(result.minSocPct)}!` : '.'),
+    );
+  }
+  return lines;
+}
+
+const SOURCE_TEXT: Record<BatteryForecastResult['loadSource'], string> = {
+  dc: 'průměrný odběr z baterie po hodinách za 7 dní',
+  ac: 'průměrný výstup měniče po hodinách za 7 dní',
+  flat: 'včerejší spotřeba rozložená rovnoměrně',
+};
 
 class FveFlowForecastDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
   private readonly _meta: HTMLParagraphElement;
+  private readonly _summary: HTMLDivElement;
+  private readonly _note: HTMLParagraphElement;
   private readonly _tbody: HTMLTableSectionElement;
 
   public constructor() {
@@ -112,6 +163,26 @@ class FveFlowForecastDialog extends HTMLElement {
           overflow: auto;
           max-height: calc(100vh - 100px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
         }
+        .summary {
+          margin: 0 0 12px;
+          padding: 10px 12px;
+          color: var(--primary-text-color, #e6f4fa);
+          font-size: 14px;
+          line-height: 1.5;
+          background: color-mix(in srgb, var(--dialog-accent) 9%, transparent);
+          border: 1px solid color-mix(in srgb, var(--dialog-accent) 30%, transparent);
+          border-radius: 10px;
+        }
+        .summary p {
+          margin: 0;
+        }
+        td small {
+          display: block;
+          margin-top: 1px;
+          color: rgba(220, 235, 245, 0.45);
+          font-size: 11px;
+          font-weight: 400;
+        }
         .meta {
           margin: 0 0 16px;
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.68));
@@ -187,7 +258,10 @@ class FveFlowForecastDialog extends HTMLElement {
           vertical-align: middle;
         }
         .dot.ok { background: #69f0ae; box-shadow: 0 0 8px #69f0ae88; }
+        .dot.part { background: #ffb74d; box-shadow: 0 0 8px #ffb74d88; }
+        .dot.none { background: #90a4ae; }
         .dot.bad { background: #ff5252; box-shadow: 0 0 8px #ff525288; }
+        tr.past .dot { opacity: 0.45; box-shadow: none; }
         .note {
           margin: 14px 0 0;
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.5));
@@ -202,6 +276,7 @@ class FveFlowForecastDialog extends HTMLElement {
           <button type="button" class="close" aria-label="Zavřít">×</button>
         </header>
         <div class="body">
+          <div class="summary"></div>
           <p class="meta"></p>
           <table>
             <thead>
@@ -209,23 +284,22 @@ class FveFlowForecastDialog extends HTMLElement {
                 <th>Den</th>
                 <th>Výroba</th>
                 <th>Spotřeba</th>
-                <th>SoC po bilanci</th>
+                <th title="Nejnižší SoC, než se baterie začne nabíjet">Ráno</th>
+                <th title="Nejvyšší SoC dne, u 100 % čas nabití">Max</th>
                 <th></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
-          <p class="note">
-            Hrubý denní model: SoC += (výroba − spotřeba) / kapacita × 100.
-            SoC po bilanci = očekávaná hladina, kdy denní výroba dožene spotřebu (ne SoC večer).
-            Šedé řádky = naměřená historie.
-          </p>
+          <p class="note"></p>
         </div>
       </dialog>
     `;
 
     this._dialog = root.querySelector('dialog')!;
     this._meta = root.querySelector('.meta')!;
+    this._summary = root.querySelector('.summary')!;
+    this._note = root.querySelector('.note')!;
     this._tbody = root.querySelector('tbody')!;
     root.querySelector('.close')!.addEventListener('click', () => this._dialog.close());
     this._dialog.addEventListener('click', (event) => {
@@ -237,29 +311,47 @@ class FveFlowForecastDialog extends HTMLElement {
   public show(options: ForecastDialogOptions): void {
     if (options.accent) this.style.setProperty('--dialog-accent', options.accent);
     const { result } = options;
+    this._summary.replaceChildren(
+      ...summary(result).map((line) => {
+        const p = document.createElement('p');
+        p.textContent = line;
+        return p;
+      }),
+    );
     this._meta.textContent =
       `Teď ${formatSoc(options.socNow)} · kapacita ${nf1.format(options.capacityKwh)} kWh` +
-      ` · spotřeba ${formatEnergy(options.dailyLoadKwh)}/den · práh ${formatSoc(result.minSocPct)}`;
+      ` · odběr ~${formatEnergy(result.dailyLoadKwh)}/den · práh ${formatSoc(result.minSocPct)}`;
+    this._note.textContent =
+      `Simulace SoC po 15 minutách: výroba podle Solcastu (průběh dne) − ${SOURCE_TEXT[result.loadSource]}. ` +
+      'Ráno = nejnižší SoC, než se baterie začne nabíjet. Max = nejvyšší SoC dne (u 100 % čas nabití). ' +
+      'Šedé řádky = naměřená historie (po hodinách).';
 
     this._tbody.replaceChildren();
     for (const day of result.days) {
       const tr = document.createElement('tr');
       tr.classList.add(day.kind);
-      if (day.kind !== 'past' && day.risk) tr.classList.add('risk');
-
-      const isPast = day.kind === 'past';
-      const loadDisplay = formatLoad(day);
-      const socDisplay = isPast ? '—' : formatSoc(day.socEnd);
-      const dotHtml = isPast
-        ? ''
-        : `<span class="dot ${day.risk ? 'bad' : 'ok'}" title="${day.risk ? 'Riziko' : 'OK'}"></span>`;
-
+      if (day.risk) tr.classList.add('risk');
+      const state = dayState(day);
+      const loadText = day.loadKwh == null ? '—' : formatEnergy(Math.max(0, day.loadKwh));
+      const trough =
+        day.trough == null
+          ? '—'
+          : `${escapeHtml(formatSoc(day.trough))}<small>${escapeHtml(formatAt(day.troughAt))}</small>`;
+      const max =
+        day.peak == null
+          ? day.trough == null
+            ? '—'
+            : '<small>nenabíjí</small>'
+          : `${escapeHtml(formatSoc(day.fullAt != null ? 100 : day.peak))}<small>${escapeHtml(
+              formatAt(day.fullAt ?? day.peakAt),
+            )}</small>`;
       tr.innerHTML = `
         <td>${escapeHtml(day.label)}</td>
         <td class="${day.pvKwh == null ? 'muted' : ''}">${escapeHtml(formatPv(day.pvKwh))}</td>
-        <td class="${loadDisplay === '—' ? 'muted' : ''}">${escapeHtml(loadDisplay)}</td>
-        <td class="${isPast ? 'muted' : ''}">${escapeHtml(socDisplay)}</td>
-        <td>${dotHtml}</td>
+        <td class="${loadText === '—' ? 'muted' : ''}">${escapeHtml(loadText)}</td>
+        <td>${trough}</td>
+        <td>${max}</td>
+        <td>${state.cls ? `<span class="dot ${state.cls}" title="${state.title}"></span>` : ''}</td>
       `;
       this._tbody.append(tr);
     }

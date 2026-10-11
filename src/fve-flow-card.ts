@@ -30,12 +30,20 @@ import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialo
 import { C, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import {
+  analyzeDays,
+  buildLoadProfile,
   capacityToKwh,
-  computeBatteryForecast,
   forecastDayLabels,
-  makePastForecastDay,
+  forwardKind,
+  measuredPoints,
   pastDayLabels,
+  pvPeriodsForDay,
+  simulatePoints,
+  type ForecastDay,
+  type PvPeriod,
 } from './battery-forecast';
+import { parseDetailed } from './analysis-data';
+import { fetchStats, type RowMap } from './analysis-stats';
 import { fetchDailyEnergyKwh, fetchYesterdaySensorKwh, localDayKeyOffset } from './daily-stats';
 import {
   formatEnergy,
@@ -596,6 +604,14 @@ export class FveFlowCard extends LitElement {
     return null;
   }
 
+  /** Entita Solcastu pro den (0 = dnes … 6) — nese i atribut detailedForecast. */
+  private _solcastDayEntity(dayIndex: number): string | undefined {
+    const s = this._config?.solcast;
+    return [s?.total_today, s?.total_tomorrow, s?.total_day3, s?.total_day4, s?.total_day5, s?.total_day6, s?.total_day7][
+      dayIndex
+    ];
+  }
+
   private _solcastDayKwh(dayIndex: number): number | null {
     const s = this._config?.solcast;
     if (!s) return null;
@@ -630,60 +646,98 @@ export class FveFlowCard extends LitElement {
     this._forecastOpening = true;
     try {
       const cfg = this._config!;
+      const b = cfg.battery!;
       const pastDays = 5;
-      const socNow = toNum(this.hass, cfg.battery!.soc);
+      const now = Date.now();
+      const socNow = toNum(this.hass, b.soc);
       const capacityKwh = this._batteryCapacityKwh();
       const yesterdayId = this._yesterdayLoadEntity()!;
-      const dailyLoadKwh = toNum(this.hass, yesterdayId);
       const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
-      const labels = forecastDayLabels();
-      const forwardInput = labels.map((label, i) => ({
-        label,
-        pvKwh: this._solcastDayKwh(i),
-      }));
 
-      // Historie spotřeby: denní meter (LTS change/state), jinak „včerejší“
-      // entita — ta má hodnoty o den posunuté, proto vlastní načtení.
+      // Dny: 5 zpět (historie) + dnes … +6 (predikce), hranice v místním čase.
+      const midnight = (offset: number) => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + offset);
+        return d.getTime();
+      };
+      const pastLabels = pastDayLabels(pastDays);
+      const fwdLabels = forecastDayLabels();
+
+      // Hodinové statistiky za 7 dní: profil odběru + naměřené SoC historie.
+      const ids = [cfg.pv?.power, b.power, cfg.inverter?.power, b.soc].filter((x): x is string => !!x);
       const todayLoadId = this._todayLoadEntity();
-      const [pvStats, loadStats] = await Promise.all([
+      const [rows, pvStats, loadStats] = await Promise.all([
+        fetchStats(this.hass!, ids, midnight(-7), now, 'hour', ['mean', 'min', 'max']).catch((): RowMap => new Map()),
         fetchDailyEnergyKwh(this.hass, cfg.pv?.energy_today, pastDays),
         todayLoadId
           ? fetchDailyEnergyKwh(this.hass, todayLoadId, pastDays)
           : fetchYesterdaySensorKwh(this.hass, yesterdayId, pastDays),
       ]);
-
-      const pastLabels = pastDayLabels(pastDays);
-      const pastRows = pastLabels.map((label, i) => {
-        const offset = -(pastDays - i);
-        const key = localDayKeyOffset(offset);
-        const pv = pvStats.has(key) ? pvStats.get(key)! : null;
-        const load = loadStats.has(key) ? loadStats.get(key)! : null;
-        return makePastForecastDay(label, pv, load);
+      const sign = b.invert ? -1 : 1;
+      const batRows = b.power
+        ? (rows.get(b.power) ?? []).map((r) => ({ ...r, mean: r.mean == null ? null : r.mean * sign }))
+        : undefined;
+      // Profil jen z celých dní (bez dneška), ať ho neovlivní rozjetý den.
+      const fullDays = <T extends { start: number }>(list?: T[]) => list?.filter((r) => r.start < midnight(0));
+      const { profile, source } = buildLoadProfile({
+        pv: fullDays(cfg.pv?.power ? rows.get(cfg.pv.power) : undefined),
+        battery: fullDays(batRows),
+        inverter: fullDays(cfg.inverter?.power ? rows.get(cfg.inverter.power) : undefined),
+        fallbackDailyKwh: toNum(this.hass, yesterdayId),
       });
+      const dailyLoadKwh = profile.reduce((a, w) => a + w, 0) / 1000;
 
-      const forward = computeBatteryForecast({
-        socNow,
-        capacityKwh,
-        dailyLoadKwh,
-        minSocPct,
-        days: forwardInput,
+      // Výroba po intervalech: detailedForecast každého dne (bez něj tvar z jiného dne).
+      const detailed = fwdLabels.map((_, i) => {
+        const id = this._solcastDayEntity(i);
+        const attr = id ? this.hass!.states[id]?.attributes.detailedForecast : undefined;
+        return parseDetailed(attr, midnight(i), midnight(i + 1)).map(
+          (p): PvPeriod => ({ start: p.start, end: p.end, w: p.p50 }),
+        );
       });
+      const template = detailed.find((d) => d.length) ?? null;
+      const pv = fwdLabels.flatMap((_, i) => pvPeriodsForDay(midnight(i), this._solcastDayKwh(i), detailed[i], template));
 
-      const result = {
-        ...forward,
-        days: [...pastRows, ...forward.days],
-        firstRiskDayIndex:
-          forward.firstRiskDayIndex == null
-            ? null
-            : forward.firstRiskDayIndex + pastRows.length,
-      };
+      const days: ForecastDay[] = [
+        ...pastLabels.map((label, i) => {
+          const key = localDayKeyOffset(-(pastDays - i));
+          return {
+            label,
+            kind: 'past' as const,
+            start: midnight(-(pastDays - i)),
+            end: midnight(-(pastDays - i) + 1),
+            pvKwh: pvStats.has(key) ? pvStats.get(key)! : null,
+            loadKwh: loadStats.has(key) ? loadStats.get(key)! : null,
+          };
+        }),
+        ...fwdLabels.map((label, i) => ({
+          label,
+          kind: forwardKind(i),
+          start: midnight(i),
+          end: midnight(i + 1),
+          pvKwh: this._solcastDayKwh(i),
+          loadKwh: dailyLoadKwh,
+        })),
+      ];
+
+      // Časová osa: naměřené hodiny do teď + simulace od teď do konce 7. dne.
+      const measured = measuredPoints(rows.get(b.soc!) ?? [], batRows).filter((p) => p.t < now);
+      const simulated = simulatePoints({ now, socNow, capacityKwh, pv, profileW: profile, until: midnight(7) });
+      const result = analyzeDays(days, [...measured, ...simulated], minSocPct);
+      const fwd = result.filter((d) => d.kind !== 'past');
 
       openForecastDialog({
-        result,
-        dailyLoadKwh,
+        result: {
+          days: result,
+          minSocPct,
+          ok: fwd.every((d) => !d.risk),
+          loadSource: source,
+          dailyLoadKwh,
+        },
         capacityKwh,
         socNow,
-        accent: result.ok ? C.ok : C.crit,
+        accent: fwd.some((d) => d.risk) ? C.crit : fwd[0]?.fullAt != null ? C.ok : C.warn,
       });
     } finally {
       this._forecastOpening = false;

@@ -14,7 +14,7 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
   mrtvá linka pod prahem zešedne
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
-- Prognóza výdrže baterie (tlačítko pod měničem) — 5 dní historie + 7denní predikce (Solcast − spotřeba)
+- Prognóza výdrže baterie (tlačítko pod měničem) — jak baterie přežila noc, jestli a kdy se dnes nabije na 100 % a jak bude ráno dalších 7 dní (simulace po 15 min ze Solcastu a profilu odběru)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast s heatmapou po hodinách, DC bilance MPPT ·
   baterie · střídač, baterie vs. spotřeba a zatížení fází pro dimenzování
@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.9.0`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.10.0`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -230,21 +230,25 @@ Poznámky:
   (jen když je vyplněné `inverter.energy_yesterday`, případně legacy
   `forecast.daily_load_entity`; bez SoC, kapacity nebo Solcastu je ztlumené
   a ukáže, co chybí) otevře modal:
+  - **Nahoře odpověď na ranní otázku:** jak hluboko baterie v noci klesla
+    (ranní minimum), jestli se dnes nabije na 100 % a kdy (jinak na kolik)
+    a kolik bude mít zítra ráno.
+  - **Tabulka po dnech** — sloupce **Ráno** (nejnižší SoC, než se baterie
+    začne nabíjet, s časem) a **Max** (nejvyšší SoC dne, u 100 % čas nabití).
+    Tečka: zelená = nabije se na 100 %, oranžová = jen částečně, šedá =
+    nenabíjí se, červená = ráno pod prahem `forecast.min_soc_pct`.
   - **5 dní naměřené historie** (šedé řádky): výroba z `pv.energy_today`,
-    spotřeba z `inverter.energy_today` (denní Utility Meter s LTS). Bez něj
-    se historie dopočítá z včerejší entity (`inverter.energy_yesterday`):
-    její hodnota během dne X patří dni X−1, včerejšek bere aktuální stav.
-    SoC po bilanci u historie = „—“.
-  - **7denní predikce**: Solcast (`total_today` / zítra / D3–D7) − včerejší
-    spotřeba → SoC po bilanci. Řádek **Dnes** bere celodenní
-    `solcast.total_today`, ne `remaining_today` (v noci by zbývalo 0 kWh).
-  - SoC po bilanci = očekávaná hladina z denního rozpočtu (kdy výroba dožene
-    spotřebu), ne SoC večer.
-  - **Poznámka:** SoC po bilanci **není entita** — karta ho **počítá** sama:
-    start = aktuální `battery.soc`, každý den
-    `SoC += (PV − spotřeba) / capacity × 100` (clamp 0–100 %).
-    Z Home Assistant bere jen vstupy (SoC teď, kapacita, Solcast kWh,
-    spotřeba), ne predikovaný SoC senzor.
+    spotřeba z `inverter.energy_today` (jinak z včerejší entity), Ráno / Max
+    z hodinových statistik SoC (časy „~“ po hodinách).
+  - **7 dní dopředu = simulace SoC po 15 minutách** od teď: výroba podle
+    průběhu dne ze Solcastu (atribut `detailedForecast` u `total_today`,
+    zítra a D3–D7; bez něj se tvar půjčí z jiného dne) minus **hodinový
+    profil odběru** — průměr za posledních 7 celých dní z výroby − nabíjení
+    baterie (= skutečný odběr z baterie včetně ztrát měniče), jinak výstup
+    měniče, jinak včerejší spotřeba rozložená rovnoměrně. SoC se ořezává
+    na 0–100 % (přebytek při plné baterii propadne).
+  - Je to model, ne měření: přesnost stojí na predikci Solcastu (p50)
+    a na tom, že dnešní odběr bude podobný průměru posledních dní.
   - Potřebuješ `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče
     a aspoň Solcast dnes/zítra. Pro historickou spotřebu ideálně i
     `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes
@@ -432,10 +436,11 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
   nativní HA historie.
 - Export do gridu se nevizualizuje (ostrovní systém nedodává do sítě).
 - Fáze jsou max. 3 na patro (A/B/C dle Shelly 3EM).
-- Prognóza je hrubý denní model (PV − spotřeba); nepočítá denní průběh ani grid.
-  Bez long-term statistics u `pv.energy_today` / `inverter.energy_today` jsou
-  historické řádky (až 5 dní) u výroby nebo spotřeby prázdné (`—`).
-- SoC po bilanci u historických dní se nezobrazuje (jen u predikce).
+- Prognóza je model: Solcast p50 a průměrný hodinový odběr posledních 7 dní;
+  nepočítá s gridem ani s tím, že se dnes spotřeba výrazně liší. Bez long-term
+  statistics u výkonu FVE / baterie spadne profil odběru na výstup měniče nebo
+  na rovnoměrně rozloženou včerejší spotřebu. Historické řádky bez statistik
+  jsou prázdné (`—`).
 - Analýza stojí na dlouhodobých statistikách HA: 5min data drží recorder
   standardně ~10 dní, starší dny jsou hodinové (špičky fází a nabíjení /
   vybíjení baterie jsou tam hrubší). Krátké rázy pod 5 min statistiky vyhlazují.
