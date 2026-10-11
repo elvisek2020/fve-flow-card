@@ -735,8 +735,6 @@ export class FveFlowCard extends LitElement {
           loadSource: source,
           dailyLoadKwh,
         },
-        capacityKwh,
-        socNow,
         accent: fwd.some((d) => d.risk) ? C.crit : fwd[0]?.fullAt != null ? C.ok : C.warn,
       });
     } finally {

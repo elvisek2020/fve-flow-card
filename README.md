@@ -57,7 +57,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.10.0`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=0.10.1`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace
@@ -230,10 +230,9 @@ Poznámky:
   (jen když je vyplněné `inverter.energy_yesterday`, případně legacy
   `forecast.daily_load_entity`; bez SoC, kapacity nebo Solcastu je ztlumené
   a ukáže, co chybí) otevře modal:
-  - **Nahoře odpověď na ranní otázku:** jak hluboko baterie v noci klesla
-    (ranní minimum), jestli se dnes nabije na 100 % a kdy (jinak na kolik)
-    a kolik bude mít zítra ráno.
-  - **Tabulka po dnech** — sloupce **Ráno** (nejnižší SoC, než se baterie
+  - **Tabulka po dnech** odpovídá na ranní otázku — jak hluboko baterie
+    v noci klesla, jestli a kdy se dnes nabije na 100 % a kolik bude mít
+    zítra ráno. Sloupce **Ráno** (nejnižší SoC, než se baterie
     začne nabíjet, s časem) a **Max** (nejvyšší SoC dne, u 100 % čas nabití).
     Tečka: zelená = nabije se na 100 %, oranžová = jen částečně, šedá =
     nenabíjí se, červená = ráno pod prahem `forecast.min_soc_pct`.

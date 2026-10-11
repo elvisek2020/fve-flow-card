@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v0.10.1 — 2026-10-11
+
+### 🎨 Vzhled
+
+- Prognóza výdrže: bez souhrnného textu a řádku „Teď · kapacita · odběr ·
+  práh“ nahoře — pod nadpisem je rovnou tabulka.
+- Poznámka pod tabulkou rozdělená po větách na samostatné řádky.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache, případně zvyš `?v=` u resource.
+
 ## v0.10.0 — 2026-10-11
 
 ### ✨ Novinky
