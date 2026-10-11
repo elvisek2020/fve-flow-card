@@ -256,7 +256,6 @@ class FveFlowForecastDialog extends HTMLElement {
         `Simulace SoC po 15 minutách: výroba podle Solcastu (průběh dne) − ${SOURCE_TEXT[result.loadSource]}.`,
         'Ráno = nejnižší SoC, než se baterie začne nabíjet.',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
-        'Šedé řádky = naměřená historie (po hodinách).',
       ].map((text) => {
         const line = document.createElement('p');
         line.textContent = text;
