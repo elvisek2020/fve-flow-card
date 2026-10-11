@@ -6,6 +6,8 @@ export interface FlowOptions {
   power: number;
   /** Barva aktivní linky a teček. */
   color: string;
+  /** Vlastní barva teček (linka zůstává v `color`). */
+  dotColor?: string;
   /** Obrácený směr (tečky poběží od konce cesty k začátku). */
   reverse?: boolean;
   /** Pod tímto výkonem je linka „dormant" — šedá, bez teček. */
@@ -50,14 +52,15 @@ export function renderFlow(id: string, d: string, opts: FlowOptions): TemplateRe
   const dur = flowDuration(Math.abs(opts.power), opts.maxPower, opts.minDuration, opts.maxDuration);
   const keyPoints = opts.reverse ? '1;0' : '0;1';
   const n = Math.max(1, opts.dots);
+  const dotColor = opts.dotColor ?? opts.color;
 
   const dots: TemplateResult[] = [];
   for (let i = 0; i < n; i++) {
     // Fázový posun teček přes záporný begin → souvislý „proud" světel.
     const begin = -((i * dur) / n).toFixed(2);
     dots.push(svg`
-      <circle cx="0" cy="0" r="5" fill="${opts.color}"
-        style="filter: drop-shadow(0 0 6px ${opts.color})">
+      <circle cx="0" cy="0" r="5" fill="${dotColor}"
+        style="filter: drop-shadow(0 0 6px ${dotColor})">
         <animateMotion dur="${dur}s" begin="${begin}s" repeatCount="indefinite"
           keyPoints="${keyPoints}" keyTimes="0;1" calcMode="linear">
           <mpath href="#${pathId}"/>

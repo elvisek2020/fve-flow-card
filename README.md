@@ -12,7 +12,10 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
 - Gridová větev: AC-IN (Shelly) → patra, každé patro s pojmenovanými fázemi
   (L1 = Pračka, L2 = Sušička, ...)
 - Světelné pulzy po vodičích — rychlost úměrná výkonu, směr podle znaménka,
-  mrtvá linka pod prahem zešedne
+  mrtvá linka pod prahem zešedne. Tečky k jednotlivým patrům mají každá svůj
+  odstín (ostrov zelená / žlutá / oranžová / bílá, síť v modrých tónech), takže
+  je vidět, která kam putuje. Když tečka do patra dorazí, okraj patra jemně
+  zapulzuje její barvou (nejvýš zhruba jednou za 5 s, při vypnuté animaci ne)
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
 - Prognóza výdrže baterie (tlačítko pod měničem) — jak baterie přežila noc, jestli a kdy se dnes nabije na 100 % a jak bude ráno dalších 7 dní (simulace po 15 min ze Solcastu a profilu odběru)
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
@@ -57,7 +60,7 @@ z GitHub releases.
 1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
 2. Zkopíruj do `/config/www/`
 3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=1.0.0`), typ **JavaScript module**
+   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=1.1.0`), typ **JavaScript module**
    (číslo verze zvyšuj při každé aktualizaci kvůli cache)
 
 ## Konfigurace

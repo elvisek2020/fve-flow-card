@@ -27,7 +27,7 @@ import {
 } from './icons';
 import { openConfirmDialog } from './confirm-dialog';
 import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
-import { C, NEUTRAL } from './palette';
+import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import {
   analyzeDays,
@@ -46,6 +46,7 @@ import { parseDetailed } from './analysis-data';
 import { fetchStats, type RowMap } from './analysis-stats';
 import { fetchDailyEnergyKwh, fetchYesterdaySensorKwh, localDayKeyOffset } from './daily-stats';
 import {
+  flowDuration,
   formatEnergy,
   formatEnergyEntity,
   formatPower,
@@ -889,14 +890,22 @@ export class FveFlowCard extends LitElement {
             const p = f.island_power && hasNum(this.hass, f.island_power)
               ? toNum(this.hass, f.island_power)
               : islandTotal;
-            return flow(`island-${i}`, d, { power: p, color: C.island });
+            return flow(`island-${i}`, d, {
+              power: p,
+              color: C.island,
+              dotColor: FLOOR_DOTS.island[i % FLOOR_DOTS.island.length],
+            });
           })}
           ${layout.paths.gridTaps.map((d, i) => {
             // Patro bez gridové větve (jen FVE) nemá spoj ze sítě; trunk tak
             // končí u posledního patra, které síť opravdu má.
             const f = floors[i];
             if (!f || !this._floorHasGrid(f)) return nothing;
-            return flow(`grid-${i}`, d, { power: this._floorGridPower(f), color: C.grid });
+            return flow(`grid-${i}`, d, {
+              power: this._floorGridPower(f),
+              color: C.grid,
+              dotColor: FLOOR_DOTS.grid[i % FLOOR_DOTS.grid.length],
+            });
           })}
 
           <!-- Uzly -->
@@ -910,6 +919,17 @@ export class FveFlowCard extends LitElement {
           ${this._nodeSolcast(layout.solcast)}
           ${this._nodeGrid(layout.grid, gridTotal, gridKnown)}
           ${layout.floors.map((r, i) => (floors[i] ? this._nodeFloor(r, floors[i]) : nothing))}
+          ${layout.floors.map((r, i) => {
+            // Okraj patra jemně zapulzuje barvou tečky, která do něj právě dorazila.
+            const f = floors[i];
+            if (!f) return nothing;
+            const islandP = f.island_power && hasNum(this.hass, f.island_power) ? toNum(this.hass, f.island_power) : islandTotal;
+            return svg`
+              ${this._arrivalPulse(r, islandP, FLOOR_DOTS.island[i % FLOOR_DOTS.island.length])}
+              ${this._floorHasGrid(f)
+                ? this._arrivalPulse(r, this._floorGridPower(f), FLOOR_DOTS.grid[i % FLOOR_DOTS.grid.length])
+                : nothing}`;
+          })}
         </svg>
       </ha-card>
     `;
@@ -922,6 +942,27 @@ export class FveFlowCard extends LitElement {
         fill="rgba(14, 24, 34, 0.72)"
         stroke="${accent}" stroke-opacity="${active ? 0.5 : 0.18}" stroke-width="1.5"
         style="${active ? `filter: drop-shadow(0 0 10px ${accent}40)` : ''}"/>`;
+  }
+
+  /**
+   * Jemný puls okraje patra v barvě tečky ve chvíli, kdy tečka dorazí.
+   * Tečka 0 doběhne na konec cesty v násobcích `dur` (SMIL časová osa dokumentu),
+   * puls běží na začátku cyklu T = k × dur — nejvýš zhruba jednou za 5 s.
+   */
+  private _arrivalPulse(r: Rect, power: number, color: string): TemplateResult | typeof nothing {
+    const base = this._flowBase();
+    if (!base.animate || Math.abs(power) < base.deadband) return nothing;
+    const dur = flowDuration(Math.abs(power), base.maxPower, base.minDuration, base.maxDuration);
+    const period = dur * Math.max(1, Math.ceil(5 / dur));
+    // Jeden pomalý, jemný záblesk: náběh 0,6 s, dozvuk 0,9 s.
+    const marks = [0, 0.6, 1.5].map((t) => (t / period).toFixed(4));
+    return svg`
+      <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="18" fill="none"
+        stroke="${color}" stroke-width="2" stroke-opacity="0" pointer-events="none"
+        style="filter: drop-shadow(0 0 6px ${color})">
+        <animate attributeName="stroke-opacity" values="0;0.65;0;0"
+          keyTimes="${marks.join(';')};1" dur="${period}s" begin="0s" repeatCount="indefinite"/>
+      </rect>`;
   }
 
   /** Tenký progress bar na spodní hraně uzlu (pozice hodnoty v rozsahu prahů). */

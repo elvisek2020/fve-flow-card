@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v1.1.0 — 2026-10-11
+
+### ✨ Novinky
+
+- **Barevné tečky k patrům** — tečky, které putují od měniče a ze sítě do
+  jednotlivých pater, mají každá svůj odstín (ostrov zelená / žlutá / oranžová /
+  bílá, síť v modrých tónech). Je vidět, která kam jde.
+- Když tečka do patra dorazí, **okraj patra jemně zapulzuje** její barvou
+  (nejvýš zhruba jednou za 5 s, při vypnuté animaci ne).
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v1.0.0 — 2026-10-11
 
 První stabilní verze. Karta umí všechno, co jsem od ní chtěl:
