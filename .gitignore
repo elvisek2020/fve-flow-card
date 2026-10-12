@@ -5,3 +5,6 @@ node_modules/
 # lokální deník práce, synchronizuje se přes iCloud
 _docs/
 .cursor/
+
+# instrukce pro Claude Code (lokální)
+CLAUDE.md
