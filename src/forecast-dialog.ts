@@ -42,6 +42,17 @@ const SOURCE_TEXT: Record<BatteryForecastResult['loadSource'], string> = {
   flat: 'včerejší spotřeba rozložená rovnoměrně',
 };
 
+/** Vysvětlení, odkud je budoucí spotřeba (proč se liší od minulých dnů). */
+const LOAD_TEXT: Record<BatteryForecastResult['loadSource'], string> = {
+  dc:
+    'Budoucí spotřeba je průměrný odběr z baterie za posledních 7 dní (včetně ztrát měniče) — ' +
+    'nerozlišuje všední den a víkend a může se lišit od naměřené spotřeby domu v minulých dnech.',
+  ac:
+    'Budoucí spotřeba je průměrný výstup měniče za posledních 7 dní — ' +
+    'nerozlišuje všední den a víkend a nepočítá se ztrátami měniče.',
+  flat: 'Budoucí spotřeba je včerejší spotřeba domu, rozložená rovnoměrně do celého dne.',
+};
+
 class FveFlowForecastDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
   private readonly _note: HTMLDivElement;
@@ -257,6 +268,7 @@ class FveFlowForecastDialog extends HTMLElement {
         `Simulace SoC po 15 minutách: výroba podle Solcastu (průběh dne) − ${SOURCE_TEXT[result.loadSource]}.`,
         'Ráno = nejnižší SoC, než se baterie začne nabíjet.',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
+        LOAD_TEXT[result.loadSource],
       ].map((text) => {
         const line = document.createElement('p');
         line.textContent = text;

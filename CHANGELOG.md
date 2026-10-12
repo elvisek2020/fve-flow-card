@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v1.1.1 — 2026-10-12
+
+### 🎨 Vzhled
+
+- Poznámka pod prognózou výdrže vysvětluje, odkud je budoucí spotřeba —
+  průměrný odběr z baterie za posledních 7 dní (včetně ztrát měniče),
+  bez rozlišení všedního dne a víkendu.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v1.1.0 — 2026-10-11
 
 ### ✨ Novinky
