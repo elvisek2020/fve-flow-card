@@ -1,5 +1,6 @@
 {
   "name": "Hybrid Energy Flow Card",
   "render_readme": true,
-  "filename": "fve-flow-card.js"
+  "filename": "fve-flow-card.js",
+  "homeassistant": "2026.10.0"
 }

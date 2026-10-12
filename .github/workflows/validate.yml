@@ -5,13 +5,17 @@ on:
   pull_request:
   schedule:
     - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: hacs/action@main
         with:
           category: plugin
@@ -20,8 +24,8 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

@@ -1,5 +1,12 @@
 # Hybrid Energy Flow Card
 
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![Release](https://img.shields.io/github/v/release/elvisek2020/fve-flow-card)](https://github.com/elvisek2020/fve-flow-card/releases)
+[![Validate](https://github.com/elvisek2020/fve-flow-card/actions/workflows/validate.yml/badge.svg)](https://github.com/elvisek2020/fve-flow-card/actions/workflows/validate.yml)
+[![Licence](https://img.shields.io/github/license/elvisek2020/fve-flow-card)](LICENSE)
+
+[![Otevřít v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=elvisek2020&repository=fve-flow-card&category=plugin)
+
 Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na míru
 **hybridní instalaci**: ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.
 
@@ -48,12 +55,12 @@ názvech, funguje s čímkoli, co vrací čísla ve W / kWh / %.
 ### HACS (doporučeno)
 
 1. HACS → tři tečky vpravo nahoře → **Custom repositories**
-2. Vlož URL tohoto repozitáře, kategorie **Dashboard** (Lovelace)
-3. Pro vlastní grafy nainstaluj z HACS také **ApexCharts Card**
-4. Nainstaluj **Hybrid Energy Flow Card** a reloadni prohlížeč
+2. Vlož URL `https://github.com/elvisek2020/fve-flow-card`, kategorie **Dashboard**
+3. Nainstaluj **Hybrid Energy Flow Card** (pro vlastní grafy z HACS i **ApexCharts Card**)
+4. Obnov stránku prohlížeče bez cache.
 
-HACS řeší registraci resource i cache-busting automaticky; updaty se nabízejí
-z GitHub releases.
+HACS nabízí aktualizace z GitHub releases a sám řeší registraci resource
+i cache-busting.
 
 ### Ručně
 
@@ -425,12 +432,14 @@ npm run typecheck
 Lokální test v HA: zkopíruj `dist/fve-flow-card.js` do `/config/www/`
 a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli cache).
 
-## Release checklist
+## Vydání verze
 
-1. Zvedni `version` v `package.json` (SemVer)
-2. `git commit` + `git tag vX.Y.Z` + `git push --tags`
-3. GitHub Actions zbuildí kartu a přiloží `fve-flow-card.js` k release
-4. HACS nabídne update automaticky
+1. Zvedni `version` v `package.json` (SemVer) — jediný zdroj verze.
+2. Doplň nahoru do `CHANGELOG.md` sekci `## vX.Y.Z — RRRR-MM-DD`; z ní vznikne text
+   vydání, který HA / HACS ukazuje v okně aktualizace.
+3. Commit `Release vX.Y.Z: krátký popis`, `git tag vX.Y.Z`, push commitu i tagu.
+4. Workflow **Release** zbuildí kartu, přiloží `fve-flow-card.js` a založí release.
+   HACS nabídne aktualizaci.
 
 ## Známá omezení
 
