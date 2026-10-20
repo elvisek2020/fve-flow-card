@@ -1,5 +1,23 @@
 import type { HomeAssistant, SeverityFields } from './types';
 
+/**
+ * Registrace elementu jen jednou (náhrada `@customElement`). Kdyby se bundle
+ * načetl dvakrát (Lovelace resource + starý odkaz v cache), druhé `define`
+ * by vyhodilo výjimku a modul by spadl.
+ */
+export const defineOnce =
+  (tag: string) =>
+  (cls: CustomElementConstructor): void => {
+    if (!customElements.get(tag)) customElements.define(tag, cls);
+  };
+
+/** Přidá kartu do výběru karet, jen pokud tam ještě není. */
+export function registerCustomCard(card: { type: string } & Record<string, unknown>): void {
+  const w = window as unknown as { customCards?: Array<Record<string, unknown>> };
+  w.customCards = w.customCards || [];
+  if (!w.customCards.some((c) => c.type === card.type)) w.customCards.push(card);
+}
+
 export const SEVERITY_COLORS = {
   red: '#ff5252',
   yellow: '#ffd740',

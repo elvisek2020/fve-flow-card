@@ -5,6 +5,21 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.6 — 2026-10-20
+
+### 🐛 Opravy
+
+- Karty se po obnovení stránky (hlavně bez cache) občas nenačetly a dashboard
+  ukázal „Custom element doesn't exist: fve-flow-mini-card“. Integrace teď kartu
+  registruje jako **zdroj dashboardů** (Lovelace resource), který se načítá
+  před kartami; při aktualizaci přepíše verzi v adrese a po odebrání integrace
+  zdroj smaže. V YAML režimu dashboardů zůstává doplňkový modul frontendu.
+- Kdyby se bundle karet načetl dvakrát, už nespadne na opakované registraci
+  elementů.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.5 — 2026-10-20
 
 ### 🎨 Vzhled

@@ -1,7 +1,7 @@
 import { LitElement, html, css, svg, nothing, type PropertyValues, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import type { FveFlowMiniCardConfig, HomeAssistant } from './types';
-import { formatPower, formatPowerEntity, formatState, hasNum, moreInfo, severityColor, toNum } from './utils';
+import { defineOnce, formatPower, formatPowerEntity, formatState, hasNum, moreInfo, registerCustomCard, severityColor, toNum } from './utils';
 import { fetchHistory, type HistoryPoint } from './sparkline';
 import { renderArcGauge } from './gauge';
 import { renderMiniChart } from './mini-chart';
@@ -22,7 +22,7 @@ const HISTORY_REFRESH_MS = 5 * 60 * 1000;
  * Klik kamkoli na kartu naviguje na velký `fve-flow-card` dashboard
  * (bez `navigation_path` otevře jen historii baterie jako fallback).
  */
-@customElement('fve-flow-mini-card')
+@defineOnce('fve-flow-mini-card')
 export class FveFlowMiniCard extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
@@ -375,8 +375,7 @@ declare global {
   }
 }
 
-window.customCards = window.customCards || [];
-window.customCards.push({
+registerCustomCard({
   type: 'fve-flow-mini-card',
   name: 'Hybrid Energy Flow Mini Card',
   description:

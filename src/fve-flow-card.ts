@@ -1,5 +1,5 @@
 import { LitElement, html, css, svg, nothing, type PropertyValues, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import type {
   FloorConfig,
   FveFlowCardConfig,
@@ -33,6 +33,7 @@ import { findPlanner, plannerMinSoc, type PlannerEntities } from './planner';
 import { fetchStats } from './analysis-stats';
 import {
   capacityToKwh,
+  defineOnce,
   flowDuration,
   formatEnergy,
   formatEnergyEntity,
@@ -41,6 +42,7 @@ import {
   formatState,
   hasNum,
   moreInfo,
+  registerCustomCard,
   severityColor,
   toNum,
 } from './utils';
@@ -59,11 +61,14 @@ const PHASE_STYLE: Record<string, { color: string; border: string }> = {
   L3: { color: '#b87333', border: 'rgba(184,115,51,0.38)' },
 };
 
-console.info(
-  `%c HYBRID-ENERGY-FLOW %c v${CARD_VERSION} `,
-  'color: #0a0f16; background: #00e676; font-weight: 700;',
-  'color: #00e676; background: #0a0f16; font-weight: 700;',
-);
+// Banner jen při prvním načtení bundlu (druhé načtení elementy nepředefinuje).
+if (!customElements.get('fve-flow-card')) {
+  console.info(
+    `%c HYBRID-ENERGY-FLOW %c v${CARD_VERSION} `,
+    'color: #0a0f16; background: #00e676; font-weight: 700;',
+    'color: #00e676; background: #0a0f16; font-weight: 700;',
+  );
+}
 
 interface FlowBase {
   deadband: number;
@@ -74,7 +79,7 @@ interface FlowBase {
   animate: boolean;
 }
 
-@customElement('fve-flow-card')
+@defineOnce('fve-flow-card')
 export class FveFlowCard extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
@@ -1620,8 +1625,7 @@ declare global {
   }
 }
 
-window.customCards = window.customCards || [];
-window.customCards.push({
+registerCustomCard({
   type: 'fve-flow-card',
   name: 'Hybrid Energy Flow Card',
   description:

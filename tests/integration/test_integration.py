@@ -144,3 +144,53 @@ async def test_entity_ids_are_english_in_czech_ha(hass: HomeAssistant, freezer) 
         assert hass.states.get(eid) is not None, eid
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_card_bundle_is_a_lovelace_resource(hass: HomeAssistant, hass_storage) -> None:
+    from homeassistant.components.lovelace.const import LOVELACE_DATA
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.island_energy import _async_register_resource, async_remove_entry
+    from custom_components.island_energy.const import FRONTEND_URL
+
+    hass_storage["lovelace_resources"] = {
+        "version": 1,
+        "key": "lovelace_resources",
+        "data": {
+            "items": [
+                {"id": "other", "type": "module", "url": "/hacsfiles/other/other.js"},
+                {"id": "map", "type": "js", "url": f"{FRONTEND_URL}.map"},
+                {"id": "old", "type": "js", "url": f"{FRONTEND_URL}?v=2.0.4"},
+                {"id": "dup", "type": "module", "url": f"{FRONTEND_URL}?v=2.0.3"},
+            ]
+        },
+    }
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = hass.data[LOVELACE_DATA].resources
+
+    assert await _async_register_resource(hass, f"{FRONTEND_URL}?v=9.9.9")
+    items = {i["id"]: i for i in resources.async_items()}
+    # stale version updated in place, duplicate removed, foreign resource kept
+    assert items["old"]["url"] == f"{FRONTEND_URL}?v=9.9.9"
+    assert items["old"]["type"] == "module"
+    assert "dup" not in items and "other" in items and "map" in items
+
+    # idempotent: a second run creates nothing new
+    assert await _async_register_resource(hass, f"{FRONTEND_URL}?v=9.9.9")
+    assert len(resources.async_items()) == 3
+
+    await async_remove_entry(hass, MockConfigEntry(domain=DOMAIN))
+    assert sorted(i["id"] for i in resources.async_items()) == ["map", "other"]
+
+
+async def test_card_resource_created_when_missing(hass: HomeAssistant) -> None:
+    from homeassistant.components.lovelace.const import LOVELACE_DATA
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.island_energy import _async_register_resource
+    from custom_components.island_energy.const import FRONTEND_URL
+
+    assert await async_setup_component(hass, "lovelace", {})
+    assert await _async_register_resource(hass, f"{FRONTEND_URL}?v=1.0.0")
+    (item,) = hass.data[LOVELACE_DATA].resources.async_items()
+    assert item["type"] == "module" and item["url"] == f"{FRONTEND_URL}?v=1.0.0"

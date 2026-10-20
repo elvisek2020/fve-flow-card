@@ -1,7 +1,8 @@
 """Hybrid Energy: island PV battery forecast, grid (AC IN) charge planning and cooling.
 
 The integration also ships the Lovelace cards ``custom:fve-flow-card`` and
-``custom:fve-flow-mini-card`` and registers them as an extra frontend module.
+``custom:fve-flow-mini-card`` and registers them as a Lovelace resource
+(storage mode) or an extra frontend module (YAML mode).
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from pathlib import Path
 import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import LOVELACE_DATA
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -55,7 +58,56 @@ async def _register_frontend(hass: HomeAssistant) -> None:
         return
     await hass.http.async_register_static_paths([StaticPathConfig(FRONTEND_URL, str(path), True)])
     integration = await async_get_integration(hass, DOMAIN)
-    add_extra_js_url(hass, f"{FRONTEND_URL}?v={integration.version}")
+    url = f"{FRONTEND_URL}?v={integration.version}"
+    # Lovelace resources load before the dashboard renders its cards; an extra JS
+    # module races with it and a card may stay "Custom element doesn't exist".
+    if not await _async_register_resource(hass, url):
+        add_extra_js_url(hass, url)
+
+
+def _lovelace_resources(hass: HomeAssistant) -> ResourceStorageCollection | None:
+    """The storage-mode resource collection, or None (YAML mode / no Lovelace)."""
+    data = hass.data.get(LOVELACE_DATA)
+    resources = getattr(data, "resources", None)
+    return resources if isinstance(resources, ResourceStorageCollection) else None
+
+
+def _is_ours(item: dict) -> bool:
+    """Our resource: the same path, whatever ``?v=`` it carries."""
+    return str(item.get("url", "")).split("?", 1)[0] == FRONTEND_URL
+
+
+async def _async_register_resource(hass: HomeAssistant, url: str) -> bool:
+    """Create or update the card bundle as a Lovelace module resource."""
+    resources = _lovelace_resources(hass)
+    if resources is None:
+        return False
+    try:
+        await resources.async_get_info()  # loads the collection from storage
+        ours = [item for item in resources.async_items() if _is_ours(item)]
+        if not ours:
+            await resources.async_create_item({"res_type": "module", "url": url})
+        else:
+            first, *extra = ours
+            if first.get("url") != url or first.get("type") != "module":
+                await resources.async_update_item(first["id"], {"res_type": "module", "url": url})
+            for item in extra:
+                await resources.async_delete_item(item["id"])
+    except Exception:
+        _LOGGER.exception("Could not register the card bundle as a Lovelace resource")
+        return False
+    return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: IslandEnergyConfigEntry) -> None:
+    """Integration removed: drop the card resource (the cards stop working anyway)."""
+    resources = _lovelace_resources(hass)
+    if resources is None:
+        return
+    await resources.async_get_info()
+    for item in list(resources.async_items()):
+        if _is_ours(item):
+            await resources.async_delete_item(item["id"])
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: IslandEnergyConfigEntry) -> bool:

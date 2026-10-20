@@ -80,7 +80,11 @@ Integrace potřebuje Home Assistant 2026.10 a recorder s dlouhodobými statistik
 4. Restartuj Home Assistant a přidej integraci v Nastavení → Zařízení a služby →
    Přidat integraci → **Hybrid Energy**.
 
-Integrace sama načte karty do všech dashboardů, žádný ruční resource netřeba.
+Integrace sama načte karty do všech dashboardů, žádný ruční resource netřeba:
+v režimu dashboardů přes UI si sama založí (a při aktualizaci přepíše verzí)
+zdroj `/island_energy/fve-flow-card.js?v=…` v Nastavení → Dashboardy → ⋮ → Zdroje,
+v YAML režimu se karty načtou jako doplňkový modul frontendu. Po odebrání
+integrace se zdroj smaže.
 HACS nabízí aktualizace z GitHub releases.
 
 ### Ručně

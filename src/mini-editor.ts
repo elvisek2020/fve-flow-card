@@ -1,7 +1,7 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import type { FveFlowMiniCardConfig, HomeAssistant } from './types';
-import { fireEvent } from './utils';
+import { defineOnce, fireEvent } from './utils';
 
 const ENTITY = { entity: { domain: 'sensor' } };
 const TEXT = { text: {} };
@@ -133,7 +133,7 @@ const HELPERS: Record<string, string> = {
     'Cesta velkého Hybrid Energy Flow dashboardu, např. /lovelace/fve-flow — najdeš ji v adresním řádku prohlížeče, když máš velkou kartu otevřenou. Bez vyplnění klik na kartu otevře jen historii baterie.',
 };
 
-@customElement('fve-flow-mini-card-editor')
+@defineOnce('fve-flow-mini-card-editor')
 export class FveFlowMiniCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
 

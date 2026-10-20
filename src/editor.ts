@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import type { FloorConfig, FveFlowCardConfig, HomeAssistant } from './types';
-import { fireEvent } from './utils';
+import { defineOnce, fireEvent } from './utils';
 
 const ENTITY = { entity: { domain: 'sensor' } };
 const SWITCH = { entity: { domain: 'switch' } };
@@ -395,7 +395,7 @@ const HELPERS: Record<string, string> = {
     'Ryska v pruhu energie baterie a zvýraznění v Analýze. S integrací Hybrid Energy se bere minimum nastavené v integraci. Výchozí 10 %.',
 };
 
-@customElement('fve-flow-card-editor')
+@defineOnce('fve-flow-card-editor')
 export class FveFlowCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
