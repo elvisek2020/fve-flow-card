@@ -107,7 +107,11 @@ def hdo_windows(hass: HomeAssistant, entity_id: str | None, today: date, tz: tzi
     if st is None or st.state in ("unknown", "unavailable"):
         return None
     horizon = datetime.combine(today + timedelta(days=8), datetime.min.time(), tz)
-    hourly = windows_from_hourly(st.attributes.get("HDO_HOURLY"), tz)
+    try:
+        nt_price = float(st.attributes["price_nt"])
+    except (KeyError, TypeError, ValueError):
+        nt_price = None
+    hourly = windows_from_hourly(st.attributes.get("HDO_HOURLY"), tz, nt_price)
     if hourly:
         return extend_pattern(hourly, horizon, tz)
     today_slots = st.attributes.get("all_times_today") or st.attributes.get("hdo_times_today")

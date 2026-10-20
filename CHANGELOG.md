@@ -5,6 +5,22 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.11 — 2026-10-21
+
+### 🐛 Opravy
+
+- Prognóza a plán zase počítají s **nočním nabíjením i na další dny**. Integrace
+  EG.D (v0.6) posílá v `HDO_HOURLY` ceny tarifů (3,83 / 4,65 Kč) místo 1 / 2,
+  takže se nenašel žádný nízký tarif a zbyl jen dnešek do půlnoci. Nízký tarif
+  se teď pozná podle `price_nt` (jinak nižší hodnota).
+- Textové časy HDO na zítřek (`hdo_times_tomorrow`) se četly špatně a opakovat
+  se do dalších dnů nedaly.
+- Opakování posledního známého dne zachová i ranní okno (např. 21:15 → 7:15),
+  dřív se do dalších dnů přeneslo jen večerní okno do půlnoci.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.10 — 2026-10-21
 
 ### 🐛 Opravy

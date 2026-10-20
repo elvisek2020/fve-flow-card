@@ -3,8 +3,9 @@
 Two sources are supported:
 
 - ``HDO_HOURLY`` on the "HDO Status" binary sensor: a dict of local 15-minute
-  slots (``"2026-10-20T00:00:00": 1.0``) where 1.0 = NT and 2.0 = VT, covering
-  today and tomorrow. Preferred.
+  slots (``"2026-10-20T00:00:00": 3.83``) covering today and tomorrow. Values are
+  the tariff prices (``price_nt`` / ``price_vt``; older versions 1.0 / 2.0), the
+  lower one is NT. Preferred.
 - Slot texts ``all_times_today`` / ``all_times_tomorrow`` of the "next HDO
   time" sensor (or ``hdo_times_today`` as one comma separated string), e.g.
   ``"00 - 07:15"``, ``"Zítra 21:15 - 23:59"``. Times are shortened by
@@ -69,22 +70,44 @@ def nt_windows(
 ) -> list[ChargeWindow]:
     """NT windows from today over ``horizon_days``; days after tomorrow repeat tomorrow's pattern."""
     windows = parse_slots(today_texts, today, tz)
-    pattern = list(tomorrow_texts or today_texts or ())
+    pattern = _texts(tomorrow_texts) or _texts(today_texts)
     for d in range(1, horizon_days):
         windows += parse_slots(pattern, today + timedelta(days=d), tz)
     return merge(windows)
 
 
-def windows_from_hourly(slots: Mapping[str, object] | None, tz: tzinfo) -> list[ChargeWindow]:
-    """NT windows from ``HDO_HOURLY`` (local ISO 15-minute slots, 1.0 = NT)."""
-    out: list[ChargeWindow] = []
+def _texts(texts: Iterable[str] | str | None) -> list[str]:
+    """Slot texts as a list; one comma separated string is split (never into characters)."""
+    if not texts:
+        return []
+    if isinstance(texts, str):
+        return [t for t in texts.split(",") if t.strip()]
+    return list(texts)
+
+
+def windows_from_hourly(
+    slots: Mapping[str, object] | None, tz: tzinfo, nt_value: float | None = None
+) -> list[ChargeWindow]:
+    """NT windows from ``HDO_HOURLY`` (local ISO 15-minute slots).
+
+    ``nt_value`` is the NT price (attribute ``price_nt``); without it the lower of
+    the values is NT. One value only and no ``nt_value``: unknown → no windows.
+    """
+    parsed: list[tuple[datetime, float]] = []
     for key, value in (slots or {}).items():
         try:
-            start = datetime.fromisoformat(str(key))
-            nt = float(value) == 1.0  # type: ignore[arg-type]
+            parsed.append((datetime.fromisoformat(str(key)), float(value)))  # type: ignore[arg-type]
         except (TypeError, ValueError):
             continue
-        if not nt:
+    values = {v for _, v in parsed}
+    if nt_value is None or not any(abs(v - nt_value) < 1e-6 for v in values):
+        # No (or a non-matching) NT price, e.g. older 1.0 / 2.0 values: the lower is NT.
+        if len(values) < 2:
+            return []
+        nt_value = min(values)
+    out: list[ChargeWindow] = []
+    for start, value in parsed:
+        if abs(value - nt_value) > 1e-6:
             continue
         if start.tzinfo is None:
             start = start.replace(tzinfo=tz)
@@ -97,7 +120,11 @@ def extend_pattern(windows: Sequence[ChargeWindow], until: datetime, tz: tzinfo)
     if not windows:
         return []
     last_day = max(w.start for w in windows).astimezone(tz).date()
-    pattern = [w for w in windows if w.start.astimezone(tz).date() == last_day]
+    # The last day's windows clipped to that day — including the part of a window
+    # that started the evening before (e.g. 21:15 → 07:15 gives 00:00–07:15).
+    day_start = datetime.combine(last_day, time(0, 0), tz)
+    day_end = datetime.combine(last_day + timedelta(days=1), time(0, 0), tz)
+    pattern = clip(windows, day_start, day_end)
     out = list(windows)
     shift = 1
     while True:
