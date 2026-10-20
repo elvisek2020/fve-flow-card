@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.9 — 2026-10-21
+
+### 🐛 Opravy
+
+- Po restartu Home Assistantu během nabíjení integrace „zapomněla“, že AC IN
+  sepnula sama: ukázala stav *Zapnuto mimo plánovač* a po dosažení cíle ani na
+  konci okna ho nevypnula. Integrace si teď ukládá, kdo AC IN sepnul, běžící
+  nabíjení (cíl a konec), přeskočení, potlačení i chybu bez napětí a po restartu
+  je obnoví. Jakmile je AC IN vypnutý, vlastnictví zaniká.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.8 — 2026-10-20
 
 ### ✨ Novinky

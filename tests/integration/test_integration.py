@@ -213,12 +213,15 @@ def switch_service(hass: HomeAssistant, calls: list[tuple[str, bool]], gx_follow
     hass.services.async_register("switch", "turn_off", handle)
 
 
-async def start_with(hass: HomeAssistant, freezer, extra: dict) -> MockConfigEntry:
+async def start_with(hass: HomeAssistant, freezer, extra: dict, ac_in_on: bool = False) -> MockConfigEntry:
     await hass.config.async_set_time_zone(TZ)
     now = datetime(2026, 10, 20, 22, 0, tzinfo=dt_util.get_time_zone(TZ))
     freezer.move_to(now)
     await setup_states(hass, 40, now)
-    entry = MockConfigEntry(domain=DOMAIN, data={**CONFIG, **extra}, title="Hybrid Energy")
+    if ac_in_on:
+        hass.states.async_set("switch.ac_in", "on")
+        hass.states.async_set("sensor.active_input", "grid")
+    entry = MockConfigEntry(domain=DOMAIN, data={**CONFIG, **extra}, title="Hybrid Energy", entry_id="he1")
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -299,4 +302,56 @@ async def test_running_charge_is_on_the_plan_sensor(hass: HomeAssistant, freezer
     assert session["remaining_kwh"] == 8.0
     eta = dt_util.parse_datetime(session["eta"])
     assert timedelta(hours=3) < eta - dt_util.now() < timedelta(hours=3, minutes=10)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_control_state_is_saved(hass: HomeAssistant, freezer, hass_storage) -> None:
+    entry = await start_with(hass, freezer, {})
+    switch_service(hass, [])
+    await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 80}, blocking=True)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=11))
+    await hass.async_block_till_done()
+    data = hass_storage[f"{DOMAIN}.he1"]["data"]
+    assert data["we_switched_on"] is True
+    assert data["manual"]["target"] == 80
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_restart_mid_charge_keeps_ownership(hass: HomeAssistant, freezer, hass_storage) -> None:
+    until = datetime(2026, 10, 21, 1, 0, tzinfo=dt_util.get_time_zone(TZ))
+    hass_storage[f"{DOMAIN}.he1"] = {
+        "version": 1,
+        "key": f"{DOMAIN}.he1",
+        "data": {
+            "we_switched_on": True,
+            "manual": None,
+            "session": {"target": 60.0, "until": until.isoformat()},
+            "suppress_until": None,
+            "skip_night": None,
+            "fault_until": None,
+            "last_switch": None,
+        },
+    }
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    assert rt.status == "charging"  # ours again, not "external"
+    assert rt.session is not None and rt.session.target == 60.0
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    rt.set_setting("auto_charging", True)
+    hass.states.async_set("sensor.soc", "61", {"unit_of_measurement": "%"})
+    await rt.async_control()
+    # target reached → we switch off what we switched on before the restart
+    assert calls == [("switch.ac_in", False)]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_restored_ownership_drops_when_ac_in_is_off(hass: HomeAssistant, freezer, hass_storage) -> None:
+    hass_storage[f"{DOMAIN}.he1"] = {"version": 1, "key": f"{DOMAIN}.he1", "data": {"we_switched_on": True}}
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    await rt.async_control()
+    hass.states.async_set("switch.ac_in", "on")  # e.g. the failsafe automation
+    await rt.async_control()
+    assert rt.status == "external"
     await hass.config_entries.async_unload(entry.entry_id)

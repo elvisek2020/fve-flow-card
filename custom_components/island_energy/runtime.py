@@ -25,6 +25,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -101,6 +102,10 @@ from .data import (
 
 _LOGGER = logging.getLogger(__name__)
 
+STORAGE_VERSION = 1
+#: Control state is saved with this delay (coalesces bursts of changes).
+SAVE_DELAY = 10
+
 
 @dataclass
 class ManualCharge:
@@ -152,10 +157,14 @@ class IslandEnergyRuntime:
         self._unsubs: list[CALLBACK_TYPE] = []
         self._listeners: list[Callable[[], None]] = []
         self._pending: CALLBACK_TYPE | None = None
+        #: Who switched AC IN on and the running charge survive an HA restart;
+        #: otherwise a restart mid-charge turns our own charging into "external".
+        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
 
     # ------------------------------------------------------------------ lifecycle
 
     async def async_start(self) -> None:
+        await self._async_restore()
         await self.async_refresh_history()
         await self.async_recompute()
         self._unsubs += [
@@ -177,6 +186,60 @@ class IslandEnergyRuntime:
         if self._pending:
             self._pending()
         self._pending = None
+
+    async def _async_restore(self) -> None:
+        """Restore the control state saved before a restart (expired parts are dropped)."""
+        try:
+            data = await self._store.async_load() or {}
+        except Exception:
+            _LOGGER.exception("Reading the saved control state failed")
+            return
+        now = dt_util.now()
+
+        def when(key: str) -> datetime | None:
+            t = dt_util.parse_datetime(data.get(key) or "")
+            return t if t and t > now else None
+
+        def charge(key: str) -> ManualCharge | None:
+            raw = data.get(key) or {}
+            until = dt_util.parse_datetime(raw.get("until") or "")
+            target = raw.get("target")
+            return ManualCharge(float(target), until) if until and until > now and target is not None else None
+
+        # The AC IN switch may not be loaded yet after a restart; async_control drops
+        # the ownership once it reads the switch off.
+        self._we_switched_on = bool(data.get("we_switched_on"))
+        self.manual = charge("manual")
+        self.session = charge("session")
+        self.suppress_until = when("suppress_until")
+        self.skip_night = when("skip_night")
+        self.fault_until = when("fault_until")
+        last = dt_util.parse_datetime(data.get("last_switch") or "")
+        self._last_switch = last
+        if self._we_switched_on or self.manual or self.session:
+            _LOGGER.debug("Restored control state: %s", data)
+        self._update_status()
+
+    @callback
+    def _save(self) -> None:
+        def iso(t: datetime | None) -> str | None:
+            return t.isoformat() if t else None
+
+        def charge(c: ManualCharge | None) -> dict[str, Any] | None:
+            return {"target": c.target, "until": c.until.isoformat()} if c else None
+
+        self._store.async_delay_save(
+            lambda: {
+                "we_switched_on": self._we_switched_on,
+                "manual": charge(self.manual),
+                "session": charge(self.session),
+                "suppress_until": iso(self.suppress_until),
+                "skip_night": iso(self.skip_night),
+                "fault_until": iso(self.fault_until),
+                "last_switch": iso(self._last_switch),
+            },
+            SAVE_DELAY,
+        )
 
     @callback
     def async_add_listener(self, update: Callable[[], None]) -> Callable[[], None]:
@@ -380,6 +443,8 @@ class IslandEnergyRuntime:
             return
         now = dt_util.now()
         is_on = st.state == STATE_ON
+        if not is_on:
+            self._we_switched_on = False  # switched off (by anyone): no longer ours
         # Switched on by us, but no grid on the input (tripped breaker / RCD): not charging.
         if is_on and self._we_switched_on and self.grid_present() is False:
             self._no_grid_since = self._no_grid_since or now
@@ -578,6 +643,7 @@ class IslandEnergyRuntime:
             self.status = "planned"
         else:
             self.status = "idle"
+        self._save()
 
     def _log(self, message: str, notify: bool = False) -> None:
         _LOGGER.info(message)

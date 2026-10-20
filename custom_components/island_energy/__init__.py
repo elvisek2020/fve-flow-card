@@ -21,11 +21,12 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN, FRONTEND_FILE, FRONTEND_URL
-from .runtime import IslandEnergyRuntime
+from .runtime import STORAGE_VERSION, IslandEnergyRuntime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,7 +101,8 @@ async def _async_register_resource(hass: HomeAssistant, url: str) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: IslandEnergyConfigEntry) -> None:
-    """Integration removed: drop the card resource (the cards stop working anyway)."""
+    """Integration removed: drop the saved control state and the card resource."""
+    await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
     resources = _lovelace_resources(hass)
     if resources is None:
         return
