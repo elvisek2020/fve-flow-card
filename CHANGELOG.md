@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.10 — 2026-10-21
+
+### 🐛 Opravy
+
+- Šetrné odpojení: „Ignorovat AC vstup“ se po rozepnutí stykače vypne vždy.
+  Dřív mohl zůstat zapnutý, když se jeho stav z GX hlásil se zpožděním, a pak
+  by se Victron po dalším sepnutí stykače (pojistka, ručně) nepřipojil.
+  Integrace ho po startu vypne i tehdy, když zůstal zapnutý při rozepnutém AC IN.
+- Stav plánovače se přepočítá hned při změně AC IN (stykač, vstup GX, napětí),
+  takže po vypnutí nezůstane viset „Zapnuto mimo plánovač“.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.9 — 2026-10-21
 
 ### 🐛 Opravy

@@ -197,15 +197,24 @@ async def test_card_resource_created_when_missing(hass: HomeAssistant) -> None:
     assert item["type"] == "module" and item["url"] == f"{FRONTEND_URL}?v=1.0.0"
 
 
-def switch_service(hass: HomeAssistant, calls: list[tuple[str, bool]], gx_follows_ignore: bool = True) -> None:
-    """Switch services that change the state; "ignore AC in" moves the GX input like a Victron."""
+def switch_service(
+    hass: HomeAssistant,
+    calls: list[tuple[str, bool]],
+    gx_follows_ignore: bool = True,
+    lagging: frozenset[str] = frozenset(),
+) -> None:
+    """Switch services that change the state; "ignore AC in" moves the GX input like a Victron.
+
+    ``lagging`` switches do not update their state (read back later from the device).
+    """
 
     async def handle(call) -> None:
         on = call.service == "turn_on"
         ids = call.data["entity_id"]
         for eid in [ids] if isinstance(ids, str) else ids:
             calls.append((eid, on))
-            hass.states.async_set(eid, "on" if on else "off")
+            if eid not in lagging:
+                hass.states.async_set(eid, "on" if on else "off")
             if eid == "switch.ignore" and gx_follows_ignore:
                 hass.states.async_set("sensor.active_input", "not_connected" if on else "grid")
 
@@ -354,4 +363,30 @@ async def test_restored_ownership_drops_when_ac_in_is_off(hass: HomeAssistant, f
     hass.states.async_set("switch.ac_in", "on")  # e.g. the failsafe automation
     await rt.async_control()
     assert rt.status == "external"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_ignore_is_released_even_when_its_state_lags(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {"ignore_ac_in_switch": "switch.ignore"}, ac_in_on=True)
+    hass.states.async_set("switch.ignore", "off")
+    hass.states.async_set("sensor.active_input", "not_connected")  # input already dead
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls, lagging=frozenset({"switch.ignore"}))
+    await hass.services.async_call(DOMAIN, "stop_charging", {}, blocking=True)
+    assert calls == [("switch.ignore", True), ("switch.ac_in", False), ("switch.ignore", False)]
+    await hass.async_block_till_done()
+    # the contactor is off: no longer "external"
+    assert hass.states.get("sensor.hybrid_energy_planner_status").state == "shadow"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_stale_ignore_is_released_after_start(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {"ignore_ac_in_switch": "switch.ignore"})
+    hass.states.async_set("switch.ignore", "on")
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await entry.runtime_data.async_control()
+    assert calls == [("switch.ignore", False)]
+    await entry.runtime_data.async_control()  # only once after a start
+    assert calls == [("switch.ignore", False)]
     await hass.config_entries.async_unload(entry.entry_id)

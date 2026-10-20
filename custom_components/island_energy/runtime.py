@@ -148,6 +148,8 @@ class IslandEnergyRuntime:
         self._no_grid_since: datetime | None = None
         #: One AC IN switching sequence at a time (the graceful off takes seconds).
         self._switch_lock = asyncio.Lock()
+        #: Stale "ignore AC input" is checked once, on the first control after start.
+        self._ignore_checked = False
         self._history: dict[str, list[HourRow]] = {}
         self._last_full: datetime | None = None
         self._we_switched_on = False
@@ -177,6 +179,10 @@ class IslandEnergyRuntime:
         watched = [w for w in watched if w]
         if watched:
             self._unsubs.append(async_track_state_change_event(self.hass, watched, self._on_input_change))
+        # AC IN state (contactor, GX input, voltage) → status right away, not only on the next control.
+        ac_in = [self.cfg.get(k) for k in (CONF_AC_IN_SWITCH, CONF_IGNORE_AC_IN, CONF_ACTIVE_INPUT, CONF_AC_IN_VOLTAGE)]
+        if ac_in := [e for e in ac_in if e]:
+            self._unsubs.append(async_track_state_change_event(self.hass, ac_in, self._on_ac_in_change))
 
     @callback
     def async_stop(self) -> None:
@@ -445,6 +451,10 @@ class IslandEnergyRuntime:
         is_on = st.state == STATE_ON
         if not is_on:
             self._we_switched_on = False  # switched off (by anyone): no longer ours
+            if not self._ignore_checked:
+                await self._release_stale_ignore()
+        self._ignore_checked = True
+        status_before = self.status
         # Switched on by us, but no grid on the input (tripped breaker / RCD): not charging.
         if is_on and self._we_switched_on and self.grid_present() is False:
             self._no_grid_since = self._no_grid_since or now
@@ -480,8 +490,16 @@ class IslandEnergyRuntime:
                 return
             await self._switch(sw, False, reason)
         self._update_status()
-        if self.manual or self.session:
-            self._notify_listeners()  # session estimate (kWh left, end) once a minute
+        if self.manual or self.session or self.status != status_before:
+            self._notify_listeners()  # status change; session estimate (kWh left, end) once a minute
+
+    async def _release_stale_ignore(self) -> None:
+        """After a start: contactor off but "ignore AC input" left on (interrupted sequence)."""
+        ignore = self.cfg.get(CONF_IGNORE_AC_IN)
+        st = self.hass.states.get(ignore) if ignore else None
+        if ignore and st is not None and st.state == STATE_ON:
+            await self._set_switch(ignore, False, force=True)
+            self._log("„Ignorovat AC vstup“ zůstal zapnutý při rozepnutém AC IN, vypínám ho.")
 
     async def _switch(self, entity_id: str, on: bool, reason: str) -> None:
         """Switch the AC IN contactor; off is graceful when "ignore AC input" is configured.
@@ -492,19 +510,25 @@ class IslandEnergyRuntime:
         """
         async with self._switch_lock:
             ignore = self.cfg.get(CONF_IGNORE_AC_IN)
+            # The ignore switch's state may lag behind the service call (it is read
+            # back from the GX), so it is always commanded, never skipped by state.
             if on:
                 if ignore:
-                    await self._set_switch(ignore, False)
+                    await self._set_switch(ignore, False, force=True)
                 await self._set_switch(entity_id, True, force=True)
                 self._no_grid_since = None
             else:
                 released = True
-                if ignore:
-                    await self._set_switch(ignore, True)
-                    released = await self._wait_released()
-                await self._set_switch(entity_id, False, force=True)
-                if ignore:
-                    await self._set_switch(ignore, False)
+                try:
+                    if ignore:
+                        await self._set_switch(ignore, True, force=True)
+                        released = await self._wait_released()
+                    await self._set_switch(entity_id, False, force=True)
+                finally:
+                    # Never leave "ignore AC input" on: a later close of the contactor
+                    # (failsafe, by hand) would not connect the Victron.
+                    if ignore:
+                        await self._set_switch(ignore, False, force=True)
                 if not released:
                     self._log("GX se po „Ignorovat AC vstup“ do 30 s neodpojil od sítě, stykač rozpínám i tak.")
             self._last_switch = dt_util.now()
@@ -671,6 +695,13 @@ class IslandEnergyRuntime:
     @callback
     def _on_input_change(self, _event: Event) -> None:
         self._schedule_recompute(30)
+
+    @callback
+    def _on_ac_in_change(self, _event: Event) -> None:
+        before = self.status
+        self._update_status()
+        if self.status != before:
+            self._notify_listeners()
 
     async def _interval_recompute(self, _now: datetime) -> None:
         await self.async_recompute()
