@@ -25,7 +25,9 @@
           "dc_voltage": "DC napětí měniče (V)",
           "active_input": "Aktivní vstupní zdroj GX",
           "inverter_state": "Stav měniče",
+          "ac_in_voltage": "Napětí sítě na AC IN (V)",
           "ac_in_switch": "Spínač AC IN (nabíjení ze sítě)",
+          "ignore_ac_in_switch": "Spínač Victron „Ignorovat AC vstup“ (šetrné odpojení)",
           "fan_switch": "Spínač chlazení",
           "hdo_sensor": "HDO – binární senzor „HDO Status“ (EG.D)",
           "daily_load": "Záložní denní spotřeba (kWh)",
@@ -67,7 +69,9 @@
           "dc_voltage": "DC napětí měniče (V)",
           "active_input": "Aktivní vstupní zdroj GX",
           "inverter_state": "Stav měniče",
+          "ac_in_voltage": "Napětí sítě na AC IN (V)",
           "ac_in_switch": "Spínač AC IN (nabíjení ze sítě)",
+          "ignore_ac_in_switch": "Spínač Victron „Ignorovat AC vstup“ (šetrné odpojení)",
           "fan_switch": "Spínač chlazení",
           "hdo_sensor": "HDO – binární senzor „HDO Status“ (EG.D)",
           "daily_load": "Záložní denní spotřeba (kWh)",
@@ -101,7 +105,8 @@
           "charging": "Nabíjí",
           "manual": "Ruční nabíjení",
           "external": "Zapnuto mimo plánovač",
-          "skipped": "Dnes přeskočeno"
+          "skipped": "Dnes přeskočeno",
+          "fault": "Bez napětí na AC IN"
         }
       }
     },

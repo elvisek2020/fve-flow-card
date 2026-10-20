@@ -119,6 +119,8 @@ Při přidání vybereš entity (vše jde později změnit v možnostech integra
 | DC proud a napětí měniče | `…_proud_dc`, `…_napeti_dc` | proud × napětí = skutečný výkon nabíjení do baterie (atribut `learned_charge_power_w`) |
 | Aktivní vstup GX, stav měniče | `sensor.gx_device_aktivni_vstupni_zdroj_ac`, `…_stav` | kontrola, že AC IN opravdu nabíjí |
 | Spínač AC IN, spínač chlazení | `switch.…_ac_in`, `switch.…` | co integrace spíná |
+| Ignorovat AC vstup (volitelné) | `switch.multiplus_…_ovladani_ignore_ac_in_1` | šetrné odpojení: stykač se rozepíná bez proudu |
+| Napětí sítě na AC IN (volitelné) | `sensor.multiplus_…_vstupni_napeti_l1` | hlídání „sepnuto, ale bez napětí“ (jinak podle aktivního vstupu GX) |
 | HDO | `binary_sensor.egd_hdo_…_hdo_status` | povel tvého tarifu (atribut `HDO_HOURLY`); bez něj se nabíjí kdykoli |
 
 **Stínový režim (výchozí):** integrace počítá a ukazuje plán, ale AC IN sama
@@ -139,10 +141,19 @@ automatické chlazení**).
   začnou nabíjet panely; začaté nabíjení dojede do cíle (přepočet ho nepřeruší),
 - plán přepočítává každých 15 minut a při změně SoC, Solcastu nebo HDO.
 
-**Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min, po zapnutí za 3 min
-kontrola, že GX hlásí aktivní vstup `grid` (jinak záznam v logbooku a volitelně
-notifikace). AC IN vypíná jen tehdy, když ho sama zapnula — ruční zapnutí nebo
-nouzovou automatizaci nepřebije.
+**Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min. AC IN vypíná jen
+tehdy, když ho sama zapnula — ruční zapnutí nebo nouzovou automatizaci nepřebije.
+
+- **Šetrné odpojení** (s entitou *Ignorovat AC vstup*): integrace nejdřív zapne
+  „Ignorovat AC vstup“, počká, až GX přestane brát síť (aktivní vstup ≠ `grid`,
+  nejvýš 30 s), pak rozepne stykač a „Ignorovat AC vstup“ zase vypne. Stykač tak
+  nerozpíná pod proudem a proudový chránič nevypadává. Zapíná se obráceně: stykač
+  se sepne s vypnutým ignorováním a Victron se připojí sám.
+- **Sepnuto, ale bez napětí:** když je AC IN sepnutý a 2 min nepřijde síť (napětí
+  na AC IN pod 180 V, bez té entity aktivní vstup GX ≠ `grid`), integrace stykač
+  rozepne, stav plánovače přepne na **Bez napětí na AC IN** (`fault`), zapíše do
+  logbooku a pošle notifikaci „zkontroluj jistič nebo proudový chránič“. Nabíjení
+  se to nepočítá; automaticky to zkusí znovu za 30 min, hned po **Nabít teď**.
 
 **Chlazení:** zapne nad **1 000 W** zátěže měniče (největší z AC out, příkonu AC IN
 a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
@@ -173,6 +184,9 @@ actions:
 ```
 
 Ještě spolehlivější je relé GX (start/stop podle SoC), které funguje i bez HA.
+Pokud pojistka AC IN i vypíná, ať drží stejné šetrné pořadí: zapnout „Ignorovat
+AC vstup“, počkat na odpojení GX (aktivní vstup ≠ `grid`, ~5–30 s), rozepnout
+stykač, vypnout „Ignorovat AC vstup“.
 
 ### Karta Hybrid Energy Flow Card
 

@@ -10,6 +10,7 @@ Safety rules:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_AC_IN_POWER,
     CONF_AC_IN_SWITCH,
+    CONF_AC_IN_VOLTAGE,
     CONF_ACTIVE_INPUT,
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
@@ -39,6 +41,7 @@ from .const import (
     CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
     CONF_HDO_SENSOR,
+    CONF_IGNORE_AC_IN,
     CONF_INVERTER_POWER,
     CONF_NOMINAL_VOLTAGE,
     CONF_NOTIFY,
@@ -49,13 +52,18 @@ from .const import (
     COOLING_INTERVAL,
     DEFAULT_SETTINGS,
     DOMAIN,
+    FAULT_AFTER,
+    FAULT_RETRY,
     HISTORY_INTERVAL,
+    MIN_GRID_VOLTAGE,
     MIN_OFF,
     MIN_ON,
     NAME,
     PAST_DAYS,
     PROFILE_DAYS,
     RECOMPUTE_INTERVAL,
+    RELEASE_SETTLE,
+    RELEASE_TIMEOUT,
     SET_AUTO_CHARGING,
     SET_AUTO_COOLING,
     SET_CEILING,
@@ -64,7 +72,6 @@ from .const import (
     SET_COOLING_ON,
     SET_FULL_EVERY,
     SET_MIN_SOC,
-    VERIFY_AFTER,
 )
 from .core.cooling import CoolingConfig, CoolingController, inverter_load
 from .core.forecast import (
@@ -130,6 +137,12 @@ class IslandEnergyRuntime:
         #: "Stop charging" pressed: no automatic charging until this time.
         self.suppress_until: datetime | None = None
         self.skip_night: datetime | None = None
+        #: AC IN was on without grid voltage (tripped breaker / RCD): no automatic
+        #: charging until this time; "charge now" retries at once.
+        self.fault_until: datetime | None = None
+        self._no_grid_since: datetime | None = None
+        #: One AC IN switching sequence at a time (the graceful off takes seconds).
+        self._switch_lock = asyncio.Lock()
         self._history: dict[str, list[HourRow]] = {}
         self._last_full: datetime | None = None
         self._we_switched_on = False
@@ -139,7 +152,6 @@ class IslandEnergyRuntime:
         self._unsubs: list[CALLBACK_TYPE] = []
         self._listeners: list[Callable[[], None]] = []
         self._pending: CALLBACK_TYPE | None = None
-        self._verify: CALLBACK_TYPE | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -162,10 +174,9 @@ class IslandEnergyRuntime:
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
-        for timer in (self._pending, self._verify):
-            if timer:
-                timer()
-        self._pending = self._verify = None
+        if self._pending:
+            self._pending()
+        self._pending = None
 
     @callback
     def async_add_listener(self, update: Callable[[], None]) -> Callable[[], None]:
@@ -333,7 +344,20 @@ class IslandEnergyRuntime:
         return next((w for w in self.result.windows if w.end > now), None)
 
     def _blocked(self, now: datetime) -> bool:
-        return bool((self.suppress_until and now < self.suppress_until) or (self.skip_night and now < self.skip_night))
+        return any(t is not None and now < t for t in (self.suppress_until, self.skip_night, self.fault_until))
+
+    def grid_present(self) -> bool | None:
+        """Grid on AC IN: input voltage when configured, else the GX active input.
+
+        None = unknown (neither entity configured or readable).
+        """
+        volts = state_float(self.hass, self.cfg.get(CONF_AC_IN_VOLTAGE))
+        if volts is not None:
+            return volts >= MIN_GRID_VOLTAGE
+        source = self.hass.states.get(self.cfg.get(CONF_ACTIVE_INPUT) or "")
+        if source is None or source.state in ("unknown", "unavailable"):
+            return None
+        return source.state == "grid"
 
     def _planned_session(self, now: datetime, soc: float) -> ManualCharge | None:
         """Start a charging session when a planned window is active."""
@@ -352,10 +376,18 @@ class IslandEnergyRuntime:
             return
         st = self.hass.states.get(sw)
         soc = state_float(self.hass, self.cfg.get(CONF_SOC))
-        if st is None or st.state in ("unknown", "unavailable") or soc is None:
+        if st is None or st.state in ("unknown", "unavailable") or soc is None or self._switch_lock.locked():
             return
         now = dt_util.now()
         is_on = st.state == STATE_ON
+        # Switched on by us, but no grid on the input (tripped breaker / RCD): not charging.
+        if is_on and self._we_switched_on and self.grid_present() is False:
+            self._no_grid_since = self._no_grid_since or now
+            if now - self._no_grid_since >= FAULT_AFTER:
+                await self._fault(sw, now)
+                return
+        else:
+            self._no_grid_since = None
         desired: bool | None = None
         reason = ""
         if self.manual:
@@ -385,28 +417,86 @@ class IslandEnergyRuntime:
         self._update_status()
 
     async def _switch(self, entity_id: str, on: bool, reason: str) -> None:
-        await self.hass.services.async_call("switch", "turn_on" if on else "turn_off", {"entity_id": entity_id})
-        self._last_switch = dt_util.now()
-        self._we_switched_on = on
-        soc = state_float(self.hass, self.cfg.get(CONF_SOC))
-        msg = f"{'Zapínám' if on else 'Vypínám'} nabíjení z AC IN ({reason}, SoC {soc:.0f} %)"
-        self._log(msg)
-        if self._verify:
-            self._verify()
-            self._verify = None
-        if on:
-            self._verify = async_call_later(self.hass, VERIFY_AFTER, self._verify_charging)
+        """Switch the AC IN contactor; off is graceful when "ignore AC input" is configured.
+
+        Off: ignore AC input → wait until the GX leaves the grid (no current through
+        the contactor, an RCD does not trip) → open the contactor → stop ignoring.
+        On: close the contactor with ignoring off; the Victron connects by itself.
+        """
+        async with self._switch_lock:
+            ignore = self.cfg.get(CONF_IGNORE_AC_IN)
+            if on:
+                if ignore:
+                    await self._set_switch(ignore, False)
+                await self._set_switch(entity_id, True, force=True)
+                self._no_grid_since = None
+            else:
+                released = True
+                if ignore:
+                    await self._set_switch(ignore, True)
+                    released = await self._wait_released()
+                await self._set_switch(entity_id, False, force=True)
+                if ignore:
+                    await self._set_switch(ignore, False)
+                if not released:
+                    self._log("GX se po „Ignorovat AC vstup“ do 30 s neodpojil od sítě, stykač rozpínám i tak.")
+            self._last_switch = dt_util.now()
+            self._we_switched_on = on
+            soc = state_float(self.hass, self.cfg.get(CONF_SOC))
+            self._log(f"{'Zapínám' if on else 'Vypínám'} nabíjení z AC IN ({reason}, SoC {soc or 0:.0f} %)")
         self._notify_listeners()
 
-    @callback
-    def _verify_charging(self, _now: datetime) -> None:
-        self._verify = None
-        source = self.hass.states.get(self.cfg.get(CONF_ACTIVE_INPUT) or "")
-        sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
-        if source is None or sw is None or sw.state != STATE_ON:
-            return
-        if source.state != "grid":
-            self._log(f"AC IN je zapnutý, ale GX hlásí aktivní vstup „{source.state}“ — nabíjení neběží?", notify=True)
+    async def _set_switch(self, entity_id: str, on: bool, force: bool = False) -> None:
+        st = self.hass.states.get(entity_id)
+        if force or st is None or (st.state == STATE_ON) != on:
+            await self.hass.services.async_call(
+                "switch", "turn_on" if on else "turn_off", {"entity_id": entity_id}, blocking=True
+            )
+
+    async def _wait_released(self) -> bool:
+        """Wait until the GX no longer uses the grid as its active input (max RELEASE_TIMEOUT)."""
+        eid = self.cfg.get(CONF_ACTIVE_INPUT)
+        if not eid:
+            await asyncio.sleep(RELEASE_SETTLE.total_seconds())
+            return True
+
+        def released() -> bool:
+            st = self.hass.states.get(eid)
+            return st is None or st.state != "grid"
+
+        if released():
+            return True
+        done: asyncio.Future[bool] = self.hass.loop.create_future()
+
+        @callback
+        def _changed(_event: Event) -> None:
+            if released() and not done.done():
+                done.set_result(True)
+
+        unsub = async_track_state_change_event(self.hass, [eid], _changed)
+        try:
+            async with asyncio.timeout(RELEASE_TIMEOUT.total_seconds()):
+                return await done
+        except TimeoutError:
+            return False
+        finally:
+            unsub()
+
+    async def _fault(self, entity_id: str, now: datetime) -> None:
+        """AC IN on without grid: give up charging, notify, retry after FAULT_RETRY."""
+        self.fault_until = now + FAULT_RETRY
+        self.manual = None
+        self.session = None
+        self._no_grid_since = None
+        minutes = int(FAULT_RETRY.total_seconds() // 60)
+        self._log(
+            "AC IN je sepnutý, ale bez napětí – zkontroluj jistič nebo proudový chránič. "
+            f"Další pokus za {minutes} min (nebo Nabít teď).",
+            notify=True,
+        )
+        await self._switch(entity_id, False, "bez napětí na AC IN")
+        self._update_status()
+        self._notify_listeners()
 
     async def async_cooling(self) -> None:
         fan = self.cfg.get(CONF_FAN_SWITCH)
@@ -436,6 +526,7 @@ class IslandEnergyRuntime:
             until=now + (duration or timedelta(hours=12)),
         )
         self.suppress_until = None
+        self.fault_until = None  # manual retry after a fault
         sw = self.cfg.get(CONF_AC_IN_SWITCH)
         st = self.hass.states.get(sw) if sw else None
         if sw and st is not None and st.state != STATE_ON:
@@ -473,6 +564,8 @@ class IslandEnergyRuntime:
         charging = sw is not None and sw.state == STATE_ON
         if self.manual:
             self.status = "manual"
+        elif self.fault_until and dt_util.now() < self.fault_until:
+            self.status = "fault"
         elif charging:
             self.status = "charging" if self._we_switched_on else "external"
         elif not self.settings[SET_AUTO_CHARGING]:

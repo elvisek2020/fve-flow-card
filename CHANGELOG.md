@@ -5,6 +5,41 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.7 — 2026-10-20
+
+### ✨ Novinky
+
+- **Šetrné odpojení AC IN:** s novou volitelnou entitou *Ignorovat AC vstup*
+  (Victron) integrace nejdřív odpojí MultiPlus od sítě, počká, až GX přestane brát
+  síť (max 30 s), a teprve pak rozepne stykač. Stykač už nerozpíná pod proudem
+  a proudový chránič nevypadává.
+- **Hlídání „sepnuto, ale bez napětí“:** když po sepnutí AC IN do 2 minut nepřijde
+  síť (nová volitelná entita *Napětí sítě na AC IN*, jinak aktivní vstup GX),
+  integrace stykač rozepne, stav plánovače je **Bez napětí na AC IN**, přijde
+  notifikace „zkontroluj jistič nebo proudový chránič“ a nabíjení se to
+  nepočítá. Další pokus za 30 min, nebo hned po **Nabít teď**.
+
+### ⚠️ Změny, které vyžadují zásah
+
+- V možnostech integrace doplň *Ignorovat AC vstup*
+  (`switch.multiplus_…_ovladani_ignore_ac_in_1`) a *Napětí sítě na AC IN*
+  (`sensor.multiplus_…_vstupni_napeti_l1`). Bez nich se odpojuje jako dřív.
+
+### 🎨 Vzhled
+
+- Tlačítko v bloku **Nabíjení ze sítě** říká, co udělá: při nabíjení podle plánu
+  **Přerušit nabíjení podle plánu** (plán pokračuje dalším oknem), při ručním
+  **Vypnout ruční nabíjení**, jinak **Vypnout nabíjení**.
+
+### 🐛 Opravy
+
+- Když AC IN zapne něco mimo plánovač (stav „Zapnuto mimo plánovač“), blok
+  nabízí vypnutí a rozsvítí se, místo tlačítka Nabít teď.
+- Blok **Nabíjení ze sítě** při stavu Bez napětí na AC IN svítí červeně.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.6 — 2026-10-20
 
 ### 🐛 Opravy

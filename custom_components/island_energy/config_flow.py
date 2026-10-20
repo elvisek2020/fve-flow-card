@@ -12,6 +12,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AC_IN_POWER,
     CONF_AC_IN_SWITCH,
+    CONF_AC_IN_VOLTAGE,
     CONF_ACTIVE_INPUT,
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
@@ -22,6 +23,7 @@ from .const import (
     CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
     CONF_HDO_SENSOR,
+    CONF_IGNORE_AC_IN,
     CONF_INVERTER_POWER,
     CONF_INVERTER_STATE,
     CONF_NOMINAL_VOLTAGE,
@@ -65,9 +67,11 @@ def _schema(values: dict[str, Any]) -> vol.Schema:
         CONF_DC_VOLTAGE,
         CONF_ACTIVE_INPUT,
         CONF_INVERTER_STATE,
+        CONF_AC_IN_VOLTAGE,
     ):
         fields[key(name)] = SENSOR
     fields[key(CONF_AC_IN_SWITCH)] = SWITCH
+    fields[key(CONF_IGNORE_AC_IN)] = SWITCH
     fields[key(CONF_FAN_SWITCH)] = SWITCH
     fields[key(CONF_HDO_SENSOR)] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])

@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import IslandEnergyConfigEntry
 from .entity import IslandEnergyEntity
 
-STATUSES = ["shadow", "idle", "planned", "charging", "manual", "external", "skipped"]
+STATUSES = ["shadow", "idle", "planned", "charging", "manual", "external", "skipped", "fault"]
 
 
 async def async_setup_entry(

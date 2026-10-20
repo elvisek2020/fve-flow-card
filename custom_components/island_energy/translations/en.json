@@ -25,7 +25,9 @@
           "dc_voltage": "Inverter DC voltage (V)",
           "active_input": "GX active input source",
           "inverter_state": "Inverter state",
+          "ac_in_voltage": "Grid voltage on AC IN (V)",
           "ac_in_switch": "AC IN switch (grid charging)",
+          "ignore_ac_in_switch": "Victron \"Ignore AC input\" switch (graceful disconnect)",
           "fan_switch": "Cooling switch",
           "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
           "daily_load": "Fallback daily consumption (kWh)",
@@ -67,7 +69,9 @@
           "dc_voltage": "Inverter DC voltage (V)",
           "active_input": "GX active input source",
           "inverter_state": "Inverter state",
+          "ac_in_voltage": "Grid voltage on AC IN (V)",
           "ac_in_switch": "AC IN switch (grid charging)",
+          "ignore_ac_in_switch": "Victron \"Ignore AC input\" switch (graceful disconnect)",
           "fan_switch": "Cooling switch",
           "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
           "daily_load": "Fallback daily consumption (kWh)",
@@ -101,7 +105,8 @@
           "charging": "Charging",
           "manual": "Manual charging",
           "external": "Switched on externally",
-          "skipped": "Skipped tonight"
+          "skipped": "Skipped tonight",
+          "fault": "No voltage on AC IN"
         }
       }
     },

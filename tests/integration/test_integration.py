@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
@@ -9,7 +10,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed, async_mock_service
 
 from custom_components.island_energy.const import DOMAIN
 
@@ -194,3 +195,93 @@ async def test_card_resource_created_when_missing(hass: HomeAssistant) -> None:
     assert await _async_register_resource(hass, f"{FRONTEND_URL}?v=1.0.0")
     (item,) = hass.data[LOVELACE_DATA].resources.async_items()
     assert item["type"] == "module" and item["url"] == f"{FRONTEND_URL}?v=1.0.0"
+
+
+def switch_service(hass: HomeAssistant, calls: list[tuple[str, bool]], gx_follows_ignore: bool = True) -> None:
+    """Switch services that change the state; "ignore AC in" moves the GX input like a Victron."""
+
+    async def handle(call) -> None:
+        on = call.service == "turn_on"
+        ids = call.data["entity_id"]
+        for eid in [ids] if isinstance(ids, str) else ids:
+            calls.append((eid, on))
+            hass.states.async_set(eid, "on" if on else "off")
+            if eid == "switch.ignore" and gx_follows_ignore:
+                hass.states.async_set("sensor.active_input", "not_connected" if on else "grid")
+
+    hass.services.async_register("switch", "turn_on", handle)
+    hass.services.async_register("switch", "turn_off", handle)
+
+
+async def start_with(hass: HomeAssistant, freezer, extra: dict) -> MockConfigEntry:
+    await hass.config.async_set_time_zone(TZ)
+    now = datetime(2026, 10, 20, 22, 0, tzinfo=dt_util.get_time_zone(TZ))
+    freezer.move_to(now)
+    await setup_states(hass, 40, now)
+    entry = MockConfigEntry(domain=DOMAIN, data={**CONFIG, **extra}, title="Hybrid Energy")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    return entry
+
+
+async def test_graceful_disconnect_ignores_ac_input_first(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {"ignore_ac_in_switch": "switch.ignore"})
+    hass.states.async_set("switch.ignore", "off")
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await hass.services.async_call(DOMAIN, "charge_now", {}, blocking=True)
+    hass.states.async_set("sensor.active_input", "grid")
+    calls.clear()
+    await hass.services.async_call(DOMAIN, "stop_charging", {}, blocking=True)
+    # ignore AC in → (GX leaves the grid) → open the contactor → stop ignoring
+    assert calls == [("switch.ignore", True), ("switch.ac_in", False), ("switch.ignore", False)]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_graceful_disconnect_times_out(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {"ignore_ac_in_switch": "switch.ignore"})
+    hass.states.async_set("switch.ignore", "off")
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls, gx_follows_ignore=False)
+    await hass.services.async_call(DOMAIN, "charge_now", {}, blocking=True)
+    hass.states.async_set("sensor.active_input", "grid")
+    calls.clear()
+    task = hass.async_create_task(hass.services.async_call(DOMAIN, "stop_charging", {}, blocking=True))
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert calls == [("switch.ignore", True)]  # waiting for the GX to leave the grid
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await task
+    # the GX did not let go: the contactor opens anyway
+    assert calls == [("switch.ignore", True), ("switch.ac_in", False), ("switch.ignore", False)]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_on_without_grid_voltage_is_a_fault(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {"ac_in_voltage": "sensor.ac_in_v"})
+    rt = entry.runtime_data
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    hass.states.async_set("sensor.ac_in_v", "0", {"unit_of_measurement": "V"})
+    await hass.services.async_call(DOMAIN, "charge_now", {}, blocking=True)
+    assert rt.grid_present() is False
+    await rt.async_control()
+    assert rt.status == "manual" and hass.states.get("switch.ac_in").state == "on"
+
+    freezer.tick(timedelta(minutes=2, seconds=5))
+    await rt.async_control()
+    await hass.async_block_till_done()
+    assert rt.status == "fault"
+    assert calls[-1] == ("switch.ac_in", False)
+    assert hass.states.get("sensor.hybrid_energy_planner_status").state == "fault"
+    assert hass.states.get("binary_sensor.hybrid_energy_grid_charging").state == "off"
+
+    # no automatic retry while the fault lasts; "charge now" retries at once
+    rt.set_setting("auto_charging", True)
+    await rt.async_control()
+    assert hass.states.get("switch.ac_in").state == "off"
+    hass.states.async_set("sensor.ac_in_v", "231", {"unit_of_measurement": "V"})
+    await hass.services.async_call(DOMAIN, "charge_now", {}, blocking=True)
+    assert rt.status == "manual" and hass.states.get("switch.ac_in").state == "on"
+    await hass.config_entries.async_unload(entry.entry_id)

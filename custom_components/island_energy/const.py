@@ -27,6 +27,8 @@ CONF_DC_VOLTAGE: Final = "dc_voltage"  # inverter DC voltage (V)
 CONF_ACTIVE_INPUT: Final = "active_input"
 CONF_INVERTER_STATE: Final = "inverter_state"
 CONF_AC_IN_SWITCH: Final = "ac_in_switch"
+CONF_IGNORE_AC_IN: Final = "ignore_ac_in_switch"  # Victron "Ignore AC input" (graceful disconnect)
+CONF_AC_IN_VOLTAGE: Final = "ac_in_voltage"  # grid voltage on AC IN (V)
 CONF_FAN_SWITCH: Final = "fan_switch"
 CONF_DAILY_LOAD: Final = "daily_load"  # fallback energy (kWh/day)
 CONF_HDO_SENSOR: Final = "hdo_sensor"
@@ -91,7 +93,16 @@ COOLING_INTERVAL: Final = timedelta(seconds=30)
 #: Protect the AC IN contactor from cycling.
 MIN_ON: Final = timedelta(minutes=15)
 MIN_OFF: Final = timedelta(minutes=10)
-#: After switching AC IN on, the GX must report the grid as active input by then.
-VERIFY_AFTER: Final = timedelta(minutes=3)
+#: Graceful disconnect: after "ignore AC input" wait at most this long for the GX
+#: to leave the grid before the contactor opens (no current through the contactor).
+RELEASE_TIMEOUT: Final = timedelta(seconds=30)
+#: Without an active-input entity: fixed settle time after "ignore AC input".
+RELEASE_SETTLE: Final = timedelta(seconds=5)
+#: AC IN switched on but no grid on the input this long → fault (tripped breaker / RCD).
+FAULT_AFTER: Final = timedelta(minutes=2)
+#: After a fault automatic charging retries after this time (or "charge now").
+FAULT_RETRY: Final = timedelta(minutes=30)
+#: Grid voltage on AC IN below this counts as "no grid".
+MIN_GRID_VOLTAGE: Final = 180.0
 PAST_DAYS: Final = 5
 PROFILE_DAYS: Final = 7

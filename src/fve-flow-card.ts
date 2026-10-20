@@ -632,7 +632,11 @@ export class FveFlowCard extends LitElement {
     const hass = this.hass;
     if (!p || !hass) return nothing;
     const status = p.status ? hass.states[p.status]?.state : undefined;
-    const charging = (p.charging ? hass.states[p.charging]?.state === 'on' : false) || status === 'charging' || status === 'manual';
+    const charging =
+      (p.charging ? hass.states[p.charging]?.state === 'on' : false) ||
+      status === 'charging' ||
+      status === 'manual' ||
+      status === 'external';
     const plan = p.plan ? hass.states[p.plan] : undefined;
     const kwh = plan ? Number(plan.state) : NaN;
     const windows = (plan?.attributes.windows as Array<{ start: string; end: string }> | undefined) ?? [];
@@ -645,9 +649,12 @@ export class FveFlowCard extends LitElement {
       manual: 'Ruční nabíjení',
       external: 'Zapnuto mimo plánovač',
       skipped: 'Dnes v noci ne',
+      fault: 'Bez napětí na AC IN',
     };
     // Jako ostatní panely: vlastní barva (síť), rozsvítí se jen při nabíjení.
-    const accent = C.grid;
+    // Sepnuto bez napětí (jistič / chránič): červeně, ať si toho všimneš.
+    const fault = status === 'fault';
+    const accent = fault ? C.crit : C.grid;
     const acInW = hasNum(hass, this._config?.ac_in?.power) ? Math.max(0, toNum(hass, this._config!.ac_in!.power)) : 0;
     const planText =
       Number.isFinite(kwh) && kwh > 0 && windows.length
@@ -670,10 +677,10 @@ export class FveFlowCard extends LitElement {
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
     return svg`
-      ${this._panel(r, accent, charging)}
+      ${this._panel(r, accent, charging || fault)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
-      ${iconPylon(r.x + 20, r.y + 44, 44, charging ? C.grid : 'rgba(148,170,190,0.55)')}
-      <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${charging ? C.grid : '#e6f4fa'}">
+      ${iconPylon(r.x + 20, r.y + 44, 44, fault ? C.crit : charging ? C.grid : 'rgba(148,170,190,0.55)')}
+      <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${fault ? C.crit : charging ? C.grid : '#e6f4fa'}">
         ${status ? STATUS[status] ?? status : '—'}
       </text>
       <text class="small" x="${r.x + 80}" y="${r.y + 90}">${planText}</text>
@@ -695,7 +702,14 @@ export class FveFlowCard extends LitElement {
           </text>`
         : nothing}
       ${charging
-        ? btn(r.x + 20, 'Vypnout nabíjení', true, C.grid, press(p.stopCharging))
+        ? btn(
+            r.x + 20,
+            // Plán po přerušení pokračuje dalším oknem, ruční nabíjení končí.
+            status === 'charging' ? 'Přerušit nabíjení podle plánu' : status === 'manual' ? 'Vypnout ruční nabíjení' : 'Vypnout nabíjení',
+            true,
+            C.grid,
+            press(p.stopCharging),
+          )
         : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
     `;
   }

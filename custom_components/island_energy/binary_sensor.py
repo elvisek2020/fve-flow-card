@@ -10,7 +10,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 
 from . import IslandEnergyConfigEntry
-from .const import CONF_AC_IN_SWITCH, CONF_ACTIVE_INPUT
+from .const import CONF_AC_IN_SWITCH, CONF_AC_IN_VOLTAGE, CONF_ACTIVE_INPUT
 from .entity import IslandEnergyEntity
 
 
@@ -34,12 +34,14 @@ class ChargingSensor(IslandEnergyEntity, BinarySensorEntity):
         sw = self.hass.states.get(cfg.get(CONF_AC_IN_SWITCH) or "")
         if sw is None:
             return None
-        source = self.hass.states.get(cfg.get(CONF_ACTIVE_INPUT) or "")
-        return sw.state == STATE_ON and (source is None or source.state == "grid")
+        # Switched on without grid (tripped breaker / RCD) is not charging.
+        return sw.state == STATE_ON and self.runtime.grid_present() is not False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        watched = [e for e in (self.runtime.cfg.get(CONF_AC_IN_SWITCH), self.runtime.cfg.get(CONF_ACTIVE_INPUT)) if e]
+        cfg = self.runtime.cfg
+        keys = (CONF_AC_IN_SWITCH, CONF_ACTIVE_INPUT, CONF_AC_IN_VOLTAGE)
+        watched = [e for e in (cfg.get(k) for k in keys) if e]
         if watched:
             self.async_on_remove(async_track_state_change_event(self.hass, watched, self._changed))
 
