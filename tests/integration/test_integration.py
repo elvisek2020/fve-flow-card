@@ -63,7 +63,8 @@ async def ready(hass: HomeAssistant, freezer):
     entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Hybrid Energy")
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    # Plán se počítá v úloze na pozadí (start integrace) — počkat i na ni.
+    await hass.async_block_till_done(wait_background_tasks=True)
     yield entry
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
