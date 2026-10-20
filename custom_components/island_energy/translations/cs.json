@@ -1,0 +1,185 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hybrid Energy",
+        "description": "Vyber entity ostrovní FVE. Po přidání běží integrace ve stínovém režimu: plánuje, ale AC IN nespíná, dokud nezapneš „Povolit automatické nabíjení“.",
+        "data": {
+          "soc": "SoC baterie (%)",
+          "battery_power": "Výkon baterie (W, + = nabíjení)",
+          "battery_invert": "Obrátit znaménko výkonu baterie",
+          "pv_power": "Výkon FV (W)",
+          "capacity": "Kapacita baterie (kWh / Wh / Ah)",
+          "nominal_voltage": "Jmenovité napětí baterie (pro Ah)",
+          "solcast_today": "Solcast – dnes",
+          "solcast_tomorrow": "Solcast – zítra",
+          "solcast_day_3": "Solcast – den 3",
+          "solcast_day_4": "Solcast – den 4",
+          "solcast_day_5": "Solcast – den 5",
+          "solcast_day_6": "Solcast – den 6",
+          "solcast_day_7": "Solcast – den 7",
+          "inverter_power": "Výstupní výkon měniče (AC out, W)",
+          "ac_in_power": "Příkon ze sítě na AC IN (W)",
+          "dc_power": "DC výkon měniče (W)",
+          "active_input": "Aktivní vstupní zdroj GX",
+          "inverter_state": "Stav měniče",
+          "ac_in_switch": "Spínač AC IN (nabíjení ze sítě)",
+          "fan_switch": "Spínač chlazení",
+          "hdo_sensor": "HDO – binární senzor „HDO Status“ (EG.D)",
+          "daily_load": "Záložní denní spotřeba (kWh)",
+          "notify_service": "Služba pro notifikace (např. notify.mobile_app_telefon)"
+        },
+        "data_description": {
+          "hdo_sensor": "Nejlépe binární senzor s atributem HDO_HOURLY pro povel tvého tarifu (např. DP01). Funguje i senzor „Další HDO čas“. Bez HDO se nabíjí kdykoli podle plánu.",
+          "notify_service": "Jen pro upozornění, když po zapnutí AC IN nenabíjí.",
+          "capacity": "Ah se přepočte přes jmenovité napětí, ne přes aktuální."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Integrace už je nastavená."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hybrid Energy",
+        "data": {
+          "soc": "SoC baterie (%)",
+          "battery_power": "Výkon baterie (W, + = nabíjení)",
+          "battery_invert": "Obrátit znaménko výkonu baterie",
+          "pv_power": "Výkon FV (W)",
+          "capacity": "Kapacita baterie (kWh / Wh / Ah)",
+          "nominal_voltage": "Jmenovité napětí baterie (pro Ah)",
+          "solcast_today": "Solcast – dnes",
+          "solcast_tomorrow": "Solcast – zítra",
+          "solcast_day_3": "Solcast – den 3",
+          "solcast_day_4": "Solcast – den 4",
+          "solcast_day_5": "Solcast – den 5",
+          "solcast_day_6": "Solcast – den 6",
+          "solcast_day_7": "Solcast – den 7",
+          "inverter_power": "Výstupní výkon měniče (AC out, W)",
+          "ac_in_power": "Příkon ze sítě na AC IN (W)",
+          "dc_power": "DC výkon měniče (W)",
+          "active_input": "Aktivní vstupní zdroj GX",
+          "inverter_state": "Stav měniče",
+          "ac_in_switch": "Spínač AC IN (nabíjení ze sítě)",
+          "fan_switch": "Spínač chlazení",
+          "hdo_sensor": "HDO – binární senzor „HDO Status“ (EG.D)",
+          "daily_load": "Záložní denní spotřeba (kWh)",
+          "notify_service": "Služba pro notifikace (např. notify.mobile_app_telefon)"
+        },
+        "data_description": {
+          "hdo_sensor": "Nejlépe binární senzor s atributem HDO_HOURLY pro povel tvého tarifu (např. DP01). Funguje i senzor „Další HDO čas“. Bez HDO se nabíjí kdykoli podle plánu.",
+          "notify_service": "Jen pro upozornění, když po zapnutí AC IN nenabíjí.",
+          "capacity": "Ah se přepočte přes jmenovité napětí, ne přes aktuální."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "grid_charge_plan": {
+        "name": "Plán nabíjení ze sítě"
+      },
+      "next_charge": {
+        "name": "Další nabíjení"
+      },
+      "forecast": {
+        "name": "Prognóza výdrže"
+      },
+      "status": {
+        "name": "Stav plánovače",
+        "state": {
+          "shadow": "Stínový režim",
+          "idle": "Bez plánu",
+          "planned": "Naplánováno",
+          "charging": "Nabíjí",
+          "manual": "Ruční nabíjení",
+          "external": "Zapnuto mimo plánovač",
+          "skipped": "Dnes přeskočeno"
+        }
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Nabíjení ze sítě"
+      },
+      "low_tariff": {
+        "name": "Nízký tarif"
+      }
+    },
+    "switch": {
+      "auto_charging": {
+        "name": "Povolit automatické nabíjení"
+      },
+      "auto_cooling": {
+        "name": "Povolit automatické chlazení"
+      }
+    },
+    "number": {
+      "ceiling": {
+        "name": "Strop nabíjení ze sítě"
+      },
+      "min_soc": {
+        "name": "Minimální SoC"
+      },
+      "charge_power": {
+        "name": "Výkon nabíjení ze sítě"
+      },
+      "full_every_days": {
+        "name": "Plné nabití aspoň jednou za"
+      },
+      "cooling_on": {
+        "name": "Chlazení zapnout nad"
+      },
+      "cooling_off": {
+        "name": "Chlazení vypnout pod"
+      }
+    },
+    "button": {
+      "charge_now": {
+        "name": "Nabít teď"
+      },
+      "stop_charging": {
+        "name": "Vypnout nabíjení"
+      },
+      "skip_tonight": {
+        "name": "Dnes v noci nenabíjet"
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "Integrace Hybrid Energy není načtená."
+    }
+  },
+  "services": {
+    "charge_now": {
+      "name": "Nabít teď",
+      "description": "Zapne nabíjení ze sítě do cílového SoC nebo na zadanou dobu.",
+      "fields": {
+        "target_soc": {
+          "name": "Cílové SoC",
+          "description": "Výchozí je strop nabíjení ze sítě."
+        },
+        "duration": {
+          "name": "Doba (min)",
+          "description": "Nejdéle tak dlouho."
+        }
+      }
+    },
+    "stop_charging": {
+      "name": "Vypnout nabíjení",
+      "description": "Vypne nabíjení ze sítě a přeskočí právě běžící okno plánu."
+    },
+    "skip_tonight": {
+      "name": "Dnes v noci nenabíjet",
+      "description": "Přeskočí plánované nabíjení do příštího rána."
+    },
+    "recompute": {
+      "name": "Přepočítat plán",
+      "description": "Znovu načte statistiky a přepočítá plán."
+    }
+  }
+}

@@ -21,12 +21,16 @@ export interface Layout {
   analysisButton?: Rect;
   /** Tlačítko Prognóza nad Analýzou — když je nastavená včerejší spotřeba. */
   forecastButton?: Rect;
+  /** Blok „Nabíjení ze sítě“ (integrace Hybrid Energy) — pod baterií. */
+  chargeBlock?: Rect;
   paths: {
     pvMppt: string;
     mpptInv: string;
     batInv: string;
     /** Přerušovaná spojnice FVE panely ↔ Solcast predikce (bez animace). */
     pvSolcast: string;
+    /** Síť domu → AC IN měniče (nabíjení ze sítě); prázdné = nekreslí se (mobil). */
+    gridAcIn: string;
     islandTaps: string[];
     gridTaps: string[];
   };
@@ -39,7 +43,12 @@ export interface LayoutOptions {
   analysisButton?: boolean;
   /** Rezervovat místo pro tlačítko Prognóza (nad Analýzou). */
   forecastButton?: boolean;
+  /** Rezervovat místo pro blok „Nabíjení ze sítě“ pod baterií. */
+  chargeBlock?: boolean;
 }
+
+/** Výška bloku „Nabíjení ze sítě“. */
+const CHARGE_BLOCK_H = 210;
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
 // odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.
@@ -117,7 +126,11 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   const analysisButton: Rect | undefined = opts.analysisButton
     ? { x: inverter.x, y: stackY, w: inverter.w, h: ANALYSIS_BTN_H }
     : undefined;
+  const chargeBlock: Rect | undefined = opts.chargeBlock
+    ? { x: battery.x, y: battery.y + battery.h + 30, w: battery.w, h: CHARGE_BLOCK_H }
+    : undefined;
   const buttonsBottom = Math.max(
+    chargeBlock ? chargeBlock.y + chargeBlock.h : 0,
     analysisButton ? analysisButton.y + analysisButton.h : 0,
     forecastButton ? forecastButton.y + forecastButton.h : 0,
     backButton ? backButton.y + backButton.h : 0,
@@ -136,6 +149,13 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     pvSolcast: `M ${pv.x + pv.w} ${pv.y + pv.h / 2} H ${solcast.x}`,
     mpptInv: `M ${mppt.x + mppt.w} ${mpptMidY} H ${inverter.x - 80} V ${invDcY} H ${inverter.x}`,
     batInv: `M ${battery.x + battery.w} ${batPortY} H ${inverter.x - 40} V ${invBatY} H ${inverter.x}`,
+    // Síť → AC IN: z levého boku sítě mezi sloupci dolů a shora do měniče
+    // (pod boxem Solcastu, mimo ostrovní trunk vpravo).
+    gridAcIn: (() => {
+      const bendX = Math.round((inverter.x + inverter.w + FLOOR_X) / 2) - 20;
+      const midY = Math.round((solcast.y + solcast.h + inverter.y) / 2);
+      return `M ${grid.x} ${grid.y + grid.h * 0.75} H ${bendX} V ${midY} H ${inverter.x + inverter.w - 50} V ${inverter.y}`;
+    })(),
     islandTaps: floors.map((f) => {
       const fy = f.y + f.h / 2;
       return `M ${inverter.x + inverter.w} ${invOutY} H ${ISLAND_TRUNK_X} V ${fy} H ${f.x}`;
@@ -159,6 +179,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     backButton,
     analysisButton,
     forecastButton,
+    chargeBlock,
     paths,
   };
 }
@@ -211,6 +232,9 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     ? { x, y, w, h: ANALYSIS_BTN_H }
     : undefined;
   if (analysisButton) y += analysisButton.h + MOBILE_GAP;
+  // Mobil: pod tlačítky (pod baterií by ho křížila spojka baterie → měnič).
+  const chargeBlock: Rect | undefined = opts.chargeBlock ? { x, y, w, h: CHARGE_BLOCK_H } : undefined;
+  if (chargeBlock) y += chargeBlock.h + MOBILE_GAP;
   const grid: Rect = { x, y, w, h: 185 };
   y += grid.h + MOBILE_GAP;
 
@@ -263,6 +287,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     backButton,
     analysisButton,
     forecastButton,
-    paths: { pvMppt, mpptInv, batInv, pvSolcast, islandTaps, gridTaps },
+    chargeBlock,
+    paths: { pvMppt, mpptInv, batInv, pvSolcast, gridAcIn: '', islandTaps, gridTaps },
   };
 }

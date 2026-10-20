@@ -148,6 +148,14 @@ export class FveFlowMiniCard extends LitElement {
     };
   }
 
+  /** Spotřeba z FVE bez AC IN: při nabíjení / průchodu ze sítě jde zátěž ze sítě. */
+  private _fveLoadText(): string {
+    const cfg = this._config!;
+    const acIn = hasNum(this.hass, cfg.ac_in_power) ? Math.max(0, toNum(this.hass, cfg.ac_in_power)) : 0;
+    if (acIn <= 0) return formatPowerEntity(this.hass, cfg.fve_load);
+    return formatPower(Math.max(0, toNum(this.hass, cfg.fve_load) - acIn));
+  }
+
   protected render(): TemplateResult {
     const cfg = this._config;
     if (!cfg) return html``;
@@ -228,7 +236,7 @@ export class FveFlowMiniCard extends LitElement {
           ${showFveLoad
             ? svg`
               <text class="side-value" x="${sideXLeft}" y="${sideValueY}" text-anchor="middle"
-                style="fill: ${C_FVE_LOAD}">${formatPowerEntity(this.hass, cfg.fve_load)}</text>
+                style="fill: ${C_FVE_LOAD}">${this._fveLoadText()}</text>
               <text class="side-label" x="${sideXLeft}" y="${sideLabelY}" text-anchor="middle">${fveLoadLabel}</text>
             `
             : nothing}

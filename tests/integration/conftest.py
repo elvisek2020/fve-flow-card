@@ -1,0 +1,9 @@
+"""Home Assistant fixtures for integration tests (core tests stay HA-free)."""
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(recorder_mock, enable_custom_integrations):
+    """Recorder first (it must exist before ``hass``), then allow custom integrations."""
+    return

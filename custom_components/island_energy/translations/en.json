@@ -1,0 +1,185 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hybrid Energy",
+        "description": "Pick the island PV entities. After setup the integration runs in shadow mode: it plans but does not switch AC IN until \"Allow automatic charging\" is on.",
+        "data": {
+          "soc": "Battery SoC (%)",
+          "battery_power": "Battery power (W, + = charging)",
+          "battery_invert": "Invert battery power sign",
+          "pv_power": "PV power (W)",
+          "capacity": "Battery capacity (kWh / Wh / Ah)",
+          "nominal_voltage": "Battery nominal voltage (for Ah)",
+          "solcast_today": "Solcast – today",
+          "solcast_tomorrow": "Solcast – tomorrow",
+          "solcast_day_3": "Solcast – day 3",
+          "solcast_day_4": "Solcast – day 4",
+          "solcast_day_5": "Solcast – day 5",
+          "solcast_day_6": "Solcast – day 6",
+          "solcast_day_7": "Solcast – day 7",
+          "inverter_power": "Inverter output power (AC out, W)",
+          "ac_in_power": "Grid power on AC IN (W)",
+          "dc_power": "Inverter DC power (W)",
+          "active_input": "GX active input source",
+          "inverter_state": "Inverter state",
+          "ac_in_switch": "AC IN switch (grid charging)",
+          "fan_switch": "Cooling switch",
+          "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
+          "daily_load": "Fallback daily consumption (kWh)",
+          "notify_service": "Notify service (e.g. notify.mobile_app_phone)"
+        },
+        "data_description": {
+          "hdo_sensor": "Preferred: the binary sensor with the HDO_HOURLY attribute (tariff command of your rate, e.g. DP01). The \"next HDO time\" sensor also works. Without HDO charging may happen any time.",
+          "notify_service": "Only for alerts when AC IN does not charge after switching on.",
+          "capacity": "Ah is converted with the nominal voltage, not the live one."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hybrid Energy",
+        "data": {
+          "soc": "Battery SoC (%)",
+          "battery_power": "Battery power (W, + = charging)",
+          "battery_invert": "Invert battery power sign",
+          "pv_power": "PV power (W)",
+          "capacity": "Battery capacity (kWh / Wh / Ah)",
+          "nominal_voltage": "Battery nominal voltage (for Ah)",
+          "solcast_today": "Solcast – today",
+          "solcast_tomorrow": "Solcast – tomorrow",
+          "solcast_day_3": "Solcast – day 3",
+          "solcast_day_4": "Solcast – day 4",
+          "solcast_day_5": "Solcast – day 5",
+          "solcast_day_6": "Solcast – day 6",
+          "solcast_day_7": "Solcast – day 7",
+          "inverter_power": "Inverter output power (AC out, W)",
+          "ac_in_power": "Grid power on AC IN (W)",
+          "dc_power": "Inverter DC power (W)",
+          "active_input": "GX active input source",
+          "inverter_state": "Inverter state",
+          "ac_in_switch": "AC IN switch (grid charging)",
+          "fan_switch": "Cooling switch",
+          "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
+          "daily_load": "Fallback daily consumption (kWh)",
+          "notify_service": "Notify service (e.g. notify.mobile_app_phone)"
+        },
+        "data_description": {
+          "hdo_sensor": "Preferred: the binary sensor with the HDO_HOURLY attribute (tariff command of your rate, e.g. DP01). The \"next HDO time\" sensor also works. Without HDO charging may happen any time.",
+          "notify_service": "Only for alerts when AC IN does not charge after switching on.",
+          "capacity": "Ah is converted with the nominal voltage, not the live one."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "grid_charge_plan": {
+        "name": "Grid charge plan"
+      },
+      "next_charge": {
+        "name": "Next charging"
+      },
+      "forecast": {
+        "name": "Battery forecast"
+      },
+      "status": {
+        "name": "Planner status",
+        "state": {
+          "shadow": "Shadow mode",
+          "idle": "Idle",
+          "planned": "Planned",
+          "charging": "Charging",
+          "manual": "Manual charging",
+          "external": "Switched on externally",
+          "skipped": "Skipped tonight"
+        }
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Grid charging"
+      },
+      "low_tariff": {
+        "name": "Low tariff"
+      }
+    },
+    "switch": {
+      "auto_charging": {
+        "name": "Allow automatic charging"
+      },
+      "auto_cooling": {
+        "name": "Allow automatic cooling"
+      }
+    },
+    "number": {
+      "ceiling": {
+        "name": "Grid charge ceiling"
+      },
+      "min_soc": {
+        "name": "Minimum SoC"
+      },
+      "charge_power": {
+        "name": "Grid charge power"
+      },
+      "full_every_days": {
+        "name": "Full charge at least every"
+      },
+      "cooling_on": {
+        "name": "Cooling on above"
+      },
+      "cooling_off": {
+        "name": "Cooling off below"
+      }
+    },
+    "button": {
+      "charge_now": {
+        "name": "Charge now"
+      },
+      "stop_charging": {
+        "name": "Stop charging"
+      },
+      "skip_tonight": {
+        "name": "Skip tonight"
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "Hybrid Energy is not loaded."
+    }
+  },
+  "services": {
+    "charge_now": {
+      "name": "Charge now",
+      "description": "Charge from the grid to a target SoC or for a duration.",
+      "fields": {
+        "target_soc": {
+          "name": "Target SoC",
+          "description": "Defaults to the grid charge ceiling."
+        },
+        "duration": {
+          "name": "Duration (min)",
+          "description": "At most this long."
+        }
+      }
+    },
+    "stop_charging": {
+      "name": "Stop charging",
+      "description": "Stop grid charging and skip the current plan window."
+    },
+    "skip_tonight": {
+      "name": "Skip tonight",
+      "description": "Skip planned charging until the next morning."
+    },
+    "recompute": {
+      "name": "Recompute plan",
+      "description": "Reload statistics and recompute the plan."
+    }
+  }
+}

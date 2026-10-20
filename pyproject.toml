@@ -1,0 +1,17 @@
+[project]
+name = "island-energy"
+version = "2.0.0"
+description = "Hybrid Energy — integrace pro Home Assistant s kartou toků energie"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]

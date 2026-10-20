@@ -11,6 +11,13 @@ permissions:
   contents: read
 
 jobs:
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
@@ -18,10 +25,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: hacs/action@main
         with:
-          category: plugin
+          category: integration
 
   build:
-    name: Build
+    name: Build card
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

@@ -138,10 +138,17 @@ export interface AnalysisPlan {
   pv: Candidate[];
   charge: Candidate[];
   discharge: Candidate[];
+  /** AC IN Victronu: síť → nabíječ, síť → zátěž (průchod), záložně integrál příkonu. */
+  acInCharge: Candidate[];
+  acInPass: Candidate[];
+  acInPower: Candidate[];
+  acInConfigured: boolean;
+  /** Index patra, jehož měření sítě napájí AC IN (odběr AC IN se od něj odečte). */
+  acInFloor: number | null;
   floors: FloorPlan[];
   fveConfigured: boolean;
   gridConfigured: boolean;
-  chart: { pv?: string; battery?: string; ac?: string; grid: string[]; soc?: string };
+  chart: { pv?: string; battery?: string; ac?: string; acIn?: string; grid: string[]; soc?: string };
   /** Řady zatížení fází (síť po fázích + výstup měniče) pro dimenzování měniče. */
   phases: Array<{ label: string; ids: string[] }>;
   solcast: { today?: string; tomorrow?: string; remaining?: string };
@@ -173,6 +180,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
   const pv = cfg.pv ?? {};
   const b = cfg.battery ?? {};
   const s = cfg.solcast ?? {};
+  const a = cfg.ac_in ?? {};
   const acId = clean(inv.load_power) ?? clean(inv.power);
   const acInPhases = [g.phase_a, g.phase_b, g.phase_c];
   const gridPowerIds = clean(g.power) ? [g.power] : acInPhases;
@@ -220,6 +228,14 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
     pv: [...meter(pv.energy_today, true), ...meter(pv.energy_total, false), ...integral([pv.power])],
     charge: integral([b.power], b.invert ? 'neg' : 'pos', true),
     discharge: integral([b.power], b.invert ? 'pos' : 'neg', true),
+    acInCharge: meter(a.energy_to_charger, false),
+    acInPass: meter(a.energy_passthrough, false),
+    acInPower: integral([a.power]),
+    acInConfigured: !!(clean(a.energy_to_charger) || clean(a.energy_passthrough) || clean(a.power)),
+    acInFloor: clean(a.floor) ? (() => {
+      const i = (cfg.floors ?? []).findIndex((f) => f.name === clean(a.floor));
+      return i >= 0 ? i : null;
+    })() : null,
     floors,
     fveConfigured: fve.length > 0 || floors.some((f) => f.fve.length),
     gridConfigured: grid.length > 0 || floors.some((f) => f.grid.length),
@@ -227,6 +243,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
       pv: clean(pv.power),
       battery: clean(b.power),
       ac: acId,
+      acIn: clean(a.power),
       grid: chartGrid,
       soc: clean(b.soc),
     },
@@ -340,6 +357,9 @@ interface Resolved {
   pv: Quantity;
   charge: Quantity;
   discharge: Quantity;
+  acInCharge: Quantity;
+  acInPass: Quantity;
+  acInPower: Quantity;
   floors: Array<{ fve: Quantity | null; grid: Quantity | null }>;
   pendingPower: string[];
 }
@@ -396,13 +416,23 @@ function resolveAll(plan: AnalysisPlan, st: Store): Resolved {
     pv: resolveChain(plan.pv, st, floorParts, pending),
     charge: resolveChain(plan.charge, st, floorParts, pending),
     discharge: resolveChain(plan.discharge, st, floorParts, pending),
+    acInCharge: resolveChain(plan.acInCharge, st, floorParts, pending),
+    acInPass: resolveChain(plan.acInPass, st, floorParts, pending),
+    acInPower: resolveChain(plan.acInPower, st, floorParts, pending),
     floors,
     pendingPower: [...pending],
   };
 }
 
 function meterIds(plan: AnalysisPlan): string[] {
-  const all = [plan.fve, plan.grid, plan.pv, ...plan.floors.flatMap((f) => [f.fve, f.grid])].flat();
+  const all = [
+    plan.fve,
+    plan.grid,
+    plan.pv,
+    plan.acInCharge,
+    plan.acInPass,
+    ...plan.floors.flatMap((f) => [f.fve, f.grid]),
+  ].flat();
   return all.flatMap((c) => (c.kind === 'meter' ? [c.id] : []));
 }
 
@@ -510,6 +540,8 @@ export interface IntradaySeries {
   pv: Slots;
   battery: Slots;
   ac: Slots;
+  /** Příkon ze sítě na AC IN měniče (W). */
+  acIn: Slots;
   gridW: Slots;
   soc: Slots;
   /** Úseky, kdy byla baterie plná (SoC max ≥ práh). */
@@ -694,6 +726,21 @@ export interface AnalysisData {
   pv: Quantity;
   charge: Quantity;
   discharge: Quantity;
+  /**
+   * AC IN Victronu (síť domu → měnič): `charger` = do nabíječe (baterie),
+   * `pass` = průchod do zátěže, `total` = obojí. Je i v příkonu hlavní přípojky.
+   */
+  acIn: {
+    configured: boolean;
+    charger: number | null;
+    pass: number | null;
+    total: number | null;
+    chargeQ: Quantity;
+    passQ: Quantity;
+    powerQ: Quantity;
+  };
+  /** Spotřeba z FV / baterie bez energie ze sítě přes AC IN (pro soběstačnost). */
+  fveSolar: number | null;
   fveConfigured: boolean;
   gridConfigured: boolean;
   gridName: string;
@@ -709,6 +756,8 @@ export interface AnalysisData {
     discharge: number | null;
     ac: number | null;
     inverterIn: number | null;
+    /** Nabito ze sítě přes AC IN (nabíječ) — DC příjem baterie, který není z MPPT. */
+    gridCharge: number | null;
     losses: number | null;
     efficiency: number | null;
     cycles: number | null;
@@ -816,7 +865,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
   const warnings: string[] = [];
   const chartIds = [
     ...new Set(
-      [plan.chart.pv, plan.chart.battery, plan.chart.ac, plan.chart.soc, ...plan.chart.grid, ...plan.phases.flatMap((p) => p.ids)].filter(
+      [plan.chart.pv, plan.chart.battery, plan.chart.ac, plan.chart.acIn, plan.chart.soc, ...plan.chart.grid, ...plan.phases.flatMap((p) => p.ids)].filter(
         (x): x is string => !!x,
       ),
     ),
@@ -869,6 +918,7 @@ export async function loadDay(ctx: AnalysisContext, range: PeriodRange): Promise
     pv: slot(plan.chart.pv),
     battery,
     ac: slot(plan.chart.ac),
+    acIn: slot(plan.chart.acIn),
     gridW: addSlots(plan.chart.grid.map((id) => slot(id)), grid.n),
     soc: slot(plan.chart.soc),
     fullSpans: fullSpans(grid, socMax, plan.fullSocPct),
@@ -1021,6 +1071,9 @@ export async function loadRange(
     pv: merge(past.pv, today?.pv),
     charge: merge(past.charge, today?.charge),
     discharge: merge(past.discharge, today?.discharge),
+    acInCharge: merge(past.acInCharge, today?.acIn.chargeQ),
+    acInPass: merge(past.acInPass, today?.acIn.passQ),
+    acInPower: merge(past.acInPower, today?.acIn.powerQ),
     floors: past.floors.map((f, i) => ({
       fve: f.fve ? merge(f.fve, today ? floorQuantity(today, i, 'fve') : undefined) : null,
       grid: f.grid ? merge(f.grid, today ? floorQuantity(today, i, 'grid') : undefined) : null,
@@ -1131,12 +1184,50 @@ function unmeasuredOf(
   return { u: 0, mismatch: null, days: days.length };
 }
 
-function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: DeriveExtra): AnalysisData {
+/**
+ * Energie AC IN po dnech: nabíječ + průchod z měřáků MultiPlusu, jinak integrál
+ * příkonu AC IN (celé jako nabíjení). Dny bez dat = 0 (AC IN se nepoužil).
+ */
+function acInDays(res: Resolved): { charger: Map<string, number>; pass: Map<string, number>; total: Map<string, number> } {
+  const keys = new Set([...res.acInCharge.byDay.keys(), ...res.acInPass.byDay.keys(), ...res.acInPower.byDay.keys()]);
+  const charger = new Map<string, number>();
+  const pass = new Map<string, number>();
+  const total = new Map<string, number>();
+  for (const k of keys) {
+    const ch = res.acInCharge.byDay.get(k);
+    const pa = res.acInPass.byDay.get(k) ?? 0;
+    const pw = res.acInPower.byDay.get(k);
+    const t = ch != null ? ch + pa : pw ?? pa;
+    total.set(k, t);
+    pass.set(k, pa);
+    charger.set(k, ch ?? Math.max(0, t - pa));
+  }
+  return { charger, pass, total };
+}
+
+function derive(ctx: AnalysisContext, range: PeriodRange, resolved: Resolved, x: DeriveExtra): AnalysisData {
+  let res = resolved;
   const { plan, capacityKwh } = ctx;
   const fve = res.fve.total;
   const grid = res.grid.total;
-  const configured = [plan.fveConfigured ? fve : 0, plan.gridConfigured ? grid : 0];
-  const house = configured.some((v) => v == null) || (fve == null && grid == null) ? null : (fve ?? 0) + (grid ?? 0);
+  const ac = acInDays(res);
+  const acCharger = plan.acInConfigured && ac.total.size ? sumMap(ac.charger) : plan.acInConfigured ? 0 : null;
+  const acPass = plan.acInConfigured && ac.total.size ? sumMap(ac.pass) : plan.acInConfigured ? 0 : null;
+  const acTotal = acCharger != null && acPass != null ? acCharger + acPass : null;
+  // Výstup měniče obsahuje i průchod ze sítě a energii nabitou ze sítě (spotřebuje
+  // se později) — z FV / baterie je jen zbytek. Síť (hlavní přípojka) AC IN už obsahuje.
+  const fveSolar = fve != null && acTotal != null ? Math.max(0, fve - acTotal) : fve;
+  const configured = [plan.fveConfigured ? fveSolar : 0, plan.gridConfigured ? grid : 0];
+  const house =
+    configured.some((v) => v == null) || (fveSolar == null && grid == null) ? null : (fveSolar ?? 0) + (grid ?? 0);
+  // Patro, přes jehož měření je AC IN napájený: odběr AC IN od něj odečíst (ukáže se zvlášť).
+  if (plan.acInFloor != null && ac.total.size) {
+    const f = res.floors[plan.acInFloor];
+    if (f?.grid) {
+      const byDay = new Map([...f.grid.byDay].map(([k, v]) => [k, Math.max(0, v - (ac.total.get(k) ?? 0))]));
+      res = { ...res, floors: res.floors.map((q, i) => (i === plan.acInFloor ? { ...q, grid: { ...f.grid!, byDay, total: sumMap(byDay) } } : q)) };
+    }
+  }
   const floors: FloorResult[] = plan.floors.map((f, i) => {
     const q = res.floors[i];
     const fv = q.fve?.total ?? null;
@@ -1157,7 +1248,14 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
   const partsOf = (part: 'fve' | 'grid') =>
     res.floors.map((f) => f[part]).filter((q): q is Quantity => q != null);
   const uf = unmeasuredOf(res.fve, partsOf('fve'));
-  const ug = unmeasuredOf(res.grid, partsOf('grid'));
+  // AC IN Victronu je v příkonu hlavní přípojky, ale ne v patrech → z „Neměřeno“ ho odečíst.
+  const gridLessAcIn: Quantity = ac.total.size
+    ? {
+        ...res.grid,
+        byDay: new Map([...res.grid.byDay].map(([k, v]) => [k, v - (ac.total.get(k) ?? 0)])),
+      }
+    : res.grid;
+  const ug = unmeasuredOf(gridLessAcIn, partsOf('grid'));
 
   // DC bilance jen za společné dny: vstup střídače = FVE − nabito + vybito; ztráty = vstup − AC.
   const dis = res.discharge.total;
@@ -1167,6 +1265,7 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
     discharge: null,
     ac: null,
     inverterIn: null,
+    gridCharge: null,
     losses: null,
     efficiency: null,
     cycles: null,
@@ -1177,19 +1276,26 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
   if (dcQs.every((q) => q.total != null)) {
     const days = commonDays(dcQs);
     if (days.length) {
-      const [pv, ch, di, ac] = dcQs.map((q) => sumDays(q, days));
-      const inverterIn = pv - ch + di;
-      const raw = inverterIn - ac;
+      const [pv, ch, di, acOut] = dcQs.map((q) => sumDays(q, days));
+      // Nabíjení ze sítě je DC příjem baterie mimo MPPT; průchod ze sítě jde do
+      // zátěže mimo DC stranu, takže do výstupu střídače nepatří.
+      const gridCharge = days.reduce((sum, k) => sum + (ac.charger.get(k) ?? 0), 0);
+      const pass = days.reduce((sum, k) => sum + (ac.pass.get(k) ?? 0), 0);
+      const fromPv = Math.max(0, ch - gridCharge);
+      const inverterIn = pv - fromPv + di;
+      const acFromDc = Math.max(0, acOut - pass);
+      const raw = inverterIn - acFromDc;
       const tol = Math.max(0.05, 0.03 * Math.abs(inverterIn));
       const mismatch = raw < -tol;
       dc = {
         pv,
         charge: ch,
         discharge: di,
-        ac,
+        ac: acFromDc,
         inverterIn,
+        gridCharge: plan.acInConfigured ? gridCharge : null,
         losses: mismatch ? null : Math.max(0, raw),
-        efficiency: !mismatch && inverterIn > 0.05 ? Math.min(1, ac / inverterIn) : null,
+        efficiency: !mismatch && inverterIn > 0.05 ? Math.min(1, acFromDc / inverterIn) : null,
         cycles: null,
         mismatch,
         days: days.length,
@@ -1219,12 +1325,22 @@ function derive(ctx: AnalysisContext, range: PeriodRange, res: Resolved, x: Deri
     pv: res.pv,
     charge: res.charge,
     discharge: res.discharge,
+    acIn: {
+      configured: plan.acInConfigured,
+      charger: acCharger,
+      pass: acPass,
+      total: acTotal,
+      chargeQ: res.acInCharge,
+      passQ: res.acInPass,
+      powerQ: res.acInPower,
+    },
+    fveSolar,
     fveConfigured: plan.fveConfigured,
     gridConfigured: plan.gridConfigured,
     gridName: plan.gridName,
     floors,
     house,
-    selfSufficiency: house != null && house > 0 && fve != null ? fve / house : null,
+    selfSufficiency: house != null && house > 0 && fveSolar != null ? fveSolar / house : null,
     unmeasured: { fve: uf.u, grid: ug.u },
     mismatch: { fve: uf.mismatch, grid: ug.mismatch },
     dc,

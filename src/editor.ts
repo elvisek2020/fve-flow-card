@@ -108,6 +108,26 @@ const SCHEMA = [
     ],
   },
   {
+    name: 'ac_in',
+    type: 'expandable',
+    title: 'AC IN měniče (nabíjení ze sítě)',
+    icon: 'mdi:transmission-tower-import',
+    schema: [
+      { name: 'power', selector: ENTITY, custom_label: 'Příkon ze sítě na AC IN (W)' },
+      { name: 'active_input', selector: ENTITY, custom_label: 'Aktivní vstupní zdroj GX' },
+      { name: 'state', selector: ENTITY, custom_label: 'Stav měniče (bulk / absorption / …)' },
+      { name: 'dc_power', selector: ENTITY, custom_label: 'DC výkon měniče (W, + = nabíjí)' },
+      { name: 'energy_to_charger', selector: ENTITY, custom_label: 'Energie síť → nabíječ (kWh)' },
+      { name: 'energy_passthrough', selector: ENTITY, custom_label: 'Energie síť → zátěž, průchod (kWh)' },
+      { name: 'floor', selector: TEXT, custom_label: 'Patro, přes které je AC IN napájený (název, např. 0NP)' },
+      {
+        name: 'phase',
+        selector: { select: { mode: 'dropdown', options: [{ value: 'a', label: 'L1' }, { value: 'b', label: 'L2' }, { value: 'c', label: 'L3' }] } },
+        custom_label: 'Fáze toho patra',
+      },
+    ],
+  },
+  {
     name: 'grid',
     type: 'expandable',
     icon: 'mdi:transmission-tower',
@@ -142,14 +162,14 @@ const SCHEMA = [
   {
     name: 'forecast',
     type: 'expandable',
-    title: 'Prognóza výdrže baterie',
+    title: 'Minimální SoC',
     icon: 'mdi:battery-clock',
     schema: [
       {
         name: 'min_soc_pct',
         selector: numBox(0, 100, 1),
         default: 10,
-        custom_label: 'Minimální SoC pro riziko (%)',
+        custom_label: 'Minimální SoC (%)',
       },
     ],
   },
@@ -261,6 +281,7 @@ const LABELS: Record<string, string> = {
   fan_switch: 'Spínač chlazení měniče (switch) — ovládací tlačítko',
   battery: 'Baterie',
   inverter: 'Měnič',
+  ac_in: 'AC IN měniče (nabíjení ze sítě)',
   grid: 'Síť (grid)',
   solcast: 'Předpověď Solcast',
   forecast: 'Prognóza výdrže baterie',
@@ -367,9 +388,9 @@ const HELPERS: Record<string, string> = {
   daily_load_entity:
     'Legacy: přesuň entitu do Měnič → Včerejší spotřeba domu. Stále funguje jako fallback pro prognózu.',
   energy_yesterday:
-    'Utility Meter last_period (včerejší kWh). Povinné pro tlačítko Prognóza pod měničem.',
+    'Utility Meter last_period (včerejší kWh). Prognózu a plán nabíjení dnes počítá integrace Hybrid Energy; tlačítko Prognóza se ukáže, když je nastavená.',
   min_soc_pct:
-    'Prognóza simuluje SoC po 15 min (Solcast − průměrný hodinový odběr). Když ranní minimum (SoC před začátkem nabíjení) spadne pod tento práh (%), den se označí jako riziko. Výchozí 10 %.',
+    'Ryska v pruhu energie baterie a zvýraznění v Analýze. S integrací Hybrid Energy se bere minimum nastavené v integraci. Výchozí 10 %.',
 };
 
 @customElement('fve-flow-card-editor')

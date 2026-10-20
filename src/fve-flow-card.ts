@@ -29,23 +29,10 @@ import { openConfirmDialog } from './confirm-dialog';
 import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
 import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
+import { findPlanner, plannerMinSoc, type PlannerEntities } from './planner';
+import { fetchStats } from './analysis-stats';
 import {
-  analyzeDays,
-  buildLoadProfile,
   capacityToKwh,
-  forecastDayLabels,
-  forwardKind,
-  measuredPoints,
-  pastDayLabels,
-  pvPeriodsForDay,
-  simulatePoints,
-  type ForecastDay,
-  type PvPeriod,
-} from './battery-forecast';
-import { parseDetailed } from './analysis-data';
-import { fetchStats, type RowMap } from './analysis-stats';
-import { fetchDailyEnergyKwh, fetchYesterdaySensorKwh, localDayKeyOffset } from './daily-stats';
-import {
   flowDuration,
   formatEnergy,
   formatEnergyEntity,
@@ -95,6 +82,9 @@ export class FveFlowCard extends LitElement {
 
   /** Historie za poslední hodinu pro sparkliny, klíč = entity_id. */
   @state() private _spark: Map<string, HistoryPoint[]> = new Map();
+  /** Dnešní energie AC IN (kWh, přírůstek kumulativních čítačů od půlnoci). */
+  @state() private _acInToday: { charger: number | null; pass: number | null } | null = null;
+  private _acInTodayKey = '';
   private _sparkEntities: string[] = [];
   private _sparkTimer?: number;
 
@@ -112,7 +102,10 @@ export class FveFlowCard extends LitElement {
     super.connectedCallback();
     // Periodické obnovení sparklin — nezávislé na `hass` update cyklu,
     // aby se historie netahala při každé změně stavu entit (1×/s).
-    this._sparkTimer = window.setInterval(() => void this._refreshSparklines(), 5 * 60 * 1000);
+    this._sparkTimer = window.setInterval(() => {
+      void this._refreshSparklines();
+      void this._refreshAcInToday();
+    }, 5 * 60 * 1000);
     this._resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
       if (width !== undefined) this._narrow = width < FveFlowCard.NARROW_BREAKPOINT;
@@ -146,6 +139,35 @@ export class FveFlowCard extends LitElement {
     if (!same) {
       this._sparkEntities = entities;
       void this._refreshSparklines();
+    }
+    const a = this._config.ac_in;
+    const acKey = `${a?.energy_to_charger ?? ''}|${a?.energy_passthrough ?? ''}`;
+    if (acKey !== this._acInTodayKey) {
+      this._acInTodayKey = acKey;
+      void this._refreshAcInToday();
+    }
+  }
+
+  /**
+   * Dnešní energie ze sítě do nabíječe / průchodem: čítače MultiPlusu jsou
+   * kumulativní, proto součet 5min statistik `change` od místní půlnoci.
+   */
+  private async _refreshAcInToday(): Promise<void> {
+    const a = this._config?.ac_in;
+    const ids = [a?.energy_to_charger, a?.energy_passthrough].filter((x): x is string => !!x);
+    if (!this.hass || !ids.length) {
+      this._acInToday = null;
+      return;
+    }
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    try {
+      const rows = await fetchStats(this.hass, ids, midnight.getTime(), Date.now(), '5minute', ['change']);
+      const sum = (id?: string) =>
+        id && rows.has(id) ? rows.get(id)!.reduce((s, r) => s + Math.max(0, r.change ?? 0), 0) : null;
+      this._acInToday = { charger: sum(a?.energy_to_charger), pass: sum(a?.energy_passthrough) };
+    } catch {
+      this._acInToday = null;
     }
   }
 
@@ -434,6 +456,10 @@ export class FveFlowCard extends LitElement {
       [f.phase_b_entity, f.phase_b_name, f.phase_b_icon, f.phase_b_show, 'L2'],
       [f.phase_c_entity, f.phase_c_name, f.phase_c_icon, f.phase_c_show, 'L3'],
     ];
+    // Fáze, přes kterou je napájený AC IN měniče: jeho příkon se od ní odečte.
+    const a = this._config?.ac_in;
+    const acInPhase = a?.floor && a.floor === f.name ? ({ a: 'L1', b: 'L2', c: 'L3' } as const)[a.phase ?? 'c'] : null;
+    const acInW = acInPhase && hasNum(this.hass, a?.power) ? Math.max(0, toNum(this.hass, a!.power)) : 0;
     for (const [entity, name, icon, show, label] of defs) {
       if (entity || show) {
         out.push({
@@ -441,6 +467,7 @@ export class FveFlowCard extends LitElement {
           name: name || label,
           icon: icon || 'mdi:flash',
           label,
+          ...(label === acInPhase && acInW > 0 ? { subtractW: acInW } : {}),
         });
       }
     }
@@ -567,188 +594,102 @@ export class FveFlowCard extends LitElement {
     return capacityToKwh(toNum(this.hass, b.capacity), unit, b.nominal_voltage ?? 48);
   }
 
-  /** Včerejší spotřeba domu (kWh) — prognóza; fallback na legacy forecast.daily_load_entity. */
-  private _yesterdayLoadEntity(): string | undefined {
-    const id =
-      this._config?.inverter?.energy_yesterday?.trim() ||
-      this._config?.forecast?.daily_load_entity?.trim();
-    return id || undefined;
-  }
-
-  /** Dnešní spotřeba domu (kWh) — řádek u měniče + LTS historie v prognóze. */
-  private _todayLoadEntity(): string | undefined {
-    const id = this._config?.inverter?.energy_today?.trim();
-    return id || undefined;
-  }
-
-  /** Proč nejde otevřít prognózu — prázdné = ready. */
-  private _forecastBlockReason(): string | null {
-    const cfg = this._config;
-    if (!cfg?.battery?.soc || !hasNum(this.hass, cfg.battery.soc)) {
-      return 'Chybí SoC baterie';
-    }
-    if (this._batteryCapacityKwh() <= 0) {
-      return 'Chybí kapacita baterie (kWh / Ah)';
-    }
-    const yesterday = this._yesterdayLoadEntity();
-    if (!yesterday || !hasNum(this.hass, yesterday)) {
-      return 'Doplň měnič → včerejší spotřeba domu (kWh)';
-    }
-    const s = cfg.solcast;
-    const hasPv =
-      hasNum(this.hass, s?.remaining_today) ||
-      hasNum(this.hass, s?.total_today) ||
-      hasNum(this.hass, s?.total_tomorrow);
-    if (!hasPv) {
-      return 'Doplň Solcast dnes nebo zítra (kWh)';
-    }
-    return null;
-  }
-
-  /** Entita Solcastu pro den (0 = dnes … 6) — nese i atribut detailedForecast. */
-  private _solcastDayEntity(dayIndex: number): string | undefined {
-    const s = this._config?.solcast;
-    return [s?.total_today, s?.total_tomorrow, s?.total_day3, s?.total_day4, s?.total_day5, s?.total_day6, s?.total_day7][
-      dayIndex
-    ];
-  }
-
-  private _solcastDayKwh(dayIndex: number): number | null {
-    const s = this._config?.solcast;
-    if (!s) return null;
-    // Dnes: vždy total_today (celodenní predikce). remaining_today v noci padá na 0
-    // a s celodenní spotřebou by SoC po bilanci nesmyslně propadl.
-    const ids =
-      dayIndex === 0
-        ? [s.total_today, s.remaining_today]
-        : dayIndex === 1
-          ? [s.total_tomorrow]
-          : dayIndex === 2
-            ? [s.total_day3]
-            : dayIndex === 3
-              ? [s.total_day4]
-              : dayIndex === 4
-                ? [s.total_day5]
-                : dayIndex === 5
-                  ? [s.total_day6]
-                  : [s.total_day7];
-    for (const id of ids) {
-      if (hasNum(this.hass, id)) return toNum(this.hass, id);
-    }
-    return null;
-  }
-
-  /** Guard proti dvojitému otevření prognózy během async fetch. */
-  private _forecastOpening = false;
-
-  private async _openBatteryForecast(): Promise<void> {
-    const reason = this._forecastBlockReason();
-    if (reason || this._forecastOpening) return;
-    this._forecastOpening = true;
-    try {
-      const cfg = this._config!;
-      const b = cfg.battery!;
-      const pastDays = 5;
-      const now = Date.now();
-      const socNow = toNum(this.hass, b.soc);
-      const capacityKwh = this._batteryCapacityKwh();
-      const yesterdayId = this._yesterdayLoadEntity()!;
-      const minSocPct = cfg.forecast?.min_soc_pct ?? 10;
-
-      // Dny: 5 zpět (historie) + dnes … +6 (predikce), hranice v místním čase.
-      const midnight = (offset: number) => {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        d.setDate(d.getDate() + offset);
-        return d.getTime();
-      };
-      const pastLabels = pastDayLabels(pastDays);
-      const fwdLabels = forecastDayLabels();
-
-      // Hodinové statistiky za 7 dní: profil odběru + naměřené SoC historie.
-      const ids = [cfg.pv?.power, b.power, cfg.inverter?.power, b.soc].filter((x): x is string => !!x);
-      const todayLoadId = this._todayLoadEntity();
-      const [rows, pvStats, loadStats] = await Promise.all([
-        fetchStats(this.hass!, ids, midnight(-7), now, 'hour', ['mean', 'min', 'max']).catch((): RowMap => new Map()),
-        fetchDailyEnergyKwh(this.hass, cfg.pv?.energy_today, pastDays),
-        todayLoadId
-          ? fetchDailyEnergyKwh(this.hass, todayLoadId, pastDays)
-          : fetchYesterdaySensorKwh(this.hass, yesterdayId, pastDays),
-      ]);
-      const sign = b.invert ? -1 : 1;
-      const batRows = b.power
-        ? (rows.get(b.power) ?? []).map((r) => ({ ...r, mean: r.mean == null ? null : r.mean * sign }))
-        : undefined;
-      // Profil jen z celých dní (bez dneška), ať ho neovlivní rozjetý den.
-      const fullDays = <T extends { start: number }>(list?: T[]) => list?.filter((r) => r.start < midnight(0));
-      const { profile, source } = buildLoadProfile({
-        pv: fullDays(cfg.pv?.power ? rows.get(cfg.pv.power) : undefined),
-        battery: fullDays(batRows),
-        inverter: fullDays(cfg.inverter?.power ? rows.get(cfg.inverter.power) : undefined),
-        fallbackDailyKwh: toNum(this.hass, yesterdayId),
-      });
-      const dailyLoadKwh = profile.reduce((a, w) => a + w, 0) / 1000;
-
-      // Výroba po intervalech: detailedForecast každého dne (bez něj tvar z jiného dne).
-      const detailed = fwdLabels.map((_, i) => {
-        const id = this._solcastDayEntity(i);
-        const attr = id ? this.hass!.states[id]?.attributes.detailedForecast : undefined;
-        return parseDetailed(attr, midnight(i), midnight(i + 1)).map(
-          (p): PvPeriod => ({ start: p.start, end: p.end, w: p.p50 }),
-        );
-      });
-      const template = detailed.find((d) => d.length) ?? null;
-      const pv = fwdLabels.flatMap((_, i) => pvPeriodsForDay(midnight(i), this._solcastDayKwh(i), detailed[i], template));
-
-      const days: ForecastDay[] = [
-        ...pastLabels.map((label, i) => {
-          const key = localDayKeyOffset(-(pastDays - i));
-          return {
-            label,
-            kind: 'past' as const,
-            start: midnight(-(pastDays - i)),
-            end: midnight(-(pastDays - i) + 1),
-            pvKwh: pvStats.has(key) ? pvStats.get(key)! : null,
-            loadKwh: loadStats.has(key) ? loadStats.get(key)! : null,
-          };
-        }),
-        ...fwdLabels.map((label, i) => ({
-          label,
-          kind: forwardKind(i),
-          start: midnight(i),
-          end: midnight(i + 1),
-          pvKwh: this._solcastDayKwh(i),
-          loadKwh: dailyLoadKwh,
-        })),
-      ];
-
-      // Časová osa: naměřené hodiny do teď + simulace od teď do konce 7. dne.
-      const measured = measuredPoints(rows.get(b.soc!) ?? [], batRows).filter((p) => p.t < now);
-      const simulated = simulatePoints({ now, socNow, capacityKwh, pv, profileW: profile, until: midnight(7) });
-      const result = analyzeDays(days, [...measured, ...simulated], minSocPct);
-      const fwd = result.filter((d) => d.kind !== 'past');
-
-      openForecastDialog({
-        result: {
-          days: result,
-          minSocPct,
-          ok: fwd.every((d) => !d.risk),
-          loadSource: source,
-          dailyLoadKwh,
-        },
-        accent: fwd.some((d) => d.risk) ? C.crit : fwd[0]?.fullAt != null ? C.ok : C.warn,
-      });
-    } finally {
-      this._forecastOpening = false;
-    }
+  /** Entity integrace Hybrid Energy, která počítá prognózu a plán nabíjení (null = není). */
+  private _planner(): PlannerEntities | null {
+    return findPlanner(this.hass);
   }
 
   /**
-   * Tlačítko Prognóza nad Analýzou — jen když je v nastavení včerejší spotřeba
-   * domu. Bez potřebných entit je ztlumené a pod nápisem ukáže, co chybí.
+   * Blok „Nabíjení ze sítě“ pod baterií (integrace Hybrid Energy): stav plánovače,
+   * plán na příští noc a ovládání Nabít teď / Vypnout / automat.
+   */
+  private _chargeBlock(r: Rect): TemplateResult | typeof nothing {
+    const p = this._planner();
+    const hass = this.hass;
+    if (!p || !hass) return nothing;
+    const status = p.status ? hass.states[p.status]?.state : undefined;
+    const charging = (p.charging ? hass.states[p.charging]?.state === 'on' : false) || status === 'charging' || status === 'manual';
+    const auto = p.autoCharging ? hass.states[p.autoCharging]?.state === 'on' : false;
+    const plan = p.plan ? hass.states[p.plan] : undefined;
+    const kwh = plan ? Number(plan.state) : NaN;
+    const windows = (plan?.attributes.windows as Array<{ start: string; end: string }> | undefined) ?? [];
+    const hm = (iso: string) => new Date(iso).toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' });
+    const STATUS: Record<string, string> = {
+      shadow: 'Stínový režim',
+      idle: 'Bez plánu',
+      planned: 'Naplánováno',
+      charging: 'Nabíjí podle plánu',
+      manual: 'Ruční nabíjení',
+      external: 'Zapnuto mimo plánovač',
+      skipped: 'Dnes v noci ne',
+    };
+    const accent = charging ? C.grid : auto ? C.ok : 'rgba(148,170,190,0.55)';
+    const acInW = hasNum(hass, this._config?.ac_in?.power) ? Math.max(0, toNum(hass, this._config!.ac_in!.power)) : 0;
+    const planText =
+      Number.isFinite(kwh) && kwh > 0 && windows.length
+        ? `Noc: ${formatEnergy(kwh)} · ${hm(windows[0].start)}–${hm(windows[windows.length - 1].end)}`
+        : Number.isFinite(kwh)
+          ? 'Noc: ze sítě nenabíjí'
+          : 'Plán se počítá…';
+    const press = (entityId?: string) => (e: Event) => {
+      e.stopPropagation();
+      if (entityId) void hass.callService?.('button', 'press', { entity_id: entityId });
+    };
+    const toggleAuto = (e: Event) => {
+      e.stopPropagation();
+      if (p.autoCharging) void hass.callService?.('switch', auto ? 'turn_off' : 'turn_on', { entity_id: p.autoCharging });
+    };
+    const bw = 84;
+    const by = r.y + r.h - 44;
+    const btn = (x: number, label: string, on: boolean, color: string, onClick: (e: Event) => void) => svg`
+      <g class="ctrl-chip" @click=${onClick}>
+        <rect x="${x}" y="${by}" width="${bw}" height="28" rx="9" fill="rgba(255,255,255,0.05)"
+          stroke="${color}" stroke-opacity="${on ? 0.8 : 0.45}" stroke-width="1"
+          style="${on ? `filter: drop-shadow(0 0 6px ${color}60)` : ''}"/>
+        <text class="ctrl-label" x="${x + bw / 2}" y="${by + 18.5}" text-anchor="middle"
+          style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
+      </g>`;
+    return svg`
+      ${this._panel(r, accent, charging || auto)}
+      <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
+      ${iconPylon(r.x + 20, r.y + 44, 44, charging ? C.grid : 'rgba(148,170,190,0.55)')}
+      <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${charging ? C.grid : '#e6f4fa'}">
+        ${status ? STATUS[status] ?? status : '—'}
+      </text>
+      <text class="small" x="${r.x + 80}" y="${r.y + 90}">${planText}</text>
+      ${this._config?.ac_in?.power
+        ? svg`<text class="small" x="${r.x + 80}" y="${r.y + 114}">
+            Příkon ze sítě <tspan class="strong" style="fill: ${acInW > 0 ? C.grid : '#e6f4fa'}">${formatPower(acInW)}</tspan>
+          </text>`
+        : nothing}
+      ${this._acInToday && (this._acInToday.charger != null || this._acInToday.pass != null)
+        ? svg`<text class="tiny" x="${r.x + 80}" y="${r.y + 136}">
+            Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.pass != null
+              ? svg` · průchod ${formatEnergy(this._acInToday.pass)}`
+              : nothing}
+          </text>`
+        : nothing}
+      ${btn(r.x + 20, 'Nabít teď', charging, C.grid, press(p.chargeNow))}
+      ${btn(r.x + 20 + bw + 8, 'Vypnout', false, 'rgba(148,170,190,0.8)', press(p.stopCharging))}
+      ${btn(r.x + 20 + 2 * (bw + 8), auto ? 'Automat ✓' : 'Automat', auto, C.ok, toggleAuto)}
+    `;
+  }
+
+  /** Okno prognózy: data a ovládání z integrace Hybrid Energy. */
+  private _openBatteryForecast(): void {
+    const planner = this._planner();
+    if (!planner) return;
+    openForecastDialog({ getHass: () => this.hass, planner });
+  }
+
+  /**
+   * Tlačítko Prognóza nad Analýzou — jen když je nastavená integrace Hybrid
+   * Energy. Dokud nemá spočítanou prognózu, je ztlumené s vysvětlením.
    */
   private _forecastButton(r: Rect): TemplateResult {
-    const reason = this._forecastBlockReason();
+    const planner = this._planner();
+    const ready = !!planner && Array.isArray(this.hass?.states[planner.forecast]?.attributes.days);
+    const reason = ready ? null : 'Integrace Hybrid Energy zatím prognózu nespočítala';
     const enabled = !reason;
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
@@ -758,7 +699,7 @@ export class FveFlowCard extends LitElement {
         e.stopPropagation();
         if (enabled) void this._openBatteryForecast();
       }}>
-        <title>${reason ?? 'Prognóza výdrže baterie — historie a 7 dní dopředu'}</title>
+        <title>${reason ?? 'Prognóza výdrže baterie a plán nabíjení ze sítě'}</title>
         <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="14"
           fill="rgba(14, 24, 34, 0.72)"
           stroke="rgba(148,170,190,0.4)" stroke-width="1.5"/>
@@ -809,9 +750,15 @@ export class FveFlowCard extends LitElement {
     );
   }
 
+  /** Odběr patra ze sítě bez AC IN měniče, který je napájený přes toto patro. */
   private _floorGridPower(f: FloorConfig): number {
-    if (f.grid_power && hasNum(this.hass, f.grid_power)) return toNum(this.hass, f.grid_power);
-    return this._phases(f).reduce((sum, p) => sum + toNum(this.hass, p.entity), 0);
+    const a = this._config?.ac_in;
+    const acInW = a?.floor && a.floor === f.name && hasNum(this.hass, a.power) ? Math.max(0, toNum(this.hass, a.power)) : 0;
+    if (f.grid_power && hasNum(this.hass, f.grid_power)) return Math.max(0, toNum(this.hass, f.grid_power) - acInW);
+    return this._phases(f).reduce(
+      (sum, p) => sum + Math.max(0, Math.abs(toNum(this.hass, p.entity)) - (p.subtractW ?? 0)),
+      0,
+    );
   }
 
   protected render(): TemplateResult {
@@ -823,7 +770,8 @@ export class FveFlowCard extends LitElement {
     const buttons = {
       backButton: !!cfg.back_button?.enabled,
       analysisButton: cfg.analysis?.enabled !== false,
-      forecastButton: !!this._yesterdayLoadEntity(),
+      forecastButton: !!this._planner(),
+      chargeBlock: !!this._planner(),
     };
     const layout = this._narrow
       ? computeMobileLayout(Math.max(1, floors.length), buttons)
@@ -833,6 +781,7 @@ export class FveFlowCard extends LitElement {
     const pvP = toNum(this.hass, cfg.pv?.power);
     const rawBatP = toNum(this.hass, cfg.battery?.power);
     const batP = cfg.battery?.invert ? -rawBatP : rawBatP; // kladné = nabíjení
+    const acIn = this._acIn();
     const charging = batP >= base.deadband;
     const discharging = batP <= -base.deadband;
     const islandTotal = hasNum(this.hass, cfg.inverter?.load_power)
@@ -879,10 +828,17 @@ export class FveFlowCard extends LitElement {
           ${flow('mppt-inv', layout.paths.mpptInv, { power: pvP, color: C.solar, hidden: !cfg.pv?.power })}
           ${flow('bat-inv', layout.paths.batInv, {
             power: batP,
-            color: charging ? C.charge : C.discharge,
+            // Při nabíjení ze sítě (AC IN) je tok do baterie v barvě sítě, ne FV.
+            color: charging ? (acIn.active ? C.grid : C.charge) : C.discharge,
             reverse: charging,
             hidden: !cfg.battery?.power,
           })}
+          ${layout.paths.gridAcIn && cfg.ac_in?.power
+            ? flow('grid-acin', layout.paths.gridAcIn, {
+                power: acIn.active ? acIn.power : 0,
+                color: C.grid,
+              })
+            : nothing}
           ${layout.paths.islandTaps.map((d, i) => {
             // Layout drží min. 1 slot patra — bez nakonfigurovaného patra žádný tok.
             const f = floors[i];
@@ -911,9 +867,10 @@ export class FveFlowCard extends LitElement {
           <!-- Uzly -->
           ${this._nodePv(layout.pv)}
           ${this._nodeMppt(layout.mppt)}
-          ${this._nodeBattery(layout.battery, batP, charging, discharging)}
-          ${this._nodeInverter(layout.inverter, islandTotal)}
+          ${this._nodeBattery(layout.battery, batP, charging, discharging, acIn.active)}
+          ${this._nodeInverter(layout.inverter, islandTotal, acIn)}
           ${layout.forecastButton ? this._forecastButton(layout.forecastButton) : nothing}
+          ${layout.chargeBlock ? this._chargeBlock(layout.chargeBlock) : nothing}
           ${layout.analysisButton ? this._analysisButton(layout.analysisButton) : nothing}
           ${layout.backButton ? this._backButton(layout.backButton) : nothing}
           ${this._nodeSolcast(layout.solcast)}
@@ -1064,7 +1021,13 @@ export class FveFlowCard extends LitElement {
     `;
   }
 
-  private _nodeBattery(r: Rect, batP: number, charging: boolean, discharging: boolean): TemplateResult {
+  private _nodeBattery(
+    r: Rect,
+    batP: number,
+    charging: boolean,
+    discharging: boolean,
+    fromGrid = false,
+  ): TemplateResult {
     const b = this._config?.battery ?? {};
     const soc = toNum(this.hass, b.soc, 0);
     // Nedostupné SoC nesmí vypadat jako prázdná červená baterie — neutrální šedá.
@@ -1077,12 +1040,13 @@ export class FveFlowCard extends LitElement {
           severity_invert: b.severity_invert,
         })!
       : NEUTRAL;
+    // Nabíjení ze sítě (AC IN) v barvě sítě, ať je vidět, že nejde o FV.
     const stateText = charging
-      ? `▲ nabíjení ${formatPower(Math.abs(batP))}`
+      ? `▲ ${fromGrid ? 'ze sítě' : 'nabíjení'} ${formatPower(Math.abs(batP))}`
       : discharging
         ? `▼ vybíjení ${formatPower(Math.abs(batP))}`
         : '● klidový stav';
-    const stateColor = charging ? C.charge : discharging ? C.discharge : 'rgba(220,235,245,0.55)';
+    const stateColor = charging ? (fromGrid ? C.grid : C.charge) : discharging ? C.discharge : 'rgba(220,235,245,0.55)';
     return svg`
       ${this._panel(r, socColor, socKnown)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">${b.name || 'Baterie Pylontech'}</text>
@@ -1135,7 +1099,7 @@ export class FveFlowCard extends LitElement {
     const w = r.w - 40;
     const y = r.y + r.h - 24;
     const pct = soc == null ? 0 : Math.min(100, Math.max(0, soc));
-    const minPct = this._config?.forecast?.min_soc_pct ?? 10;
+    const minPct = plannerMinSoc(this.hass, this._planner()) ?? this._config?.forecast?.min_soc_pct ?? 10;
     return svg`
       <text class="small" x="${x}" y="${y - 9}">
         V baterii <tspan class="strong" style="fill: ${color}">${soc == null ? '—' : formatEnergy((cap * pct) / 100)}</tspan>
@@ -1154,7 +1118,26 @@ export class FveFlowCard extends LitElement {
       </line>`;
   }
 
-  private _nodeInverter(r: Rect, islandTotal: number): TemplateResult {
+  /**
+   * AC IN Victronu: aktivní, když má příkon nad deadband nebo GX hlásí vstup `grid`.
+   * Nabíjení baterie ze sítě = kladný DC výkon měniče během AC IN.
+   */
+  private _acIn(): { active: boolean; power: number; chargeW: number | null; state: string | null } {
+    const a = this._config?.ac_in;
+    if (!a?.power && !a?.active_input) return { active: false, power: 0, chargeW: null, state: null };
+    const power = hasNum(this.hass, a.power) ? toNum(this.hass, a.power) : 0;
+    const input = a.active_input ? this.hass?.states[a.active_input]?.state : undefined;
+    const active = power >= this._flowBase().deadband || input === 'grid';
+    const chargeW = hasNum(this.hass, a.dc_power) ? Math.max(0, toNum(this.hass, a.dc_power)) : null;
+    const state = a.state ? formatState(this.hass, a.state) : null;
+    return { active, power, chargeW, state: state && state !== '—' ? state : null };
+  }
+
+  private _nodeInverter(
+    r: Rect,
+    islandTotal: number,
+    acIn: { active: boolean; power: number; chargeW: number | null; state: string | null },
+  ): TemplateResult {
     const inv = this._config?.inverter ?? {};
     const p = hasNum(this.hass, inv.power) ? toNum(this.hass, inv.power) : islandTotal;
     const pKnown = hasNum(this.hass, inv.power) || hasNum(this.hass, inv.load_power);
@@ -1188,6 +1171,13 @@ export class FveFlowCard extends LitElement {
       ${inv.load_power
         ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + (inv.energy_today ? 204 : 184)}">
             Kritické zátěže ${formatPowerEntity(this.hass, inv.load_power)}
+          </text>`
+        : nothing}
+      ${acIn.active
+        ? svg`<text class="tiny" x="${r.x + 90}" y="${r.y + (inv.load_power ? 224 : 204)}" style="fill: ${C.grid}">
+            AC IN <tspan class="strong" style="fill: ${C.grid}">${formatPower(acIn.power)}</tspan>${acIn.chargeW
+              ? ` · nabíjí ${formatPower(acIn.chargeW)}`
+              : ''}
           </text>`
         : nothing}
       ${sev ? this._bar(r, p, inv.bar_max ?? this._flowBase().maxPower, sev) : nothing}

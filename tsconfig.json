@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
-    "outDir": "dist"
+    "outDir": "custom_components/island_energy/frontend"
   },
   "include": ["src/**/*.ts"]
 }

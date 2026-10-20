@@ -2,7 +2,7 @@ import { svg, type TemplateResult } from 'lit';
 import type { HomeAssistant, PhaseSpec } from './types';
 import type { Rect } from './layout';
 import { iconBolt } from './icons';
-import { formatPowerEntity, toNum } from './utils';
+import { formatPower, formatPowerEntity, toNum } from './utils';
 
 /** Nad tímto výkonem (W) se okraj chipu zvýrazní barvou fáze / FVE. */
 const ACTIVE_CHIP_W = 10;
@@ -71,14 +71,14 @@ export function renderPhaseChips(
     const iconColor = style?.iconColor ?? opts?.iconColor ?? 'rgba(226,240,248,0.75)';
     const idleBorder = style?.borderColor ?? opts?.borderColor ?? 'rgba(120,180,210,0.16)';
     const valueColor = style?.valueColor ?? opts?.valueColor;
-    const watts = inactive ? 0 : Math.abs(toNum(hass, ph.entity));
+    const watts = inactive ? 0 : Math.max(0, Math.abs(toNum(hass, ph.entity)) - (ph.subtractW ?? 0));
     const activeLoad = !inactive && watts > ACTIVE_CHIP_W;
     const borderColor = activeLoad ? iconColor : idleBorder;
     const strokeWidth = activeLoad ? 1.75 : 1;
     const strokeOpacity = activeLoad ? 0.85 : 0.45;
     const x = zoneX + i * (chipW + gap);
     const cx = x + chipW / 2;
-    const power = inactive ? '—' : formatPowerEntity(hass, ph.entity);
+    const power = inactive ? '—' : ph.subtractW ? formatPower(watts) : formatPowerEntity(hass, ph.entity);
     const iconSize = 14;
     const iconX = cx - iconSize / 2;
     const iconY = chipY + 12;

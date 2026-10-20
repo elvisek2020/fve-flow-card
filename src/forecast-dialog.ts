@@ -1,62 +1,85 @@
-import type { BatteryForecastResult, ForecastDayResult } from './battery-forecast';
+import type { HomeAssistant } from './types';
+import { plannerDays, type LoadSource, type PlannerDay, type PlannerEntities } from './planner';
 import { formatEnergy } from './utils';
 
 export interface ForecastDialogOptions {
-  result: BatteryForecastResult;
-  accent?: string;
+  /** Aktuální hass (dialog se obnovuje, dokud je otevřený). */
+  getHass: () => HomeAssistant | undefined;
+  planner: PlannerEntities;
 }
 
 const DIALOG_TAG = 'fve-flow-forecast-dialog';
+const REFRESH_MS = 5000;
 
 const nf0 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 });
-
-function formatSoc(pct: number): string {
-  return `${nf0.format(Math.round(pct))} %`;
-}
-
-function formatPv(kwh: number | null): string {
-  if (kwh == null || !Number.isFinite(kwh)) return '—';
-  return formatEnergy(kwh);
-}
-
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: 'numeric', minute: '2-digit' });
+const fmtDay = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
 
-/** Čas z historie (už proběhlý) je jen po hodinách → „~7:00“. */
-function formatAt(t: number | null): string {
-  if (t == null) return '';
-  return `${t < Date.now() ? '~' : ''}${fmtTime.format(t)}`;
-}
-
-/** Stav dne: pod prahem / nabije se na 100 % / jen částečně / nenabíjí se. */
-function dayState(day: ForecastDayResult): { cls: string; title: string } {
-  if (day.trough == null) return { cls: '', title: '' };
-  if (day.risk) return { cls: 'bad', title: 'Ráno pod prahem' };
-  if (day.fullAt != null) return { cls: 'ok', title: 'Nabije se na 100 %' };
-  if (day.charges) return { cls: 'part', title: 'Nenabije se na 100 %' };
-  return { cls: 'none', title: 'Nenabíjí se' };
-}
-
-const SOURCE_TEXT: Record<BatteryForecastResult['loadSource'], string> = {
-  dc: 'průměrný odběr z baterie po hodinách za 7 dní',
-  ac: 'průměrný výstup měniče po hodinách za 7 dní',
-  flat: 'včerejší spotřeba rozložená rovnoměrně',
-};
-
-/** Vysvětlení, odkud je budoucí spotřeba (proč se liší od minulých dnů). */
-const LOAD_TEXT: Record<BatteryForecastResult['loadSource'], string> = {
+const LOAD_TEXT: Record<LoadSource, string> = {
   dc:
     'Budoucí spotřeba je průměrný odběr z baterie za posledních 7 dní (včetně ztrát měniče) — ' +
     'nerozlišuje všední den a víkend a může se lišit od naměřené spotřeby domu v minulých dnech.',
   ac:
     'Budoucí spotřeba je průměrný výstup měniče za posledních 7 dní — ' +
     'nerozlišuje všední den a víkend a nepočítá se ztrátami měniče.',
-  flat: 'Budoucí spotřeba je včerejší spotřeba domu, rozložená rovnoměrně do celého dne.',
+  flat: 'Budoucí spotřeba je záložní denní spotřeba, rozložená rovnoměrně do celého dne.',
 };
+
+function formatSoc(pct: number): string {
+  return `${nf0.format(Math.round(pct))} %`;
+}
+
+function kwh(v: number | null | undefined): string {
+  return v == null || !Number.isFinite(v) ? '—' : formatEnergy(v);
+}
+
+/** Čas z historie (už proběhlý) je jen po hodinách → „~7:00“. */
+function formatAt(iso: string | null): string {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  return `${t < Date.now() ? '~' : ''}${fmtTime.format(t)}`;
+}
+
+function dayLabel(d: PlannerDay): string {
+  if (d.kind === 'today') return 'Dnes';
+  if (d.kind === 'tomorrow') return 'Zítra';
+  return fmtDay.format(new Date(`${d.date}T12:00:00`));
+}
+
+/** Stav dne: pod prahem / nabije se na 100 % / jen částečně / nenabíjí se. */
+function dayState(day: PlannerDay): { cls: string; title: string } {
+  if (day.trough == null) return { cls: '', title: '' };
+  if (day.risk) return { cls: 'bad', title: 'Ráno pod prahem' };
+  if (day.full_at != null) return { cls: 'ok', title: 'Nabije se na 100 %' };
+  if (day.charges) return { cls: 'part', title: 'Nenabije se na 100 %' };
+  return { cls: 'none', title: 'Nenabíjí se' };
+}
+
+/** Sloupec AC IN: kWh a pod tím okna nabíjení se součtem délky. */
+function gridCell(day: PlannerDay): string {
+  if (!day.grid_kwh || !day.grid_windows.length) return '<span class="muted">—</span>';
+  let minutes = 0;
+  for (const w of day.grid_windows) minutes += (Date.parse(w.end) - Date.parse(w.start)) / 60000;
+  // Kompaktně: od začátku prvního do konce posledního okna (mezery přes VT neukazuje).
+  const first = Date.parse(day.grid_windows[0].start);
+  const last = Date.parse(day.grid_windows[day.grid_windows.length - 1].end);
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  const dur = h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+  const span = `${fmtTime.format(first)}–${fmtTime.format(last)}`;
+  const title = day.grid_windows
+    .map((w) => `${fmtTime.format(Date.parse(w.start))}–${fmtTime.format(Date.parse(w.end))}`)
+    .join(', ');
+  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(day.grid_kwh))}<small>${escapeHtml(span)}<span class="dur"> · ${dur}</span></small></span>`;
+}
 
 class FveFlowForecastDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
   private readonly _note: HTMLDivElement;
   private readonly _tbody: HTMLTableSectionElement;
+  private _options?: ForecastDialogOptions;
+  private _timer?: number;
+  private _stamp = '';
 
   public constructor() {
     super();
@@ -69,7 +92,7 @@ class FveFlowForecastDialog extends HTMLElement {
           font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
         }
         dialog {
-          width: min(560px, calc(100vw - 32px));
+          width: min(640px, calc(100vw - 32px));
           max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           padding: 0;
           overflow: hidden;
@@ -180,8 +203,14 @@ class FveFlowForecastDialog extends HTMLElement {
           table {
             font-size: 12.5px;
           }
+          /* Na mobilu se nevejde: spotřeba je u předpovědi stejná, délka je vidět z času. */
+          .col-load,
+          .dur {
+            display: none;
+          }
         }
-        td.muted {
+        td.muted,
+        span.muted {
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.45));
         }
         tr.risk td {
@@ -223,6 +252,11 @@ class FveFlowForecastDialog extends HTMLElement {
         .note p {
           margin: 0 0 3px;
         }
+        .empty {
+          padding: 24px 0;
+          color: var(--secondary-text-color, rgba(220, 235, 245, 0.6));
+          text-align: center;
+        }
       </style>
       <dialog aria-labelledby="forecast-title">
         <header>
@@ -236,9 +270,10 @@ class FveFlowForecastDialog extends HTMLElement {
               <tr>
                 <th>Den</th>
                 <th>Výroba</th>
-                <th>Spotřeba</th>
+                <th class="col-load">Spotřeba</th>
                 <th title="Nejnižší SoC, než se baterie začne nabíjet">Ráno</th>
                 <th title="Nejvyšší SoC dne, u 100 % čas nabití">Max</th>
+                <th title="Očekávané nabíjení ze sítě (AC IN) před tímto dnem">AC IN</th>
                 <th></th>
               </tr>
             </thead>
@@ -256,57 +291,84 @@ class FveFlowForecastDialog extends HTMLElement {
     this._dialog.addEventListener('click', (event) => {
       if (event.target === this._dialog) this._dialog.close();
     });
-    this._dialog.addEventListener('close', () => this.remove());
+    this._dialog.addEventListener('close', () => {
+      window.clearInterval(this._timer);
+      this.remove();
+    });
   }
 
   public show(options: ForecastDialogOptions): void {
-    if (options.accent) this.style.setProperty('--dialog-accent', options.accent);
-    const { result } = options;
-    // Patička po větách — každá na vlastním řádku.
+    this._options = options;
+    this._render(true);
+    this._dialog.showModal();
+    this._timer = window.setInterval(() => this._render(false), REFRESH_MS);
+  }
+
+  private _render(force: boolean): void {
+    const hass = this._options?.getHass();
+    const p = this._options?.planner;
+    if (!hass || !p) return;
+    const stamp = [p.forecast]
+      .map((id) => (id ? hass.states[id]?.last_updated ?? hass.states[id]?.state : ''))
+      .join('|');
+    if (!force && stamp === this._stamp) return;
+    this._stamp = stamp;
+
+    const forecast = hass.states[p.forecast];
+    const days = plannerDays(hass, p);
+    const risk = days.some((d) => d.kind !== 'past' && d.risk);
+    const today = days.find((d) => d.kind === 'today' || d.kind === 'tomorrow');
+    this.style.setProperty('--dialog-accent', risk ? '#ff5252' : today?.full_at ? '#69f0ae' : '#ffb74d');
+
+    this._tbody.replaceChildren();
+    if (!days.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="7" class="empty">Integrace zatím prognózu nespočítala.</td>';
+      this._tbody.append(tr);
+    }
+    for (const day of days) {
+      const tr = document.createElement('tr');
+      tr.classList.add(day.kind);
+      if (day.risk) tr.classList.add('risk');
+      const state = dayState(day);
+      const trough =
+        day.trough == null
+          ? '—'
+          : `${escapeHtml(formatSoc(day.trough))}<small>${escapeHtml(formatAt(day.trough_at))}</small>`;
+      const max =
+        day.peak == null
+          ? day.trough == null
+            ? '—'
+            : '<small>nenabíjí</small>'
+          : `${escapeHtml(formatSoc(day.full_at != null ? 100 : day.peak))}<small>${escapeHtml(
+              formatAt(day.full_at ?? day.peak_at),
+            )}</small>`;
+      tr.innerHTML = `
+        <td>${escapeHtml(dayLabel(day))}</td>
+        <td class="${day.pv_kwh == null ? 'muted' : ''}">${escapeHtml(kwh(day.pv_kwh))}</td>
+        <td class="col-load ${day.load_kwh == null ? 'muted' : ''}">${escapeHtml(kwh(day.load_kwh))}</td>
+        <td>${trough}</td>
+        <td>${max}</td>
+        <td>${day.kind === 'past' ? '<span class="muted">—</span>' : gridCell(day)}</td>
+        <td>${state.cls ? `<span class="dot ${state.cls}" title="${state.title}"></span>` : ''}</td>
+      `;
+      this._tbody.append(tr);
+    }
+
+    const source = (forecast?.attributes.load_source as LoadSource | undefined) ?? 'dc';
     this._note.replaceChildren(
       ...[
-        `Simulace SoC po 15 minutách: výroba podle Solcastu (průběh dne) − ${SOURCE_TEXT[result.loadSource]}.`,
+        'Prognózu a plán nabíjení počítá integrace Hybrid Energy po 15 minutách: výroba podle Solcastu minus spotřeba.',
         'Ráno = nejnižší SoC, než se baterie začne nabíjet.',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
-        LOAD_TEXT[result.loadSource],
+        'AC IN = plánované nabíjení ze sítě v noci před daným dnem (jen v nízkém tarifu).',
+        LOAD_TEXT[source] ?? LOAD_TEXT.dc,
       ].map((text) => {
         const line = document.createElement('p');
         line.textContent = text;
         return line;
       }),
     );
-
-    this._tbody.replaceChildren();
-    for (const day of result.days) {
-      const tr = document.createElement('tr');
-      tr.classList.add(day.kind);
-      if (day.risk) tr.classList.add('risk');
-      const state = dayState(day);
-      const loadText = day.loadKwh == null ? '—' : formatEnergy(Math.max(0, day.loadKwh));
-      const trough =
-        day.trough == null
-          ? '—'
-          : `${escapeHtml(formatSoc(day.trough))}<small>${escapeHtml(formatAt(day.troughAt))}</small>`;
-      const max =
-        day.peak == null
-          ? day.trough == null
-            ? '—'
-            : '<small>nenabíjí</small>'
-          : `${escapeHtml(formatSoc(day.fullAt != null ? 100 : day.peak))}<small>${escapeHtml(
-              formatAt(day.fullAt ?? day.peakAt),
-            )}</small>`;
-      tr.innerHTML = `
-        <td>${escapeHtml(day.label)}</td>
-        <td class="${day.pvKwh == null ? 'muted' : ''}">${escapeHtml(formatPv(day.pvKwh))}</td>
-        <td class="${loadText === '—' ? 'muted' : ''}">${escapeHtml(loadText)}</td>
-        <td>${trough}</td>
-        <td>${max}</td>
-        <td>${state.cls ? `<span class="dot ${state.cls}" title="${state.title}"></span>` : ''}</td>
-      `;
-      this._tbody.append(tr);
-    }
-
-    this._dialog.showModal();
   }
 }
 
@@ -322,7 +384,7 @@ if (!customElements.get(DIALOG_TAG)) {
   customElements.define(DIALOG_TAG, FveFlowForecastDialog);
 }
 
-/** Otevře modal s prognózou výdrže baterie. */
+/** Otevře okno s prognózou výdrže a plánem nabíjení z integrace Hybrid Energy. */
 export function openForecastDialog(options: ForecastDialogOptions): void {
   const dialog = document.createElement(DIALOG_TAG) as FveFlowForecastDialog;
   document.body.append(dialog);

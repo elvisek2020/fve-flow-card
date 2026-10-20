@@ -112,3 +112,24 @@ export function flowDuration(
   const dur = Math.max(minDur, maxDur - pct * (maxDur - minDur));
   return Math.round(dur * 4) / 4;
 }
+
+/**
+ * Převede kapacitu entity na kWh.
+ * Ah → kWh přes jmenovité napětí (default 48 V).
+ */
+export function capacityToKwh(
+  value: number,
+  unit: string | undefined,
+  voltageV = 48,
+): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const u = (unit ?? '').trim().toLowerCase();
+  if (u === 'kwh' || u === 'kw·h' || u === 'kw.h') return value;
+  if (u === 'wh') return value / 1000;
+  if (u === 'ah' || u === 'a·h' || u === 'a.h') {
+    const v = Number.isFinite(voltageV) && voltageV > 0 ? voltageV : 48;
+    return (value * v) / 1000;
+  }
+  // Bez jednotky předpokládáme kWh (typické u template / ručních senzorů).
+  return value;
+}

@@ -3,6 +3,7 @@ export interface HassEntity {
   entity_id: string;
   state: string;
   attributes: Record<string, unknown>;
+  last_updated?: string;
 }
 
 export interface HomeAssistant {
@@ -21,6 +22,8 @@ export interface HomeAssistant {
   callApi?: (method: string, path: string) => Promise<unknown>;
   /** HA WebSocket — např. recorder/statistics_during_period. */
   callWS?: <T = unknown>(message: Record<string, unknown>) => Promise<T>;
+  /** Registr entit pro frontend (platform + translation_key → najít entity integrace). */
+  entities?: Record<string, { entity_id: string; platform?: string; translation_key?: string }>;
 }
 
 /** Minimální rozhraní dynamicky vytvořené Lovelace karty. */
@@ -96,6 +99,32 @@ export interface BatteryConfig extends SeverityFields {
    * ovlivňuje zobrazení řádku „Do plného nabití". Default 25 W.
    */
   charge_threshold_w?: number;
+}
+
+/**
+ * AC IN Victronu — vstup ze sítě domu do měniče (nabíjení baterie ze sítě
+ * a průchod do zátěže). Není to hlavní přípojka domu (`grid`).
+ */
+export interface AcInConfig {
+  /** Příkon ze sítě na AC IN (W). */
+  power?: string;
+  /** Aktivní vstupní zdroj GX (`grid` / `not_connected`). */
+  active_input?: string;
+  /** Stav měniče (bulk / absorption / float / passthrough …). */
+  state?: string;
+  /** DC výkon měniče (W, + = nabíjí baterii). */
+  dc_power?: string;
+  /** Energie síť → nabíječ (kWh, total_increasing). */
+  energy_to_charger?: string;
+  /** Energie síť → AC OUT, průchod (kWh, total_increasing). */
+  energy_passthrough?: string;
+  /**
+   * Patro (název), přes jehož měření sítě je AC IN napájený — jeho odběr se od
+   * patra odečte a ukáže zvlášť jako nabíjení ze sítě. Bez něj se odečte z Neměřeno.
+   */
+  floor?: string;
+  /** Fáze toho patra (`a` / `b` / `c`), od které se AC IN odečte ve scéně. */
+  phase?: 'a' | 'b' | 'c';
 }
 
 /** Konfigurace měniče (ostrovní strana). */
@@ -256,6 +285,7 @@ export interface FveFlowCardConfig {
   pv?: PvConfig;
   battery?: BatteryConfig;
   inverter?: InverterConfig;
+  ac_in?: AcInConfig;
   grid?: GridConfig;
   solcast?: SolcastConfig;
   forecast?: ForecastConfig;
@@ -273,6 +303,8 @@ export interface PhaseSpec {
   name: string;
   icon: string;
   label: string; // L1/L2/L3
+  /** Odečíst od naměřeného výkonu (W) — fáze napájí i AC IN měniče. */
+  subtractW?: number;
 }
 
 /**
@@ -288,6 +320,8 @@ export interface FveFlowMiniCardConfig {
   fve_load?: string;
   /** Vlastní popisek vlevo (default „FVE"). */
   fve_load_name?: string;
+  /** Příkon ze sítě na AC IN měniče (W) — při nabíjení / průchodu se odečte od FVE. */
+  ac_in_power?: string;
   /** Spotřeba ze sítě (W) — vpravo vedle gauge. */
   grid_power?: string;
   /** Vlastní popisek vpravo (default „síť"). */

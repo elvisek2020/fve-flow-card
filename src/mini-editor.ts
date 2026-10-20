@@ -46,6 +46,11 @@ const SCHEMA = [
         custom_label: 'Vlastní název FVE (vlevo)',
       },
       {
+        name: 'ac_in_power',
+        selector: ENTITY,
+        custom_label: 'Příkon ze sítě na AC IN měniče (W)',
+      },
+      {
         name: 'grid_power',
         selector: ENTITY,
         custom_label: 'Spotřeba ze sítě (W) — vpravo u baterie',
@@ -115,6 +120,8 @@ const HELPERS: Record<string, string> = {
   fve_load:
     'Typicky kritické zátěže / výstup měniče (ostrovní spotřeba). Zobrazí se vlevo vedle gauge. Bez entity se levá strana nevykreslí.',
   fve_load_name: 'Popisek pod výkonem vlevo. Výchozí „FVE".',
+  ac_in_power:
+    'Když měnič bere ze sítě (nabíjí baterii nebo pouští zátěž průchodem), jde tahle energie ze sítě, ne z FV — od hodnoty vlevo se odečte. Síť vpravo ji už obsahuje.',
   grid_power:
     'Typicky AC-IN ze Shelly. Zobrazí se vpravo vedle gauge. Bez entity se pravá strana nevykreslí.',
   grid_name: 'Popisek pod výkonem vpravo. Výchozí „síť".',

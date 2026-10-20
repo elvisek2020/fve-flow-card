@@ -416,9 +416,20 @@ export class FveFlowAnalysisDialog extends LitElement {
     return `Zdroj: ${SOURCE_TEXT[q.source]}${q.approx ? ' (odhad)' : ''}`;
   }
 
+  /** FVE den: výstup měniče bez energie ze sítě přes AC IN (průchod + nabíjení). */
+  private _fveSolarDay(d: AnalysisData, key: string): number | null {
+    const v = d.fve.byDay.get(key);
+    if (v == null) return null;
+    // Stejně jako v datech: nabíječ + průchod z měřáků, jinak integrál příkonu AC IN.
+    const ch = d.acIn.chargeQ.byDay.get(key);
+    const pass = d.acIn.passQ.byDay.get(key) ?? 0;
+    const ac = ch != null ? ch + pass : d.acIn.powerQ.byDay.get(key) ?? pass;
+    return Math.max(0, v - ac);
+  }
+
   /** 1 — Zdroje domu: FVE vs síť, soběstačnost. */
   private _cardSources(d: AnalysisData): TemplateResult {
-    const fShare = d.house && d.fve.total != null ? d.fve.total / d.house : null;
+    const fShare = d.house && d.fveSolar != null ? d.fveSolar / d.house : null;
     const gShare = d.house && d.grid.total != null ? d.grid.total / d.house : null;
     const s = d.series;
     const chart = s
@@ -431,7 +442,14 @@ export class FveFlowAnalysisDialog extends LitElement {
             x0: d.range.start,
             x1: d.range.dayEnd,
             series: [
-              { label: 'FVE', color: C.island, values: s.ac, kind: 'area', stack: true },
+              {
+                label: 'FVE',
+                color: C.island,
+                // Při AC IN jde zátěž ze sítě (průchod) — ten díl patří síti, ne FV.
+                values: s.ac.map((v, i) => (v == null ? null : Math.max(0, v - (s.acIn[i] ?? 0)))),
+                kind: 'area',
+                stack: true,
+              },
               ...(d.gridConfigured ? [{ label: 'Síť', color: C.grid, values: s.gridW, kind: 'area' as const, stack: true }] : []),
             ],
             now: d.range.period === 'today' ? Date.now() : null,
@@ -449,7 +467,7 @@ export class FveFlowAnalysisDialog extends LitElement {
             mode: 'stacked',
             partialLast: true,
             series: [
-              { label: 'FVE', color: C.island, values: d.range.days.map((x) => d.fve.byDay.get(x.key) ?? null) },
+              { label: 'FVE', color: C.island, values: d.range.days.map((x) => this._fveSolarDay(d, x.key)) },
               ...(d.gridConfigured
                 ? [{ label: 'Síť', color: C.grid, values: d.range.days.map((x) => d.grid.byDay.get(x.key) ?? null) }]
                 : []),
@@ -463,11 +481,26 @@ export class FveFlowAnalysisDialog extends LitElement {
       <h3>Zdroje domu</h3>
       <div class="kpis">
         ${this._kpi('Spotřeba domu', fmtKwh(d.house))}
-        ${this._kpi('Z FVE', fmtQ(d.fve), C.island, this._srcTitle(d.fve), fShare != null ? `${fmtPct(fShare)} spotřeby` : undefined)}
+        ${this._kpi(
+          'Z FVE',
+          d.acIn.total ? fmtKwh(d.fveSolar) : fmtQ(d.fve),
+          C.island,
+          d.acIn.total ? 'Výstup měniče bez energie ze sítě přes AC IN (průchod a nabíjení)' : this._srcTitle(d.fve),
+          fShare != null ? `${fmtPct(fShare)} spotřeby` : undefined,
+        )}
         ${d.gridConfigured
           ? this._kpi('Ze sítě', fmtQ(d.grid), C.grid, this._srcTitle(d.grid), gShare != null ? `${fmtPct(gShare)} spotřeby` : undefined)
           : nothing}
         ${this._kpi('Soběstačnost', fmtPct(d.selfSufficiency), C.ok)}
+        ${d.acIn.total
+          ? this._kpi(
+              'Ze sítě přes AC IN',
+              fmtKwh(d.acIn.total),
+              C.grid,
+              'Nabíjení baterie ze sítě a průchod do zátěže (je součástí odběru ze sítě)',
+              `nabíjení ${fmtKwh(d.acIn.charger)} · průchod ${fmtKwh(d.acIn.pass)}`,
+            )
+          : nothing}
       </div>
       ${fShare != null && gShare != null && fShare + gShare > 0
         ? html`<div class="split" title="Podíl FVE a sítě na spotřebě domu">
@@ -504,6 +537,16 @@ export class FveFlowAnalysisDialog extends LitElement {
       if (f.grid != null)
         links.push({ source: 'grid', target: `f${i}`, value: f.grid, title: `Síť → ${f.name} · ${formatEnergy(f.grid)}${pctOf(f.grid, d.grid.total)}` });
     });
+    const acIn = d.acIn.total ?? 0;
+    if (acIn > 0 && d.gridConfigured) {
+      nodes.push({ id: 'acin', label: 'FVE – nabíjení ze sítě', sub: formatEnergy(acIn), column: 1, color: C.grid });
+      links.push({
+        source: 'grid',
+        target: 'acin',
+        value: acIn,
+        title: `Síť → AC IN měniče · ${formatEnergy(acIn)} (nabíjení ${formatEnergy(d.acIn.charger ?? 0)}, průchod ${formatEnergy(d.acIn.pass ?? 0)})`,
+      });
+    }
     const uF = d.unmeasured.fve ?? 0;
     const uG = d.unmeasured.grid ?? 0;
     if (uF + uG > 0) {
@@ -537,6 +580,15 @@ export class FveFlowAnalysisDialog extends LitElement {
               <td>${fmtPct(f.share)}</td>
             </tr>`,
           )}
+          ${acIn > 0
+            ? html`<tr>
+                <td>FVE – nabíjení ze sítě</td>
+                <td></td>
+                <td style="color:${C.grid}">${formatEnergy(acIn)}</td>
+                <td>${formatEnergy(acIn)}</td>
+                <td>${fmtPct(d.house ? acIn / d.house : null)}</td>
+              </tr>`
+            : nothing}
           ${uF + uG > 0
             ? html`<tr class="muted-row">
                 <td>Neměřeno</td>
@@ -673,9 +725,13 @@ export class FveFlowAnalysisDialog extends LitElement {
 
     let sankey: TemplateResult | typeof nothing = nothing;
     if (pv != null && ch != null && dis != null && ac != null) {
-      const fromPv = Math.min(ch, pv);
+      const fromGrid = Math.min(ch, dc.gridCharge ?? 0);
+      const fromPv = Math.min(ch - fromGrid, pv);
       const nodes: SankeyNode[] = [
         { id: 'pv', label: 'FVE (MPPT)', sub: approxKwh(pv, d.pv), column: 0, color: C.solar },
+        ...(fromGrid > 0
+          ? [{ id: 'acin', label: 'Ze sítě (AC IN)', sub: fmtKwh(fromGrid), column: 0, color: C.grid } as SankeyNode]
+          : []),
         { id: 'dis', label: 'Z baterie', sub: approxKwh(dis, d.discharge), column: 0, color: C.discharge },
         { id: 'chg', label: 'Do baterie', sub: approxKwh(ch, d.charge), column: 1, color: C.charge },
         { id: 'inv', label: 'Střídač', sub: fmtKwh(dc.inverterIn), column: 1, color: C.ac },
@@ -684,7 +740,15 @@ export class FveFlowAnalysisDialog extends LitElement {
       ];
       const links: SankeyLink[] = [
         { source: 'pv', target: 'chg', value: fromPv, title: `FVE → baterie · ${formatEnergy(fromPv)}` },
-        { source: 'pv', target: 'inv', value: Math.max(0, pv - ch), title: `FVE → střídač · ${formatEnergy(Math.max(0, pv - ch))}` },
+        ...(fromGrid > 0
+          ? [{ source: 'acin', target: 'chg', value: fromGrid, title: `Síť (AC IN) → baterie · ${formatEnergy(fromGrid)}` }]
+          : []),
+        {
+          source: 'pv',
+          target: 'inv',
+          value: Math.max(0, pv - fromPv),
+          title: `FVE → střídač · ${formatEnergy(Math.max(0, pv - fromPv))}`,
+        },
         { source: 'dis', target: 'inv', value: dis, title: `Baterie → střídač · ${formatEnergy(dis)}` },
         { source: 'inv', target: 'house', value: ac, title: `Střídač → dům · ${formatEnergy(ac)}` },
         ...(dc.losses ? [{ source: 'inv', target: 'loss', value: dc.losses, faint: true, title: `Ztráty · ${formatEnergy(dc.losses)}` }] : []),

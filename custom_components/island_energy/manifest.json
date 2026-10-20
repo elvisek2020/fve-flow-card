@@ -1,0 +1,24 @@
+{
+  "domain": "island_energy",
+  "name": "Hybrid Energy",
+  "after_dependencies": [
+    "frontend",
+    "logbook",
+    "notify"
+  ],
+  "codeowners": [
+    "@elvisek2020"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "recorder"
+  ],
+  "documentation": "https://github.com/elvisek2020/fve-flow-card",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/elvisek2020/fve-flow-card/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "2.0.0"
+}

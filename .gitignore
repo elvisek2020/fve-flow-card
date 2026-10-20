@@ -1,6 +1,15 @@
 node_modules/
+# bundle karet staví CI do zipu vydání
+custom_components/island_energy/frontend/
 *.log
 .DS_Store
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
 
 # lokální deník práce, synchronizuje se přes iCloud
 _docs/

@@ -10,17 +10,31 @@ permissions:
 
 jobs:
   release:
-    name: Build & publish release asset
+    name: Build & publish release zip
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check versions (manifest.json, package.json = tag)
+        run: |
+          manifest=$(python3 -c "import json; print(json.load(open('custom_components/island_energy/manifest.json'))['version'])")
+          card=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+          if [ "v$manifest" != "$GITHUB_REF_NAME" ] || [ "v$card" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME nesedí s manifest.json ($manifest) nebo package.json ($card)"; exit 1
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      # Bundle karet patří do integrace (custom_components/island_energy/frontend/).
       - run: npm run build
+      # HACS (zip_release) čeká v zipu přímo soubory integrace, ne složku.
+      - name: Pack integration
+        run: |
+          cd custom_components/island_energy
+          zip -r "$GITHUB_WORKSPACE/island_energy.zip" . -x "__pycache__/*" "*/__pycache__/*"
+          unzip -l "$GITHUB_WORKSPACE/island_energy.zip"
       # Text vydání = sekce „## <tag>“ z CHANGELOG.md (HACS / HA ho ukáže v okně
       # aktualizace). Bez sekce zůstanou jen automaticky generované poznámky.
       - name: Release notes from CHANGELOG.md
@@ -34,9 +48,10 @@ jobs:
           else
             echo "::warning::CHANGELOG.md nemá sekci ## $GITHUB_REF_NAME"
           fi
-      - name: Attach dist to GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/fve-flow-card.js
+          files: island_energy.zip
           body_path: release-notes.md
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -1,19 +1,36 @@
-# Hybrid Energy Flow Card
+# Hybrid Energy
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![Release](https://img.shields.io/github/v/release/elvisek2020/fve-flow-card)](https://github.com/elvisek2020/fve-flow-card/releases)
 [![Validate](https://github.com/elvisek2020/fve-flow-card/actions/workflows/validate.yml/badge.svg)](https://github.com/elvisek2020/fve-flow-card/actions/workflows/validate.yml)
 [![Licence](https://img.shields.io/github/license/elvisek2020/fve-flow-card)](LICENSE)
 
-[![Otevřít v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=elvisek2020&repository=fve-flow-card&category=plugin)
+[![Otevřít v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=elvisek2020&repository=fve-flow-card&category=integration)
 
-Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na míru
-**hybridní instalaci**: ostrovní FVE (Victron) + grid po patrech (Shelly), se Solcast predikcí.
+Integrace pro Home Assistant na míru **hybridní instalaci**: ostrovní FVE (Victron)
+vedle sítě rozvedené po patrech (Shelly), se Solcast predikcí. Počítá prognózu
+výdrže baterie, **plánuje a řídí nabíjení ze sítě přes AC IN** jen v nízkém tarifu
+(HDO), řídí chlazení měniče a s sebou nese kartu **Hybrid Energy Flow Card**
+s animovaným diagramem toků energie (a mini kartu pro hlavní dashboard).
 
-> Technický typ karty zůstává `custom:fve-flow-card` (a mini `custom:fve-flow-mini-card`),
-> aby se nerozbily existující dashboardy. V HACS a výběru karet se zobrazuje nový název.
+> Technické typy karet zůstávají `custom:fve-flow-card` a `custom:fve-flow-mini-card`,
+> aby se nerozbily existující dashboardy. Od verze 2.0 je načítá integrace sama.
 
 ![Hybrid Energy Flow Card — náhled](docs/preview.png)
+
+Integrace:
+
+- **Prognóza výdrže baterie** — simulace SoC po 15 minutách na 7 dní (Solcast
+  minus hodinový profil odběru z baterie); ráno = nejnižší SoC před nabíjením
+  z panelů, max = nejvyšší SoC dne
+- **Plán nabíjení ze sítě (AC IN)** — dobije jen to, co panely nestihnou, aby
+  baterie po dni z panelů došla na 100 %; ze sítě nejvýš na strop (90 %, jednou
+  týdně 100 %), nabíjí jen v nízkém tarifu (EG.D HDO) a co nejpozději
+- **Řízení AC IN** se stínovým režimem, ochranou stykače a kontrolou, že měnič
+  opravdu nabíjí ze sítě; ruční **Nabít teď** / **Vypnout nabíjení**
+- **Chlazení** měniče podle jeho zátěže (včetně nabíjení ze sítě) s hysterezí
+
+Karta:
 
 - Ostrovní větev: FVE panely → MPPT → baterie Pylontech ↔ MultiPlus-II → patra
 - Gridová větev: AC-IN (Shelly) → patra, každé patro s pojmenovanými fázemi
@@ -24,7 +41,8 @@ Custom Lovelace karta pro Home Assistant — animovaný diagram toků energie na
   je vidět, která kam putuje. Když tečka do patra dorazí, okraj patra jemně
   zapulzuje její barvou (nejvýš zhruba jednou za 5 s, při vypnuté animaci ne)
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
-- Prognóza výdrže baterie (tlačítko pod měničem) — jak baterie přežila noc, jestli a kdy se dnes nabije na 100 % a jak bude ráno dalších 7 dní (simulace po 15 min ze Solcastu a profilu odběru)
+- Prognóza výdrže a plán nabíjení ze sítě (tlačítko PROGNÓZA) a blok
+  **Nabíjení ze sítě** pod baterií s ovládáním — data z integrace
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast s heatmapou po hodinách, DC bilance MPPT ·
   baterie · střídač, baterie vs. spotřeba a zatížení fází pro dimenzování
@@ -44,33 +62,114 @@ Datové entity dodávají tyto integrace:
 | --- | --- | --- |
 | **Victron** (Cerbo GX / Venus OS, MultiPlus-II, SmartSolar MPPT, Pylontech) | např. [victron-hacs](https://github.com/sfstar/hass-victron) nebo MQTT z Venus OS | výkon FVE, stav MPPT, SoC/výkon baterie, výkon a stav měniče, kritické zátěže |
 | **Shelly** (3EM / Pro 3EM na AC-IN a patrech) | nativní [Shelly integrace](https://www.home-assistant.io/integrations/shelly/) | příkon ze sítě celkem + po fázích, energie a výkony jednotlivých pater |
-| **Solcast** | [Solcast PV Forecast](https://github.com/BJReplay/ha-solcast-solar) (HACS) | predikce výkonu a denní výroby |
+| **Solcast** | [Solcast PV Forecast](https://github.com/BJReplay/ha-solcast-solar) (HACS) | predikce výkonu a denní výroby (`detailedForecast` po půlhodinách) |
+| **HDO** (volitelné) | [EGD Distribuce – HDO](https://github.com/Antrac1t/HomeAssistant-EGDdistribuce) (HACS) | časy nízkého tarifu — plánovač nabíjí jen v NT |
 | **ApexCharts Card** (doporučeno) | [`apexcharts-card`](https://github.com/RomRider/apexcharts-card) (HACS) | vlastní kontinuální 48h grafy po kliknutí |
 
-Konkrétní entity se vybírají v GUI editoru — karta není závislá na přesných
-názvech, funguje s čímkoli, co vrací čísla ve W / kWh / %.
+Konkrétní entity se vybírají v nastavení integrace a v GUI editoru karty —
+nic není závislé na přesných názvech, stačí entity s čísly ve W / kWh / %.
+Integrace potřebuje Home Assistant 2026.10 a recorder s dlouhodobými statistikami.
 
 ## Instalace
 
 ### HACS (doporučeno)
 
 1. HACS → tři tečky vpravo nahoře → **Custom repositories**
-2. Vlož URL `https://github.com/elvisek2020/fve-flow-card`, kategorie **Dashboard**
-3. Nainstaluj **Hybrid Energy Flow Card** (pro vlastní grafy z HACS i **ApexCharts Card**)
-4. Obnov stránku prohlížeče bez cache.
+2. Vlož URL `https://github.com/elvisek2020/fve-flow-card`, kategorie **Integration**
+3. Nainstaluj **Hybrid Energy** (pro vlastní grafy karty z HACS i **ApexCharts Card**)
+4. Restartuj Home Assistant a přidej integraci v Nastavení → Zařízení a služby →
+   Přidat integraci → **Hybrid Energy**.
 
-HACS nabízí aktualizace z GitHub releases a sám řeší registraci resource
-i cache-busting.
+Integrace sama načte karty do všech dashboardů, žádný ruční resource netřeba.
+HACS nabízí aktualizace z GitHub releases.
 
 ### Ručně
 
-1. Stáhni `fve-flow-card.js` z posledního [release](../../releases)
-2. Zkopíruj do `/config/www/`
-3. Nastavení → Dashboardy → ⋮ → Zdroje → Přidat:
-   URL `/local/fve-flow-card.js?v=<verze>` (např. `?v=1.1.1`), typ **JavaScript module**
-   (číslo verze zvyšuj při každé aktualizaci kvůli cache)
+1. Stáhni `island_energy.zip` z posledního [release](../../releases)
+2. Rozbal do `/config/custom_components/island_energy/`
+3. Restartuj Home Assistant a přidej integraci **Hybrid Energy**.
+
+### Přechod z verze 1.x (samostatná karta)
+
+1. V HACS kartu **Hybrid Energy Flow Card** odeber (kategorie Dashboard) a repo
+   odeber i ze **Custom repositories**.
+2. Pokud jsi kartu načítal ručně, odstraň resource `/local/fve-flow-card.js`
+   (Nastavení → Dashboardy → ⋮ → Zdroje).
+3. Přidej repo znovu, tentokrát s kategorií **Integration**, a postupuj podle
+   instalace výše. Dashboardy s `custom:fve-flow-card` fungují dál beze změny.
+4. Prognózu výdrže teď počítá integrace — tlačítko PROGNÓZA a blok Nabíjení ze
+   sítě se v kartě objeví, jakmile je integrace nastavená.
 
 ## Konfigurace
+
+### Integrace Hybrid Energy
+
+Při přidání vybereš entity (vše jde později změnit v možnostech integrace):
+
+| Pole | Příklad (Victron + Pylontech) | Poznámka |
+| --- | --- | --- |
+| SoC baterie, výkon baterie | `sensor.pylontech_battery_…_nabijeni`, `…_vykon` | výkon kladný = nabíjení (jinak zaškrtni obrácení) |
+| Výkon FV, kapacita baterie | `sensor.smartsolar_mppt_…_vykon_fotovoltaiky`, `…_instalovana_kapacita` | kapacita v kWh / Wh / Ah; Ah přes jmenovité napětí (48 V) |
+| Solcast dnes … den 7 | `sensor.solcast_pv_forecast_forecast_today` … `_day_7` | z atributu `detailedForecast` |
+| AC out, příkon AC IN, DC výkon měniče | `…_vystupni_vykon_l1`, `…_prikon_l1`, `…_vykon_dc` | pro chlazení |
+| Aktivní vstup GX, stav měniče | `sensor.gx_device_aktivni_vstupni_zdroj_ac`, `…_stav` | kontrola, že AC IN opravdu nabíjí |
+| Spínač AC IN, spínač chlazení | `switch.…_ac_in`, `switch.…` | co integrace spíná |
+| HDO | `binary_sensor.egd_hdo_…_hdo_status` | povel tvého tarifu (atribut `HDO_HOURLY`); bez něj se nabíjí kdykoli |
+
+**Stínový režim (výchozí):** integrace počítá a ukazuje plán, ale AC IN sama
+nespíná, dokud nezapneš **Povolit automatické nabíjení**. Tlačítka **Nabít teď**
+a **Vypnout nabíjení** fungují vždy. Chlazení se zapíná zvlášť (**Povolit
+automatické chlazení**).
+
+**Jak plánuje nabíjení ze sítě:**
+
+- simulace SoC po 15 minutách na 7 dní: Solcast (p50) minus hodinový profil
+  odběru z baterie (průměr posledních 7 celých dní, výroba − nabíjení, tedy
+  včetně ztrát měniče; hodiny s nabíjením ze sítě přes AC IN se berou z výstupu
+  měniče, takže nabíjení ze sítě není ani výroba, ani odběr),
+- pro každou noc spočítá, kolik dobít, aby baterie po dni z panelů došla na
+  100 %, ale ze sítě nejvýš na **strop** (výchozí 90 %, 100 %, když baterie za
+  posledních 7 dní nebyla plná) a tak, aby ranní SoC neklesl pod **minimum**,
+- nabíjí jen v oknech **nízkého tarifu** a **co nejpozději** — skončí, když
+  začnou nabíjet panely; začaté nabíjení dojede do cíle (přepočet ho nepřeruší),
+- plán přepočítává každých 15 minut a při změně SoC, Solcastu nebo HDO.
+
+**Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min, po zapnutí za 3 min
+kontrola, že GX hlásí aktivní vstup `grid` (jinak záznam v logbooku a volitelně
+notifikace). AC IN vypíná jen tehdy, když ho sama zapnula — ruční zapnutí nebo
+nouzovou automatizaci nepřebije.
+
+**Chlazení:** zapne nad **1 000 W** zátěže měniče (největší z AC out, příkonu AC IN
+a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
+
+**Entity:** senzory *Plán nabíjení ze sítě* (kWh na příští noc, okna, důvod),
+*Další nabíjení*, *Prognóza výdrže* (atribut `days` pro kartu), *Stav plánovače*;
+binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automatické
+nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
+*Výkon nabíjení ze sítě*, *Plné nabití aspoň jednou za*, *Chlazení zapnout nad /
+vypnout pod*; tlačítka *Nabít teď*, *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
+
+**Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min),
+`island_energy.stop_charging`, `island_energy.skip_tonight`, `island_energy.recompute`.
+
+**Nouzová pojistka** patří mimo integraci — když HA nebo integrace neběží, má
+zafungovat sama. Doporučená automatizace:
+
+```yaml
+alias: FVE – AC IN pojistka
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.pylontech_battery_id_512_nabijeni
+    below: 15
+actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.dub_0zd_fve_ac_in
+```
+
+Ještě spolehlivější je relé GX (start/stop podle SoC), které funguje i bez HA.
+
+### Karta Hybrid Energy Flow Card
 
 Kartu přidáš přes výběr karet (**Hybrid Energy Flow Card**) a nakonfiguruješ v GUI editoru.
 Nevyplněná čísla v editoru ukazují šedě výchozí hodnotu (např. 5000 W, 25 W)
@@ -116,6 +215,14 @@ inverter:
   days_in_service: sensor.fve_pocet_dni        # informační řádek
   fan_switch: switch.chlazeni_menice           # ovládací tlačítko ventilátoru
   name: MultiPlus-II
+ac_in:                                         # AC IN měniče = nabíjení / průchod ze sítě (volitelné)
+  power: sensor.multiplus_prikon_l1            # příkon ze sítě (W)
+  active_input: sensor.gx_aktivni_vstupni_zdroj_ac   # grid / not_connected
+  dc_power: sensor.multiplus_vykon_dc          # + = nabíjí baterii
+  energy_to_charger: sensor.multiplus_energie_z_ac_in_1_do_stridace  # kWh, total_increasing
+  energy_passthrough: sensor.multiplus_energie_z_ac_in1_do_ac_out    # kWh, total_increasing
+  floor: 0NP                                   # patro, přes jehož měření sítě je AC IN napájený
+  phase: c                                     # jeho fáze (a / b / c)
 grid:
   power: sensor.grid_ac_in_vykon               # když chybí, sečtou se patra
   phase_a: sensor.grid_ac_in_l1
@@ -236,36 +343,29 @@ Poznámky:
   Analýza (`back_button.enabled`).
   Cíl nastavíš v `back_button.path` (např. `/lovelace/home`); prázdná cesta
   vede na výchozí dashboard (`/`).
-- **Prognóza výdrže baterie**: tlačítko **PROGNÓZA** pod měničem, nad Analýzou
-  (jen když je vyplněné `inverter.energy_yesterday`, případně legacy
-  `forecast.daily_load_entity`; bez SoC, kapacity nebo Solcastu je ztlumené
-  a ukáže, co chybí) otevře modal:
-  - **Tabulka po dnech** odpovídá na ranní otázku — jak hluboko baterie
-    v noci klesla, jestli a kdy se dnes nabije na 100 % a kolik bude mít
-    zítra ráno. Sloupce **Ráno** (nejnižší SoC, než se baterie
-    začne nabíjet, s časem) a **Max** (nejvyšší SoC dne, u 100 % čas nabití).
-    Tečka: zelená = nabije se na 100 %, oranžová = jen částečně, šedá =
-    nenabíjí se, červená = ráno pod prahem `forecast.min_soc_pct`.
-  - **5 dní naměřené historie** (šedé řádky): výroba z `pv.energy_today`,
-    spotřeba z `inverter.energy_today` (jinak z včerejší entity), Ráno / Max
-    z hodinových statistik SoC (časy „~“ po hodinách).
-  - **7 dní dopředu = simulace SoC po 15 minutách** od teď: výroba podle
-    průběhu dne ze Solcastu (atribut `detailedForecast` u `total_today`,
-    zítra a D3–D7; bez něj se tvar půjčí z jiného dne) minus **hodinový
-    profil odběru** — průměr za posledních 7 celých dní z výroby − nabíjení
-    baterie (= skutečný odběr z baterie včetně ztrát měniče), jinak výstup
-    měniče, jinak včerejší spotřeba rozložená rovnoměrně. SoC se ořezává
-    na 0–100 % (přebytek při plné baterii propadne).
-  - Je to model, ne měření: přesnost stojí na predikci Solcastu (p50)
-    a na tom, že dnešní odběr bude podobný průměru posledních dní.
-  - Potřebuješ `battery.soc`, `battery.capacity`, včerejší spotřebu u měniče
-    a aspoň Solcast dnes/zítra. Pro historickou spotřebu ideálně i
-    `inverter.energy_today` s long-term statistics. Dny 3–7 doplň přes
-    `solcast.total_day3`…`total_day7` (v Solcast často defaultně vypnuté).
-    Práh rizika: `forecast.min_soc_pct` (default 10).
-  - Když prognóza nejde otevřít, tlačítko je ztlumené a důvod (např. „Chybí
-    kapacita baterie (kWh / Ah)") je vypsaný přímo v něm — viditelné i na
-    dotykovém panelu.
+- **AC IN měniče (nabíjení ze sítě)** — sekce `ac_in`. Uzel sítě je hlavní
+  přípojka domu; AC IN Victronu je zvlášť:
+  - ve scéně se při příkonu na AC IN (nebo vstupu GX `grid`) ukáže modrý tok
+    **síť → AC IN měniče**, v měniči řádek „AC IN … · nabíjí …“ a u baterie
+    „▲ ze sítě …“ v barvě sítě — baterie se v tu chvíli nabíjí ze sítě, ne z FV,
+  - když je AC IN napájený přes měření některého patra (`floor` + `phase`),
+    jeho příkon se od té fáze a od patra odečte (jinak by patro ukazovalo
+    i nabíjení měniče),
+  - v Analýze se energie z AC IN (nabíječ + průchod) počítá jako **síť**:
+    „Z FVE“ a soběstačnost jsou bez ní, v Patrech je samostatná položka
+    **FVE – nabíjení ze sítě** (odečtená od patra, resp. z Neměřeno) a v DC
+    bilanci uzel **Ze sítě (AC IN)** → baterie. Výroba FV (MPPT) se nemění.
+- **Prognóza výdrže a nabíjení ze sítě** (s integrací Hybrid Energy):
+  - tlačítko **PROGNÓZA** pod měničem otevře tabulku po dnech — **Ráno**
+    (nejnižší SoC, než se baterie začne nabíjet z panelů), **Max** (nejvyšší SoC
+    dne, u 100 % čas nabití) a **AC IN** (plánované nabíjení ze sítě v noci před
+    daným dnem: kWh, čas a délka); čtvereček: zelená = nabije se na 100 %,
+    oranžová = jen částečně, šedá = nenabíjí se, červená = ráno pod minimem,
+  - blok **Nabíjení ze sítě** pod baterií: stav plánovače, plán na příští noc,
+    s sekcí `ac_in` i aktuální **příkon ze sítě** a **dnešní energie do nabíječe**
+    a průchodem (přírůstek kumulativních čítačů od půlnoci) a tlačítka
+    **Nabít teď**, **Vypnout** a **Automat** (zapne / vypne automatické nabíjení),
+  - bez integrace se tlačítko ani blok nezobrazí,
   - `battery.capacity` může být v kWh, Wh nebo Ah; Ah se přepočte přes
     jmenovité napětí `battery.nominal_voltage` (default 48 V) — ne přes
     aktuální napětí, aby kapacita nekolísala s nabitím (400 Ah × 48 V = 19,2 kWh).
@@ -387,6 +487,8 @@ navigation_path: /lovelace/fve-flow            # cesta velkého dashboardu
 
 Poznámky:
 
+- **AC IN měniče**: s `ac_in_power` se při nabíjení / průchodu ze sítě jeho
+  příkon odečte od hodnoty FVE vlevo (zátěž v tu chvíli jede ze sítě).
 - **Spotřeba FVE / síť**: `fve_load` a `grid_power` se zobrazí vlevo/vpravo
   vedle bateriového gauge. Popisky řídí `fve_load_name` / `grid_name`
   (default „FVE" / „síť"). Bez entity se daná strana nevykreslí — karta dává
@@ -424,22 +526,29 @@ Poznámky:
 
 ```bash
 npm install
-npm run build      # dist/fve-flow-card.js
+npm run build      # custom_components/island_energy/frontend/fve-flow-card.js
 npm run watch      # rebuild při změně
 npm run typecheck
+
+python3.14 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
+.venv/bin/pytest                 # jádro (bez HA) + integrace (HA test harness)
+.venv/bin/pytest tests/core      # jen čisté jádro
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-Lokální test v HA: zkopíruj `dist/fve-flow-card.js` do `/config/www/`
-a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli cache).
+Jádro výpočtů (`custom_components/island_energy/core/`) je čistý Python bez
+importů HA: prognóza, plánovač, HDO a chlazení. Bundle karet v gitu není,
+staví ho CI do zipu vydání.
 
 ## Vydání verze
 
-1. Zvedni `version` v `package.json` (SemVer) — jediný zdroj verze.
+1. Stejnou verzi zapiš do `custom_components/island_energy/manifest.json`
+   a `package.json` (SemVer, předběžná verze např. `2.0.0-beta.1`).
 2. Doplň nahoru do `CHANGELOG.md` sekci `## vX.Y.Z — RRRR-MM-DD`; z ní vznikne text
    vydání, který HA / HACS ukazuje v okně aktualizace.
 3. Commit `Release vX.Y.Z: krátký popis`, `git tag vX.Y.Z`, push commitu i tagu.
-4. Workflow **Release** zbuildí kartu, přiloží `fve-flow-card.js` a založí release.
-   HACS nabídne aktualizaci.
+4. Workflow **Release** zkontroluje verze, zbuildí karty do integrace, zabalí
+   `island_energy.zip` a založí release (s pomlčkou v tagu jako předběžné vydání).
 
 ## Známá omezení
 
@@ -447,11 +556,14 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
   nativní HA historie.
 - Export do gridu se nevizualizuje (ostrovní systém nedodává do sítě).
 - Fáze jsou max. 3 na patro (A/B/C dle Shelly 3EM).
-- Prognóza je model: Solcast p50 a průměrný hodinový odběr posledních 7 dní;
-  nepočítá s gridem ani s tím, že se dnes spotřeba výrazně liší. Bez long-term
-  statistics u výkonu FVE / baterie spadne profil odběru na výstup měniče nebo
-  na rovnoměrně rozloženou včerejší spotřebu. Historické řádky bez statistik
-  jsou prázdné (`—`).
+- Prognóza a plán jsou model: Solcast p50 a průměrný hodinový odběr posledních
+  7 dní; víkend od všedního dne nerozlišuje a neví, že dnes bude spotřeba jiná.
+  Bez long-term statistics u výkonu FV / baterie spadne profil odběru na výstup
+  měniče nebo na záložní denní spotřebu.
+- HDO z integrace EG.D zná jen dnešek a zítřek, další dny plánovač odhaduje
+  podle zítřejšího rozpisu.
+- Nouzovou pojistku (nízké SoC → AC IN) integrace nenahrazuje, nech ji jako
+  automatizaci nebo relé GX.
 - Analýza stojí na dlouhodobých statistikách HA: 5min data drží recorder
   standardně ~10 dní, starší dny jsou hodinové (špičky fází a nabíjení /
   vybíjení baterie jsou tam hrubší). Krátké rázy pod 5 min statistiky vyhlazují.
@@ -461,6 +573,6 @@ a registruj resource `/local/fve-flow-card.js?v=dev-1` (číslo zvyšuj kvůli c
 
 ## Autor
 
-**[elvisek2020](https://github.com/elvisek2020)** — karta vznikla na míru
+**[elvisek2020](https://github.com/elvisek2020)** — integrace a karta vznikly na míru
 vlastní instalaci: ostrovní FVE na Victronu (MultiPlus-II 48/5000, SmartSolar
 MPPT, Pylontech) + třífázový grid měřený přes Shelly po patrech. Licence MIT.

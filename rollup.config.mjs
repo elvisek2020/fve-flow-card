@@ -9,7 +9,8 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 export default {
   input: 'src/fve-flow-card.ts',
   output: {
-    file: 'dist/fve-flow-card.js',
+    // Bundle karet patří do integrace; HACS ho dostane v zipu z release (v gitu není).
+    file: 'custom_components/island_energy/frontend/fve-flow-card.js',
     format: 'es',
     sourcemap: false,
   },

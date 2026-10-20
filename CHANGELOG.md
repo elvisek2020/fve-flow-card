@@ -5,6 +5,47 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.0 — 2026-10-20
+
+Z karty se stala **integrace Hybrid Energy**, která si kartu nese s sebou.
+
+### ✨ Novinky
+
+- **Plán nabíjení ze sítě (AC IN):** dobije jen to, co panely nestihnou, aby
+  baterie po dni z panelů došla na 100 %. Ze sítě nejvýš na strop 90 %
+  (jednou týdně 100 %), jen v nízkém tarifu (EG.D HDO) a co nejpozději.
+- **Řízení AC IN** s ochranou stykače a kontrolou, že měnič opravdu nabíjí ze sítě.
+  Tlačítka **Nabít teď**, **Vypnout nabíjení**, **Dnes v noci nenabíjet**.
+- **Stínový režim** jako výchozí: integrace jen počítá a ukazuje plán, dokud
+  nezapneš **Povolit automatické nabíjení**.
+- **Chlazení** měniče podle jeho zátěže včetně nabíjení ze sítě (zapne nad 1 kW,
+  vypne pod 900 W).
+- Karta: blok **Nabíjení ze sítě** pod baterií (stav, plán na noc, příkon ze sítě,
+  dnešní energie do nabíječe a průchodem, ovládání)
+  a v prognóze sloupec **AC IN** (kolik, kdy a jak dlouho).
+- **AC IN měniče ve scéně a v bilancích** (nová sekce `ac_in`): při nabíjení ze
+  sítě modrý tok síť → AC IN měniče, baterie „ze sítě“ v barvě sítě, odečtení
+  od patra a fáze, přes které je AC IN napájený. V Analýze se energie z AC IN
+  počítá jako síť (soběstačnost, „Z FVE“), v Patrech je zvlášť jako
+  **FVE – nabíjení ze sítě** a v DC bilanci jako příjem baterie mimo MPPT.
+  Mini karta odečte AC IN od FVE (`ac_in_power`).
+
+### 🛠️ Pod kapotou
+
+- Prognóza výdrže se počítá v integraci (Python), karta ji jen zobrazuje.
+- Profil odběru v prognóze nebere nabíjení ze sítě (AC IN) jako výrobu ani odběr.
+- Karty načítá integrace sama, ruční Lovelace resource není potřeba.
+
+### ⚠️ Změny, které vyžadují zásah
+
+- V HACS kartu (kategorie Dashboard) odeber a repo přidej znovu jako
+  **Integration**; ruční resource `/local/fve-flow-card.js` smaž. Postup je
+  v README v části „Přechod z verze 1.x“.
+
+> [!WARNING]
+> Automatické nabíjení je po instalaci vypnuté (stínový režim). Zapni ho, až
+> plán pár dní sedí, a nouzovou automatizaci ponech.
+
 ## v1.1.1 — 2026-10-12
 
 ### 🎨 Vzhled
