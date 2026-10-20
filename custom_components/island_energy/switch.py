@@ -23,6 +23,8 @@ async def async_setup_entry(
 
 
 class SettingSwitch(IslandEnergyEntity, SwitchEntity, RestoreEntity):
+    _domain = "switch"
+
     def __init__(self, runtime, key: str) -> None:
         super().__init__(runtime, key)
         self._key = key

@@ -33,6 +33,8 @@ async def async_setup_entry(
 class PlanSensor(IslandEnergyEntity, SensorEntity):
     """Energy to charge from AC IN for the next night (kWh)."""
 
+    _domain = "sensor"
+
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 1
@@ -61,6 +63,8 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
 class NextChargeSensor(IslandEnergyEntity, SensorEntity):
     """Start of the next planned charging window."""
 
+    _domain = "sensor"
+
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
@@ -76,6 +80,8 @@ class NextChargeSensor(IslandEnergyEntity, SensorEntity):
 
 class ForecastSensor(IslandEnergyEntity, SensorEntity):
     """Next morning low (%); the attribute ``days`` is the forecast table shown by the card."""
+
+    _domain = "sensor"
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -105,6 +111,7 @@ class ForecastSensor(IslandEnergyEntity, SensorEntity):
 
 
 class StatusSensor(IslandEnergyEntity, SensorEntity):
+    _domain = "sensor"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = STATUSES
 

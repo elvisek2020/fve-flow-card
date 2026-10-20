@@ -73,6 +73,7 @@ async def async_setup_entry(
 
 
 class SettingNumber(IslandEnergyEntity, RestoreNumber):
+    _domain = "number"
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
 

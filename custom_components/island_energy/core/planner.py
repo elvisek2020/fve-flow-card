@@ -59,6 +59,8 @@ class NightPlan:
     peak_without: float | None
     #: NT time before the deadline is not enough for the needed energy.
     short: bool = False
+    #: Charging starts early so the SoC does not fall below the minimum first.
+    protect_min: bool = False
 
 
 @dataclass(frozen=True)
@@ -172,6 +174,7 @@ def plan(
         ceiling = max(ceiling, min(100.0, cfg.min_soc_pct + 1)) if min_need > 0 else ceiling
         new: list[ChargeWindow] = []
         short = False
+        protect = False
         if need_pct / 100 * cap >= cfg.min_charge_kwh:
             start_bound = max(now, deadline - NIGHT_SPAN)
             allowed = clip(nt if nt is not None else [ChargeWindow(start_bound, deadline)], start_bound, deadline)
@@ -204,6 +207,7 @@ def plan(
                     # Charge enough at the crossing to last until the deadline.
                     ceiling = max(ceiling, min(100.0, cfg.min_soc_pct + 2 + min_need))
                     new, short = schedule_earliest(guard, duration, ceiling)
+                    protect = True
             windows = merge_keep_ceiling(windows + new)
         points = run(windows)
         charged = [p for p in points if p.grid_kwh > 0 and any(w.start <= p.t < w.end for w in new)]
@@ -218,6 +222,7 @@ def plan(
                 trough_without=trough_at_deadline,
                 peak_without=peak,
                 short=short,
+                protect_min=protect,
             )
         )
         full = _update_full(full, [p for p in points if day.start <= p.t < day.end])

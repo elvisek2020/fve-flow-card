@@ -262,6 +262,10 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   // Baterie ↔ Měnič jsou přímí sousedi — přímá svislá spojka.
   const batInv = `M ${battery.x + battery.w / 2} ${battery.y + battery.h} L ${inverter.x + inverter.w / 2} ${inverter.y}`;
 
+  // Síť → AC IN měniče: pravým okrajem nahoru (mezi měničem a sítí je volný)
+  // do pravého boku měniče pod vstupem z MPPT.
+  const gridAcIn = `M ${grid.x + grid.w} ${grid.y + 30} H ${MOBILE_GRID_TRUNK_X} V ${inverter.y + inverter.h * 0.7} H ${inverter.x + inverter.w}`;
+
   const invPortY = inverter.y + inverter.h - 24;
   const gridPortY = grid.y + grid.h / 2;
 
@@ -288,6 +292,6 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
     analysisButton,
     forecastButton,
     chargeBlock,
-    paths: { pvMppt, mpptInv, batInv, pvSolcast, gridAcIn: '', islandTaps, gridTaps },
+    paths: { pvMppt, mpptInv, batInv, pvSolcast, gridAcIn, islandTaps, gridTaps },
   };
 }

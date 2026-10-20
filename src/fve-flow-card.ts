@@ -663,7 +663,7 @@ export class FveFlowCard extends LitElement {
           </text>`
         : nothing}
       ${this._acInToday && (this._acInToday.charger != null || this._acInToday.pass != null)
-        ? svg`<text class="tiny" x="${r.x + 80}" y="${r.y + 136}">
+        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 136}">
             Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.pass != null
               ? svg` · průchod ${formatEnergy(this._acInToday.pass)}`
               : nothing}

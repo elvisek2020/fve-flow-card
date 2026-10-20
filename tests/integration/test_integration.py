@@ -119,3 +119,28 @@ async def test_external_switch_on_is_not_fought(hass: HomeAssistant, ready) -> N
     await rt.async_control()
     assert turn_off == []
     assert rt.status == "external"
+
+
+async def test_entity_ids_are_english_in_czech_ha(hass: HomeAssistant, freezer) -> None:
+    """entity_id must not follow the HA language — the card looks them up."""
+    hass.config.language = "cs"
+    await hass.config.async_set_time_zone(TZ)
+    now = datetime(2026, 10, 20, 22, 0, tzinfo=dt_util.get_time_zone(TZ))
+    freezer.move_to(now)
+    await setup_states(hass, 40, now)
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Hybrid Energy")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    for eid in (
+        "sensor.hybrid_energy_battery_forecast",
+        "sensor.hybrid_energy_grid_charge_plan",
+        "sensor.hybrid_energy_planner_status",
+        "binary_sensor.hybrid_energy_grid_charging",
+        "switch.hybrid_energy_allow_automatic_charging",
+        "button.hybrid_energy_charge_now",
+        "number.hybrid_energy_minimum_soc",
+    ):
+        assert hass.states.get(eid) is not None, eid
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

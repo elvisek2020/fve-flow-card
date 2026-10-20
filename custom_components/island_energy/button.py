@@ -20,6 +20,8 @@ async def async_setup_entry(
 
 
 class ActionButton(IslandEnergyEntity, ButtonEntity):
+    _domain = "button"
+
     def __init__(self, runtime, key: str) -> None:
         super().__init__(runtime, key)
         self._key = key

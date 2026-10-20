@@ -24,6 +24,8 @@ async def async_setup_entry(
 class ChargingSensor(IslandEnergyEntity, BinarySensorEntity):
     """AC IN is on and the GX uses the grid as its active input."""
 
+    _domain = "binary_sensor"
+
     _attr_device_class = BinarySensorDeviceClass.BATTERY_CHARGING
 
     @property
@@ -48,6 +50,8 @@ class ChargingSensor(IslandEnergyEntity, BinarySensorEntity):
 
 class LowTariffSensor(IslandEnergyEntity, BinarySensorEntity):
     """Now is inside a low-tariff (NT) window; unknown without the HDO sensor."""
+
+    _domain = "binary_sensor"
 
     @property
     def is_on(self) -> bool | None:

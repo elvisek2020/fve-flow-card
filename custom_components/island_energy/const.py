@@ -60,6 +60,28 @@ DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_AUTO_COOLING: False,
 }
 
+#: Stable English object ids (``<domain>.hybrid_energy_<id>``) — the card finds the
+#: entities by them and they must not depend on the HA language.
+OBJECT_IDS: Final[dict[str, str]] = {
+    "grid_charge_plan": "grid_charge_plan",
+    "next_charge": "next_charging",
+    "forecast": "battery_forecast",
+    "status": "planner_status",
+    "charging": "grid_charging",
+    "low_tariff": "low_tariff",
+    SET_AUTO_CHARGING: "allow_automatic_charging",
+    SET_AUTO_COOLING: "allow_automatic_cooling",
+    SET_CEILING: "grid_charge_ceiling",
+    SET_MIN_SOC: "minimum_soc",
+    SET_CHARGE_POWER: "grid_charge_power",
+    SET_FULL_EVERY: "full_charge_at_least_every",
+    SET_COOLING_ON: "cooling_on_above",
+    SET_COOLING_OFF: "cooling_off_below",
+    "charge_now": "charge_now",
+    "stop_charging": "stop_charging",
+    "skip_tonight": "skip_tonight",
+}
+
 RECOMPUTE_INTERVAL: Final = timedelta(minutes=15)
 HISTORY_INTERVAL: Final = timedelta(hours=1)
 CONTROL_INTERVAL: Final = timedelta(minutes=1)

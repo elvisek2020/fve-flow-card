@@ -5,6 +5,25 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.1 — 2026-10-20
+
+### 🐛 Opravy
+
+- Entity integrace mají pevná anglická `entity_id` (např.
+  `sensor.hybrid_energy_battery_forecast`) bez ohledu na jazyk Home Assistantu;
+  názvy entit zůstávají česky. Platí pro nově vytvořené entity.
+- Blok **Nabíjení ze sítě**: řádek s dnešní energií do nabíječe a průchodem už
+  nepřetéká mimo box.
+
+### 🎨 Vzhled
+
+- Tok **síť → AC IN měniče** i v mobilním zobrazení karty.
+- Vysvětlení plánu řekne, když nabíjení začíná dřív kvůli minimálnímu SoC,
+  a kWh píše s desetinnou čárkou.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.0 — 2026-10-20
 
 Z karty se stala **integrace Hybrid Energy**, která si kartu nese s sebou.

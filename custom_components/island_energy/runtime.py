@@ -542,10 +542,13 @@ class IslandEnergyRuntime:
         if night.needed_kwh <= 0:
             return f"{when}: panely baterii dobijí (max {peak}), ze sítě nenabíjím."
         windows = ", ".join(f"{_hm(w.start)}–{_hm(w.end)}" for w in night.windows)
+        kwh = f"{night.needed_kwh:.1f}".replace(".", ",")
         text = (
             f"{when}: bez sítě ráno {night.trough_without:.0f} % a max {peak} → "
-            f"dobít {night.needed_kwh:.1f} kWh ({windows}), strop {night.ceiling:.0f} %."
+            f"dobít {kwh} kWh ({windows}), strop {night.ceiling:.0f} %."
         )
+        if night.protect_min:
+            text += f" Kvůli minimu {float(self.settings[SET_MIN_SOC]):.0f} % začíná dřív."
         if night.short:
             text += " NT okna nestačí na celé dobití."
         if self.nt is None:
