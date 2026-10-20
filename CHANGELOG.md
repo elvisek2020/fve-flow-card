@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.4 — 2026-10-20
+
+### 🎨 Vzhled
+
+- Blok **Nabíjení ze sítě** má jedno tlačítko: **Nabít teď**, které se během
+  nabíjení změní na **Vypnout nabíjení**. Po vypnutí se nabíjení vrací k plánu.
+- Tlačítko **Automat** z karty zmizelo, aby se automatické nabíjení nedalo omylem
+  vypnout. Zapíná se v integraci (**Povolit automatické nabíjení**).
+- Rámeček bloku **Nabíjení ze sítě** má jako ostatní panely svou barvu (modrá
+  sítě): ztlumený, když je jen naplánováno, rozsvícený se září během nabíjení.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.0.3 — 2026-10-20
 
 ### 🎨 Vzhled

@@ -619,7 +619,8 @@ export class FveFlowCard extends LitElement {
 
   /**
    * Blok „Nabíjení ze sítě“ pod baterií (integrace Hybrid Energy): stav plánovače,
-   * plán na příští noc a ovládání Nabít teď / Vypnout / automat.
+   * plán na příští noc a jedno tlačítko Nabít teď ↔ Vypnout nabíjení. Automat (stínový /
+   * ostrý režim) se přepíná jen v integraci, ať se omylem nevypne z dashboardu.
    */
   private _chargeBlock(r: Rect): TemplateResult | typeof nothing {
     const p = this._planner();
@@ -627,7 +628,6 @@ export class FveFlowCard extends LitElement {
     if (!p || !hass) return nothing;
     const status = p.status ? hass.states[p.status]?.state : undefined;
     const charging = (p.charging ? hass.states[p.charging]?.state === 'on' : false) || status === 'charging' || status === 'manual';
-    const auto = p.autoCharging ? hass.states[p.autoCharging]?.state === 'on' : false;
     const plan = p.plan ? hass.states[p.plan] : undefined;
     const kwh = plan ? Number(plan.state) : NaN;
     const windows = (plan?.attributes.windows as Array<{ start: string; end: string }> | undefined) ?? [];
@@ -641,7 +641,8 @@ export class FveFlowCard extends LitElement {
       external: 'Zapnuto mimo plánovač',
       skipped: 'Dnes v noci ne',
     };
-    const accent = charging ? C.grid : auto ? C.ok : 'rgba(148,170,190,0.55)';
+    // Jako ostatní panely: vlastní barva (síť), rozsvítí se jen při nabíjení.
+    const accent = C.grid;
     const acInW = hasNum(hass, this._config?.ac_in?.power) ? Math.max(0, toNum(hass, this._config!.ac_in!.power)) : 0;
     const planText =
       Number.isFinite(kwh) && kwh > 0 && windows.length
@@ -653,11 +654,7 @@ export class FveFlowCard extends LitElement {
       e.stopPropagation();
       if (entityId) void hass.callService?.('button', 'press', { entity_id: entityId });
     };
-    const toggleAuto = (e: Event) => {
-      e.stopPropagation();
-      if (p.autoCharging) void hass.callService?.('switch', auto ? 'turn_off' : 'turn_on', { entity_id: p.autoCharging });
-    };
-    const bw = 84;
+    const bw = r.w - 40;
     const by = r.y + r.h - 44;
     const btn = (x: number, label: string, on: boolean, color: string, onClick: (e: Event) => void) => svg`
       <g class="ctrl-chip" @click=${onClick}>
@@ -668,7 +665,7 @@ export class FveFlowCard extends LitElement {
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
     return svg`
-      ${this._panel(r, accent, charging || auto)}
+      ${this._panel(r, accent, charging)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
       ${iconPylon(r.x + 20, r.y + 44, 44, charging ? C.grid : 'rgba(148,170,190,0.55)')}
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${charging ? C.grid : '#e6f4fa'}">
@@ -692,9 +689,9 @@ export class FveFlowCard extends LitElement {
             Průchod ze sítě do domu <tspan class="strong">${formatEnergy(this._acInToday.pass)}</tspan>
           </text>`
         : nothing}
-      ${btn(r.x + 20, 'Nabít teď', charging, C.grid, press(p.chargeNow))}
-      ${btn(r.x + 20 + bw + 8, 'Vypnout', false, 'rgba(148,170,190,0.8)', press(p.stopCharging))}
-      ${btn(r.x + 20 + 2 * (bw + 8), auto ? 'Automat ✓' : 'Automat', auto, C.ok, toggleAuto)}
+      ${charging
+        ? btn(r.x + 20, 'Vypnout nabíjení', true, C.grid, press(p.stopCharging))
+        : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
     `;
   }
 
