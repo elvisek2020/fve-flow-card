@@ -57,6 +57,7 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
             "short": night.short,
             "reason": self.runtime.reason(),
             "hdo": self.runtime.nt is not None,
+            "learned_charge_power_w": round(self.runtime.learned_charge_w) if self.runtime.learned_charge_w else None,
         }
 
 

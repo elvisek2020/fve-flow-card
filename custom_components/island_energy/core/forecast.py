@@ -194,6 +194,16 @@ def dc_load_rows(
     return sorted(clean, key=lambda r: r.start)
 
 
+def learned_charge_power(dc: Iterable[HourRow], ac_in: Iterable[HourRow], min_hours: int = 2) -> float | None:
+    """Typical grid charging power into the battery (W): median DC power of hours
+    fully on AC IN (mean AC IN power > 2 kW). None with too little data."""
+    acin = {r.start: r.mean for r in ac_in}
+    vals = sorted(r.mean for r in dc if r.mean is not None and r.mean > 0 and (acin.get(r.start) or 0) > 2000)
+    if len(vals) < min_hours:
+        return None
+    return vals[len(vals) // 2]
+
+
 def build_load_profile(
     *,
     tz: tzinfo,

@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.2 — 2026-10-20
+
+### ✨ Novinky
+
+- Blok **Nabíjení ze sítě** ukazuje i energii, která za dnešek skutečně došla
+  do baterie, a účinnost nabíjení („Do baterie 2,6 kWh · účinnost nabíjení 90 %“).
+- **Analýza**: uzel „Ze sítě (AC IN)“ v DC bilanci počítá energii do baterie
+  z DC výkonu MultiPlusu a ukazuje účinnost nabíjení za období.
+- Senzor plánu nabíjení má atribut `learned_charge_power_w` — skutečný výkon
+  nabíjení ze sítě do baterie zjištěný z historie (zatím jen pro informaci).
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.1 — 2026-10-20
 
 ### 🐛 Opravy

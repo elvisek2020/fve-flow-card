@@ -48,7 +48,7 @@ export interface LayoutOptions {
 }
 
 /** Výška bloku „Nabíjení ze sítě“. */
-const CHARGE_BLOCK_H = 210;
+const CHARGE_BLOCK_H = 228;
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
 // odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.

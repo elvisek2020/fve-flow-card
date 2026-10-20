@@ -730,7 +730,17 @@ export class FveFlowAnalysisDialog extends LitElement {
       const nodes: SankeyNode[] = [
         { id: 'pv', label: 'FVE (MPPT)', sub: approxKwh(pv, d.pv), column: 0, color: C.solar },
         ...(fromGrid > 0
-          ? [{ id: 'acin', label: 'Ze sítě (AC IN)', sub: fmtKwh(fromGrid), column: 0, color: C.grid } as SankeyNode]
+          ? [
+              {
+                id: 'acin',
+                label: 'Ze sítě (AC IN)',
+                sub:
+                  fmtKwh(fromGrid) +
+                  (d.acIn.efficiency != null ? ` · účinnost ${fmtPct(d.acIn.efficiency)}` : ''),
+                column: 0,
+                color: C.grid,
+              } as SankeyNode,
+            ]
           : []),
         { id: 'dis', label: 'Z baterie', sub: approxKwh(dis, d.discharge), column: 0, color: C.discharge },
         { id: 'chg', label: 'Do baterie', sub: approxKwh(ch, d.charge), column: 1, color: C.charge },

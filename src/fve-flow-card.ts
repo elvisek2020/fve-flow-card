@@ -31,6 +31,7 @@ import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import { findPlanner, plannerMinSoc, type PlannerEntities } from './planner';
 import { fetchStats } from './analysis-stats';
+import { chargeEff } from './analysis-data';
 import {
   capacityToKwh,
   flowDuration,
@@ -83,7 +84,7 @@ export class FveFlowCard extends LitElement {
   /** Historie za poslední hodinu pro sparkliny, klíč = entity_id. */
   @state() private _spark: Map<string, HistoryPoint[]> = new Map();
   /** Dnešní energie AC IN (kWh, přírůstek kumulativních čítačů od půlnoci). */
-  @state() private _acInToday: { charger: number | null; pass: number | null } | null = null;
+  @state() private _acInToday: { charger: number | null; pass: number | null; battery: number | null } | null = null;
   private _acInTodayKey = '';
   private _sparkEntities: string[] = [];
   private _sparkTimer?: number;
@@ -141,7 +142,7 @@ export class FveFlowCard extends LitElement {
       void this._refreshSparklines();
     }
     const a = this._config.ac_in;
-    const acKey = `${a?.energy_to_charger ?? ''}|${a?.energy_passthrough ?? ''}`;
+    const acKey = `${a?.energy_to_charger ?? ''}|${a?.energy_passthrough ?? ''}|${a?.dc_power ?? ''}`;
     if (acKey !== this._acInTodayKey) {
       this._acInTodayKey = acKey;
       void this._refreshAcInToday();
@@ -155,17 +156,30 @@ export class FveFlowCard extends LitElement {
   private async _refreshAcInToday(): Promise<void> {
     const a = this._config?.ac_in;
     const ids = [a?.energy_to_charger, a?.energy_passthrough].filter((x): x is string => !!x);
-    if (!this.hass || !ids.length) {
+    const powerIds = [a?.dc_power, a?.power].filter((x): x is string => !!x);
+    if (!this.hass || (!ids.length && !a?.dc_power)) {
       this._acInToday = null;
       return;
     }
     const midnight = new Date();
     midnight.setHours(0, 0, 0, 0);
     try {
-      const rows = await fetchStats(this.hass, ids, midnight.getTime(), Date.now(), '5minute', ['change']);
+      const [rows, power] = await Promise.all([
+        fetchStats(this.hass, ids, midnight.getTime(), Date.now(), '5minute', ['change']),
+        fetchStats(this.hass, powerIds, midnight.getTime(), Date.now(), '5minute', ['mean']),
+      ]);
       const sum = (id?: string) =>
         id && rows.has(id) ? rows.get(id)!.reduce((s, r) => s + Math.max(0, r.change ?? 0), 0) : null;
-      this._acInToday = { charger: sum(a?.energy_to_charger), pass: sum(a?.energy_passthrough) };
+      // Do baterie: kladný DC výkon MultiPlusu (nabíječ) jen při běžícím AC IN; FV nabíjí přes MPPT zvlášť.
+      const acMean = new Map((a?.power ? power.get(a.power) ?? [] : []).map((r) => [r.start, r.mean ?? 0]));
+      const dcRows = a?.dc_power ? power.get(a.dc_power) : undefined;
+      const battery = dcRows
+        ? dcRows.reduce((s, r) => {
+            const on = !a?.power || (acMean.get(r.start) ?? 0) > 50;
+            return s + (on ? (Math.max(0, r.mean ?? 0) * (r.end - r.start)) / 3600000 / 1000 : 0);
+          }, 0)
+        : null;
+      this._acInToday = { charger: sum(a?.energy_to_charger), pass: sum(a?.energy_passthrough), battery };
     } catch {
       this._acInToday = null;
     }
@@ -666,6 +680,13 @@ export class FveFlowCard extends LitElement {
         ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 136}">
             Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.pass != null
               ? svg` · průchod ${formatEnergy(this._acInToday.pass)}`
+              : nothing}
+          </text>`
+        : nothing}
+      ${this._acInToday?.battery != null
+        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 155}">
+            Do baterie <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(this._acInToday.battery)}</tspan>${chargeEff(this._acInToday.battery, this._acInToday.charger) != null
+              ? svg` · účinnost nabíjení ${Math.round(chargeEff(this._acInToday.battery, this._acInToday.charger)! * 100)} %`
               : nothing}
           </text>`
         : nothing}

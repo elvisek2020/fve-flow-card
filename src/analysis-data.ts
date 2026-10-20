@@ -52,6 +52,16 @@ const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'nu
 const fmtDayMonth = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
 
 /** Období podle lokální půlnoci (DST den má 23 / 25 h); 24 h = klouzavé okno do teď. */
+/**
+ * Účinnost nabíjení ze sítě = do baterie / do nabíječe. Když vyjde nad 100 %
+ * (nesoulad měřáků nebo neúplná data), číslo nedává smysl → null.
+ */
+export function chargeEff(battery: number | null | undefined, charger: number | null | undefined): number | null {
+  if (battery == null || charger == null || charger <= 0.05) return null;
+  const eff = battery / charger;
+  return eff > 0 && eff <= 1.02 ? Math.min(1, eff) : null;
+}
+
 export function periodRange(period: AnalysisPeriod, now = new Date()): PeriodRange {
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -142,6 +152,8 @@ export interface AnalysisPlan {
   acInCharge: Candidate[];
   acInPass: Candidate[];
   acInPower: Candidate[];
+  /** Kladný DC výkon MultiPlusu = nabíječ → baterie (FV nabíjí přes MPPT zvlášť). */
+  acInDc: Candidate[];
   acInConfigured: boolean;
   /** Index patra, jehož měření sítě napájí AC IN (odběr AC IN se od něj odečte). */
   acInFloor: number | null;
@@ -231,6 +243,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
     acInCharge: meter(a.energy_to_charger, false),
     acInPass: meter(a.energy_passthrough, false),
     acInPower: integral([a.power]),
+    acInDc: integral([a.dc_power], 'pos'),
     acInConfigured: !!(clean(a.energy_to_charger) || clean(a.energy_passthrough) || clean(a.power)),
     acInFloor: clean(a.floor) ? (() => {
       const i = (cfg.floors ?? []).findIndex((f) => f.name === clean(a.floor));
@@ -360,6 +373,7 @@ interface Resolved {
   acInCharge: Quantity;
   acInPass: Quantity;
   acInPower: Quantity;
+  acInDc: Quantity;
   floors: Array<{ fve: Quantity | null; grid: Quantity | null }>;
   pendingPower: string[];
 }
@@ -419,6 +433,7 @@ function resolveAll(plan: AnalysisPlan, st: Store): Resolved {
     acInCharge: resolveChain(plan.acInCharge, st, floorParts, pending),
     acInPass: resolveChain(plan.acInPass, st, floorParts, pending),
     acInPower: resolveChain(plan.acInPower, st, floorParts, pending),
+    acInDc: resolveChain(plan.acInDc, st, floorParts, pending),
     floors,
     pendingPower: [...pending],
   };
@@ -735,9 +750,13 @@ export interface AnalysisData {
     charger: number | null;
     pass: number | null;
     total: number | null;
+    /** Do baterie (DC výstup nabíječe) a účinnost nabíjení = do baterie / do nabíječe. */
+    toBattery: number | null;
+    efficiency: number | null;
     chargeQ: Quantity;
     passQ: Quantity;
     powerQ: Quantity;
+    dcQ: Quantity;
   };
   /** Spotřeba z FV / baterie bez energie ze sítě přes AC IN (pro soběstačnost). */
   fveSolar: number | null;
@@ -1074,6 +1093,7 @@ export async function loadRange(
     acInCharge: merge(past.acInCharge, today?.acIn.chargeQ),
     acInPass: merge(past.acInPass, today?.acIn.passQ),
     acInPower: merge(past.acInPower, today?.acIn.powerQ),
+    acInDc: merge(past.acInDc, today?.acIn.dcQ),
     floors: past.floors.map((f, i) => ({
       fve: f.fve ? merge(f.fve, today ? floorQuantity(today, i, 'fve') : undefined) : null,
       grid: f.grid ? merge(f.grid, today ? floorQuantity(today, i, 'grid') : undefined) : null,
@@ -1279,7 +1299,11 @@ function derive(ctx: AnalysisContext, range: PeriodRange, resolved: Resolved, x:
       const [pv, ch, di, acOut] = dcQs.map((q) => sumDays(q, days));
       // Nabíjení ze sítě je DC příjem baterie mimo MPPT; průchod ze sítě jde do
       // zátěže mimo DC stranu, takže do výstupu střídače nepatří.
-      const gridCharge = days.reduce((sum, k) => sum + (ac.charger.get(k) ?? 0), 0);
+      // DC výstup nabíječe (kladný DC výkon MultiPlusu), jinak AC energie do nabíječe.
+      const gridCharge = days.reduce(
+        (sum, k) => sum + (res.acInDc.byDay.get(k) ?? ac.charger.get(k) ?? 0),
+        0,
+      );
       const pass = days.reduce((sum, k) => sum + (ac.pass.get(k) ?? 0), 0);
       const fromPv = Math.max(0, ch - gridCharge);
       const inverterIn = pv - fromPv + di;
@@ -1330,9 +1354,12 @@ function derive(ctx: AnalysisContext, range: PeriodRange, resolved: Resolved, x:
       charger: acCharger,
       pass: acPass,
       total: acTotal,
+      toBattery: res.acInDc.total,
+      efficiency: chargeEff(res.acInDc.total, acCharger),
       chargeQ: res.acInCharge,
       passQ: res.acInPass,
       powerQ: res.acInPower,
+      dcQ: res.acInDc,
     },
     fveSolar,
     fveConfigured: plan.fveConfigured,

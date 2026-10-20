@@ -135,3 +135,12 @@ def test_measured_points_mark_grid_hours():
     acin = [HourRow(at(D, 7), mean=3000)]
     (p,) = measured_points(soc, bat, acin)
     assert p.charging and p.grid_kwh > 0
+
+
+def test_learned_charge_power_from_full_ac_in_hours():
+    from custom_components.island_energy.core.forecast import learned_charge_power
+
+    dc = [HourRow(at(D, h), mean=m) for h, m in ((4, 2600.0), (5, 2650.0), (6, 900.0), (7, -500.0))]
+    acin = [HourRow(at(D, h), mean=m) for h, m in ((4, 3100.0), (5, 3150.0), (6, 1000.0), (7, 0.0))]
+    assert learned_charge_power(dc, acin) == pytest.approx(2650)
+    assert learned_charge_power(dc[:1], acin[:1]) is None

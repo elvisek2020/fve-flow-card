@@ -75,6 +75,7 @@ from .core.forecast import (
     SocPoint,
     build_load_profile,
     dc_load_rows,
+    learned_charge_power,
     measured_points,
 )
 from .core.planner import PlannerConfig, PlanResult, plan
@@ -115,6 +116,8 @@ class IslandEnergyRuntime:
         self.load_source: LoadSource = "flat"
         self.capacity: float = 0.0
         self.nt: list[ChargeWindow] | None = None
+        #: Skutečný výkon nabíjení ze sítě do baterie z historie (W), jen pro informaci.
+        self.learned_charge_w: float | None = None
         self.generated: datetime | None = None
         self.status: str = "shadow"
         self.manual: ManualCharge | None = None
@@ -199,7 +202,7 @@ class IslandEnergyRuntime:
     async def async_refresh_history(self) -> None:
         now = dt_util.now()
         start = (now - timedelta(days=max(PROFILE_DAYS, PAST_DAYS) + 1)).replace(minute=0, second=0, microsecond=0)
-        keys = (CONF_PV_POWER, CONF_BATTERY_POWER, CONF_INVERTER_POWER, CONF_SOC, CONF_AC_IN_POWER)
+        keys = (CONF_PV_POWER, CONF_BATTERY_POWER, CONF_INVERTER_POWER, CONF_SOC, CONF_AC_IN_POWER, CONF_DC_POWER)
         ids = [self.cfg.get(k) for k in keys]
         try:
             self._history = await fetch_hourly(self.hass, ids, start, now)
@@ -226,6 +229,10 @@ class IslandEnergyRuntime:
             inverter=full_days(self.cfg.get(CONF_INVERTER_POWER)),
             ac_in=full_days(self.cfg.get(CONF_AC_IN_POWER)),
             fallback_daily_kwh=state_float(self.hass, self.cfg.get(CONF_DAILY_LOAD)) or 14.0,
+        )
+        self.learned_charge_w = learned_charge_power(
+            self._history.get(self.cfg.get(CONF_DC_POWER) or "", []),
+            self._history.get(self.cfg.get(CONF_AC_IN_POWER) or "", []),
         )
         soc_rows = self._history.get(self.cfg.get(CONF_SOC) or "", [])
         fulls = [r.start for r in soc_rows if (r.max if r.max is not None else r.mean or 0) >= FULL_SOC]
