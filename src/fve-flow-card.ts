@@ -792,6 +792,10 @@ export class FveFlowCard extends LitElement {
       analysisButton: cfg.analysis?.enabled !== false,
       forecastButton: !!this._planner(),
       chargeBlock: !!this._planner(),
+      // Řádky kritických zátěží a AC IN by jinak narážely do tlačítka chlazení.
+      inverterExtraRows: cfg.inverter?.fan_switch
+        ? [cfg.inverter.load_power, cfg.ac_in?.power || cfg.ac_in?.active_input].filter(Boolean).length
+        : 0,
     };
     const layout = this._narrow
       ? computeMobileLayout(Math.max(1, floors.length), buttons)

@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.5 — 2026-10-20
+
+### 🎨 Vzhled
+
+- **Měnič**: s tlačítkem chlazení se panel prodlouží o řádky Kritické zátěže
+  a AC IN, takže se text už nedotýká tlačítka. Na desktopu roste nahoru do volného
+  místa pod Solcastem, tlačítka pod měničem zůstávají na místě.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.0.4 — 2026-10-20
 
 ### 🎨 Vzhled

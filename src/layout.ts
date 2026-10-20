@@ -45,7 +45,15 @@ export interface LayoutOptions {
   forecastButton?: boolean;
   /** Rezervovat místo pro blok „Nabíjení ze sítě“ pod baterií. */
   chargeBlock?: boolean;
+  /**
+   * Počet doplňkových řádků měniče (kritické zátěže, AC IN) nad tlačítkem
+   * chlazení — o každý se měnič prodlouží, ať se text tlačítka nedotýká.
+   */
+  inverterExtraRows?: number;
 }
+
+/** Výška měniče + místo pro doplňkové řádky nad tlačítkem chlazení. */
+const inverterH = (opts: LayoutOptions): number => 260 + 24 * (opts.inverterExtraRows ?? 0);
 
 /** Výška bloku „Nabíjení ze sítě“. */
 const CHARGE_BLOCK_H = 228;
@@ -91,7 +99,10 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   const LEFT_EDGE = 350;
   const MID_W = 280;
   const MID_X = Math.round((LEFT_EDGE + FLOOR_X - MID_W) / 2);
-  const inverter: Rect = { x: MID_X, y: 360, w: MID_W, h: 260 };
+  // Doplňkové řádky měnič prodlužují nahoru (pod Solcastem je volno), spodek
+  // i tlačítka pod ním zůstávají na místě.
+  const invH = inverterH(opts);
+  const inverter: Rect = { x: MID_X, y: 620 - invH, w: MID_W, h: invH };
   // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný
   // (tam sedí volitelné tlačítko ZPĚT).
   const solcast: Rect = { x: MID_X, y: 40, w: MID_W, h: 190 };
@@ -224,7 +235,7 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   y += mppt.h + MOBILE_GAP;
   const battery: Rect = { x, y, w, h: 340 };
   y += battery.h + MOBILE_GAP;
-  const inverter: Rect = { x, y, w, h: 260 };
+  const inverter: Rect = { x, y, w, h: inverterH(opts) };
   y += inverter.h + MOBILE_GAP;
   const backButton: Rect | undefined = opts.backButton
     ? { x, y, w, h: BACK_BTN_H }
