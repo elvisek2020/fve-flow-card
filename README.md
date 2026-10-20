@@ -111,7 +111,8 @@ Při přidání vybereš entity (vše jde později změnit v možnostech integra
 | SoC baterie, výkon baterie | `sensor.pylontech_battery_…_nabijeni`, `…_vykon` | výkon kladný = nabíjení (jinak zaškrtni obrácení) |
 | Výkon FV, kapacita baterie | `sensor.smartsolar_mppt_…_vykon_fotovoltaiky`, `…_instalovana_kapacita` | kapacita v kWh / Wh / Ah; Ah přes jmenovité napětí (48 V) |
 | Solcast dnes … den 7 | `sensor.solcast_pv_forecast_forecast_today` … `_day_7` | z atributu `detailedForecast` |
-| AC out, příkon AC IN, DC výkon měniče | `…_vystupni_vykon_l1`, `…_prikon_l1`, `…_vykon_dc` | pro chlazení |
+| AC out, příkon AC IN, výkon měniče se znaménkem | `…_vystupni_vykon_l1`, `…_prikon_l1`, `…_vykon_dc` | pro chlazení |
+| DC proud a napětí měniče | `…_proud_dc`, `…_napeti_dc` | proud × napětí = skutečný výkon nabíjení do baterie (atribut `learned_charge_power_w`) |
 | Aktivní vstup GX, stav měniče | `sensor.gx_device_aktivni_vstupni_zdroj_ac`, `…_stav` | kontrola, že AC IN opravdu nabíjí |
 | Spínač AC IN, spínač chlazení | `switch.…_ac_in`, `switch.…` | co integrace spíná |
 | HDO | `binary_sensor.egd_hdo_…_hdo_status` | povel tvého tarifu (atribut `HDO_HOURLY`); bez něj se nabíjí kdykoli |
@@ -218,7 +219,9 @@ inverter:
 ac_in:                                         # AC IN měniče = nabíjení / průchod ze sítě (volitelné)
   power: sensor.multiplus_prikon_l1            # příkon ze sítě (W)
   active_input: sensor.gx_aktivni_vstupni_zdroj_ac   # grid / not_connected
-  dc_power: sensor.multiplus_vykon_dc          # + = nabíjí baterii
+  dc_power: sensor.multiplus_vykon_dc          # výkon se znaménkem, + = nabíjí (u Victronu AC strana)
+  dc_current: sensor.multiplus_proud_dc        # DC proud (A, + = do baterie)
+  dc_voltage: sensor.multiplus_napeti_dc       # DC napětí (V) — proud × napětí = energie do baterie
   energy_to_charger: sensor.multiplus_energie_z_ac_in_1_do_stridace  # kWh, total_increasing
   energy_passthrough: sensor.multiplus_energie_z_ac_in1_do_ac_out    # kWh, total_increasing
   floor: 0NP                                   # patro, přes jehož měření sítě je AC IN napájený

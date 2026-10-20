@@ -112,8 +112,15 @@ export interface AcInConfig {
   active_input?: string;
   /** Stav měniče (bulk / absorption / float / passthrough …). */
   state?: string;
-  /** DC výkon měniče (W, + = nabíjí baterii). */
+  /**
+   * Výkon měniče se znaménkem (W, + = nabíjí). U Victronu je to AC strana
+   * (příkon − výstup), ne energie do baterie.
+   */
   dc_power?: string;
+  /** DC proud MultiPlusu (A, + = do baterie) — s `dc_voltage` dává energii skutečně uloženou do baterie. */
+  dc_current?: string;
+  /** DC napětí MultiPlusu (V). */
+  dc_voltage?: string;
   /** Energie síť → nabíječ (kWh, total_increasing). */
   energy_to_charger?: string;
   /** Energie síť → AC OUT, průchod (kWh, total_increasing). */

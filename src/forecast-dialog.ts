@@ -92,7 +92,7 @@ class FveFlowForecastDialog extends HTMLElement {
           font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
         }
         dialog {
-          width: min(640px, calc(100vw - 32px));
+          width: min(820px, calc(100vw - 32px));
           max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           padding: 0;
           overflow: hidden;
@@ -169,7 +169,7 @@ class FveFlowForecastDialog extends HTMLElement {
           font-size: 13px;
         }
         th, td {
-          padding: 9px 8px;
+          padding: 10px 14px;
           text-align: right;
           border-bottom: 1px solid rgba(130, 190, 220, 0.1);
         }
@@ -183,6 +183,18 @@ class FveFlowForecastDialog extends HTMLElement {
           padding-right: 0;
           text-align: center;
           width: 2.5em;
+        }
+        /* Volné místo rozdělit mezi sloupce, ne jen před AC IN. */
+        th:nth-child(1) {
+          width: 14%;
+        }
+        th:nth-child(2),
+        th:nth-child(3) {
+          width: 15%;
+        }
+        th:nth-child(4),
+        th:nth-child(5) {
+          width: 12%;
         }
         th {
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.55));

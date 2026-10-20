@@ -34,7 +34,9 @@ from .const import (
     CONF_BATTERY_POWER,
     CONF_CAPACITY,
     CONF_DAILY_LOAD,
+    CONF_DC_CURRENT,
     CONF_DC_POWER,
+    CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
     CONF_HDO_SENSOR,
     CONF_INVERTER_POWER,
@@ -77,6 +79,7 @@ from .core.forecast import (
     dc_load_rows,
     learned_charge_power,
     measured_points,
+    product_rows,
 )
 from .core.planner import PlannerConfig, PlanResult, plan
 from .data import (
@@ -202,7 +205,15 @@ class IslandEnergyRuntime:
     async def async_refresh_history(self) -> None:
         now = dt_util.now()
         start = (now - timedelta(days=max(PROFILE_DAYS, PAST_DAYS) + 1)).replace(minute=0, second=0, microsecond=0)
-        keys = (CONF_PV_POWER, CONF_BATTERY_POWER, CONF_INVERTER_POWER, CONF_SOC, CONF_AC_IN_POWER, CONF_DC_POWER)
+        keys = (
+            CONF_PV_POWER,
+            CONF_BATTERY_POWER,
+            CONF_INVERTER_POWER,
+            CONF_SOC,
+            CONF_AC_IN_POWER,
+            CONF_DC_CURRENT,
+            CONF_DC_VOLTAGE,
+        )
         ids = [self.cfg.get(k) for k in keys]
         try:
             self._history = await fetch_hourly(self.hass, ids, start, now)
@@ -230,8 +241,12 @@ class IslandEnergyRuntime:
             ac_in=full_days(self.cfg.get(CONF_AC_IN_POWER)),
             fallback_daily_kwh=state_float(self.hass, self.cfg.get(CONF_DAILY_LOAD)) or 14.0,
         )
+        # Charger DC output = DC current × voltage (dc_power is the AC side on Victron).
         self.learned_charge_w = learned_charge_power(
-            self._history.get(self.cfg.get(CONF_DC_POWER) or "", []),
+            product_rows(
+                self._history.get(self.cfg.get(CONF_DC_CURRENT) or "", []),
+                self._history.get(self.cfg.get(CONF_DC_VOLTAGE) or "", []),
+            ),
             self._history.get(self.cfg.get(CONF_AC_IN_POWER) or "", []),
         )
         soc_rows = self._history.get(self.cfg.get(CONF_SOC) or "", [])

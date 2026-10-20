@@ -479,7 +479,7 @@ export class FveFlowAnalysisDialog extends LitElement {
         );
     return html`<article class="card">
       <h3>Zdroje domu</h3>
-      <div class="kpis">
+      <div class="kpis compact">
         ${this._kpi('Spotřeba domu', fmtKwh(d.house))}
         ${this._kpi(
           'Z FVE',
@@ -734,9 +734,7 @@ export class FveFlowAnalysisDialog extends LitElement {
               {
                 id: 'acin',
                 label: 'Ze sítě (AC IN)',
-                sub:
-                  fmtKwh(fromGrid) +
-                  (d.acIn.efficiency != null ? ` · účinnost ${fmtPct(d.acIn.efficiency)}` : ''),
+                sub: fmtKwh(fromGrid),
                 column: 0,
                 color: C.grid,
               } as SankeyNode,
@@ -931,7 +929,7 @@ export class FveFlowAnalysisDialog extends LitElement {
   /**
    * Heatmapa SoC baterie (dny × 0–24 h): přechody podle `socStops` (hranice
    * červené a oranžové = battery.yellow_from / green_from), hodiny s průměrným
-   * SoC ≥ 98 % mají bílý rámeček.
+   * SoC ≥ 98 % mají bílý rámeček, hodiny s nabíjením ze sítě přes AC IN červený.
    */
   private _socHeatmap(d: AnalysisData): TemplateResult | typeof nothing {
     const hm = d.pvHeatmap;
@@ -950,11 +948,16 @@ export class FveFlowAnalysisDialog extends LitElement {
       markColor: '#ffffff',
       // Bez poznámky v bublině — hodnota SoC je v ní vidět.
       markLabel: '',
+      altMarks: { marks: hm.gridCharge, color: C.crit, label: '' },
       valueFormat: (v) => `${nf0.format(v)} %`,
       tipLabel: 'SoC (průměr)',
       tipExtra: (key, h) => {
         const pv = hm.values.get(key)?.[h];
-        return pv == null ? [] : [{ c: C.solar, l: 'Výroba', v: formatPower(pv) }];
+        const ac = hm.gridChargeW.get(key)?.[h];
+        return [
+          ...(pv == null ? [] : [{ c: C.solar, l: 'Výroba', v: formatPower(pv) }]),
+          ...(ac == null ? [] : [{ c: C.grid, l: 'Nabíjení ze sítě', v: formatPower(ac) }]),
+        ];
       },
     });
     return html`<h4 class="spaced">SoC baterie po hodinách</h4>
@@ -1306,6 +1309,12 @@ export class FveFlowAnalysisDialog extends LitElement {
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
       gap: 10px;
       margin-bottom: 16px;
+    }
+    .kpis.compact {
+      grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    }
+    .kpis.compact .kpi {
+      padding: 10px;
     }
     .kpi-groups {
       display: flex;

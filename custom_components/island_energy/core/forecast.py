@@ -194,9 +194,16 @@ def dc_load_rows(
     return sorted(clean, key=lambda r: r.start)
 
 
+def product_rows(a: Iterable[HourRow], b: Iterable[HourRow]) -> list[HourRow]:
+    """Rows with the product of two series' means in the same hour (W = A × V)."""
+    bm = {r.start: r.mean for r in b}
+    return [HourRow(r.start, r.mean * bm[r.start]) for r in a if r.mean is not None and bm.get(r.start) is not None]
+
+
 def learned_charge_power(dc: Iterable[HourRow], ac_in: Iterable[HourRow], min_hours: int = 2) -> float | None:
-    """Typical grid charging power into the battery (W): median DC power of hours
-    fully on AC IN (mean AC IN power > 2 kW). None with too little data."""
+    """Typical grid charging power into the battery (W): median charger DC output
+    (DC current × voltage) of hours fully on AC IN (mean AC IN power > 2 kW).
+    None with too little data."""
     acin = {r.start: r.mean for r in ac_in}
     vals = sorted(r.mean for r in dc if r.mean is not None and r.mean > 0 and (acin.get(r.start) or 0) > 2000)
     if len(vals) < min_hours:

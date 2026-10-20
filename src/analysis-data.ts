@@ -52,16 +52,6 @@ const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'nu
 const fmtDayMonth = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' });
 
 /** Období podle lokální půlnoci (DST den má 23 / 25 h); 24 h = klouzavé okno do teď. */
-/**
- * Účinnost nabíjení ze sítě = do baterie / do nabíječe. Když vyjde nad 100 %
- * (nesoulad měřáků nebo neúplná data), číslo nedává smysl → null.
- */
-export function chargeEff(battery: number | null | undefined, charger: number | null | undefined): number | null {
-  if (battery == null || charger == null || charger <= 0.05) return null;
-  const eff = battery / charger;
-  return eff > 0 && eff <= 1.02 ? Math.min(1, eff) : null;
-}
-
 export function periodRange(period: AnalysisPeriod, now = new Date()): PeriodRange {
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -133,7 +123,7 @@ export function periodRange(period: AnalysisPeriod, now = new Date()): PeriodRan
 
 type Candidate =
   | { kind: 'meter'; id: string; daily: boolean }
-  | { kind: 'integral'; ids: string[]; sign: 'pos' | 'neg'; signed: boolean }
+  | { kind: 'integral'; ids: string[]; sign: 'pos' | 'neg'; signed: boolean; factor?: string }
   | { kind: 'floors'; part: 'fve' | 'grid' };
 
 interface FloorPlan {
@@ -160,7 +150,7 @@ export interface AnalysisPlan {
   floors: FloorPlan[];
   fveConfigured: boolean;
   gridConfigured: boolean;
-  chart: { pv?: string; battery?: string; ac?: string; acIn?: string; grid: string[]; soc?: string };
+  chart: { pv?: string; battery?: string; ac?: string; acIn?: string; acInDc?: string; grid: string[]; soc?: string };
   /** Řady zatížení fází (síť po fázích + výstup měniče) pro dimenzování měniče. */
   phases: Array<{ label: string; ids: string[] }>;
   solcast: { today?: string; tomorrow?: string; remaining?: string };
@@ -175,6 +165,18 @@ const clean = (v?: string): string | undefined => v?.trim() || undefined;
 function meter(id: string | undefined, daily: boolean): Candidate[] {
   const i = clean(id);
   return i ? [{ kind: 'meter', id: i, daily }] : [];
+}
+
+/** Řádky se součinem průměrů dvou řad ve stejných intervalech (W = A × V). */
+function productRows(a: StatRow[], b: StatRow[]): StatRow[] {
+  const bm = new Map(b.map((r) => [r.start, r.mean]));
+  const out: StatRow[] = [];
+  for (const r of a) {
+    const v = bm.get(r.start);
+    if (r.mean == null || v == null) continue;
+    out.push({ start: r.start, end: r.end, mean: r.mean * v });
+  }
+  return out;
 }
 
 function integral(ids: Array<string | undefined>, sign: 'pos' | 'neg' = 'pos', signed = false): Candidate[] {
@@ -243,7 +245,11 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
     acInCharge: meter(a.energy_to_charger, false),
     acInPass: meter(a.energy_passthrough, false),
     acInPower: integral([a.power]),
-    acInDc: integral([a.dc_power], 'pos'),
+    // Do baterie: skutečný DC výstup nabíječe = proud DC × napětí DC MultiPlusu (+ = nabíjí).
+    acInDc:
+      clean(a.dc_current) && clean(a.dc_voltage)
+        ? [{ kind: 'integral', ids: [clean(a.dc_current)!], sign: 'pos', signed: true, factor: clean(a.dc_voltage) }]
+        : [],
     acInConfigured: !!(clean(a.energy_to_charger) || clean(a.energy_passthrough) || clean(a.power)),
     acInFloor: clean(a.floor) ? (() => {
       const i = (cfg.floors ?? []).findIndex((f) => f.name === clean(a.floor));
@@ -257,6 +263,7 @@ export function buildPlan(cfg: FveFlowCardConfig): AnalysisPlan {
       battery: clean(b.power),
       ac: acId,
       acIn: clean(a.power),
+      acInDc: clean(a.dc_power),
       grid: chartGrid,
       soc: clean(b.soc),
     },
@@ -327,14 +334,18 @@ function evalCandidate(
     return { total: sumMap(byDay), byDay, approx: false, source: 'meter' };
   }
   if (c.kind === 'integral') {
-    if (c.ids.some((id) => !st.fetchedPower.has(id))) return 'pending';
+    if ([...c.ids, ...(c.factor ? [c.factor] : [])].some((id) => !st.fetchedPower.has(id))) return 'pending';
+    const factorRows = c.factor ? st.power.get(c.factor) : undefined;
+    if (c.factor && !factorRows) return null;
     const byDay = new Map<string, number>();
     let minCovered = Infinity;
     let any = false;
     let hourly = false;
     for (const id of c.ids) {
-      const rows = st.power.get(id);
-      if (!rows) continue;
+      const raw = st.power.get(id);
+      if (!raw) continue;
+      // Výkon jako součin dvou řad (proud × napětí) — průměry stejných intervalů.
+      const rows = factorRows ? productRows(raw, factorRows) : raw;
       any = true;
       if (st.hourly.has(id)) hourly = true;
       const r = integrateRows(rows, c.sign, dayKeyOf);
@@ -392,7 +403,7 @@ function resolveChain(
     if (acc && !missing.length) break;
     const r = evalCandidate(c, st, floorParts);
     if (r === 'pending') {
-      if (c.kind === 'integral') c.ids.forEach((id) => pending.add(id));
+      if (c.kind === 'integral') [...c.ids, ...(c.factor ? [c.factor] : [])].forEach((id) => pending.add(id));
       break;
     }
     if (!r) continue;
@@ -676,8 +687,15 @@ export interface PvHeatmap {
   full: Map<string, boolean[]>;
   /** dayKey → 24 hodinových průměrů SoC (%). */
   soc: Map<string, Array<number | null>>;
+  /** dayKey → 24 příznaků „nabíjení ze sítě přes AC IN“ v dané hodině. */
+  gridCharge: Map<string, boolean[]>;
+  /** dayKey → 24 hodinových průměrů výkonu nabíjení z AC IN (W). */
+  gridChargeW: Map<string, Array<number | null>>;
   max: number;
 }
+
+/** Od jakého hodinového průměru výkonu AC IN se hodina počítá jako nabíjení ze sítě (W). */
+const GRID_CHARGE_HOUR_W = 300;
 
 /**
  * Hodinové statistiky výkonu FVE (a SoC) → heatmapa pro vybrané období
@@ -691,7 +709,9 @@ async function loadPvHeatmap(
 ): Promise<PvHeatmap | null> {
   const days = range.days;
   if ((!plan.chart.pv && !plan.chart.soc) || !days.length) return null;
-  const ids = [plan.chart.pv, plan.chart.soc].filter((x): x is string => !!x);
+  // Nabíjení z AC IN: DC výkon nabíječe, jinak příkon AC IN.
+  const acInId = plan.chart.acInDc ?? plan.chart.acIn;
+  const ids = [plan.chart.pv, plan.chart.soc, acInId].filter((x): x is string => !!x);
   const from = Math.floor(range.start / HOUR_MS) * HOUR_MS;
   const rows = await safe(
     fetchStats(hass, ids, from, Math.min(Date.now(), range.dayEnd), 'hour', ['mean', 'max']),
@@ -729,7 +749,20 @@ async function loadPvHeatmap(
     arr[d.getHours()] = true;
     full.set(key, arr);
   }
-  return { days, values, full, soc, max };
+  const gridCharge = new Map<string, boolean[]>();
+  const gridChargeW = new Map<string, Array<number | null>>();
+  for (const row of acInId ? rows.get(acInId) ?? [] : []) {
+    if (row.mean == null || row.mean < GRID_CHARGE_HOUR_W) continue;
+    const d = new Date(row.start);
+    const key = toLocalDayKey(d);
+    const flags = gridCharge.get(key) ?? new Array<boolean>(24).fill(false);
+    flags[d.getHours()] = true;
+    gridCharge.set(key, flags);
+    const w = gridChargeW.get(key) ?? new Array<number | null>(24).fill(null);
+    w[d.getHours()] = row.mean;
+    gridChargeW.set(key, w);
+  }
+  return { days, values, full, soc, gridCharge, gridChargeW, max };
 }
 
 export interface AnalysisData {
@@ -750,9 +783,8 @@ export interface AnalysisData {
     charger: number | null;
     pass: number | null;
     total: number | null;
-    /** Do baterie (DC výstup nabíječe) a účinnost nabíjení = do baterie / do nabíječe. */
+    /** Do baterie (DC výstup nabíječe). */
     toBattery: number | null;
-    efficiency: number | null;
     chargeQ: Quantity;
     passQ: Quantity;
     powerQ: Quantity;
@@ -1355,7 +1387,6 @@ function derive(ctx: AnalysisContext, range: PeriodRange, resolved: Resolved, x:
       pass: acPass,
       total: acTotal,
       toBattery: res.acInDc.total,
-      efficiency: chargeEff(res.acInDc.total, acCharger),
       chargeQ: res.acInCharge,
       passQ: res.acInPass,
       powerQ: res.acInPower,

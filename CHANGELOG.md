@@ -5,6 +5,38 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.3 — 2026-10-20
+
+### 🎨 Vzhled
+
+- **Analýza → Zdroje domu**: menší boxíky, „Ze sítě přes AC IN“ se vejde
+  do jednoho řádku s ostatními.
+- **Analýza → MPPT · baterie · střídač**: uzel „Ze sítě (AC IN)“ bez textu
+  o účinnosti, popisek už nepřesahuje.
+- **SoC baterie po hodinách**: hodiny, kdy se baterie nabíjela ze sítě přes
+  AC IN, mají červený rámeček a v bublině výkon nabíjení.
+- **Prognóza výdrže**: širší okno (820 px) a víc místa mezi sloupci.
+- Blok **Nabíjení ze sítě**: „Dnes do nabíječe X kWh, do baterie Y kWh“ na jednom
+  řádku, pod ním „Průchod ze sítě do domu“. Účinnost nabíjení už se neukazuje.
+- Tok **nabíjení ze sítě → měnič (AC IN)** vede z bloku Nabíjení ze sítě do boku
+  měniče místo od uzlu sítě. Bez integrace (blok chybí) zůstává tok od sítě.
+
+### 🐛 Opravy
+
+- **Do baterie** se počítá ze skutečného DC výstupu nabíječe (DC proud × DC napětí
+  MultiPlusu), ne z výkonu `dc_power`, který je u Victronu na AC straně a dával
+  účinnost ~100 %. Platí pro blok Nabíjení ze sítě, Analýzu i atribut
+  `learned_charge_power_w` integrace.
+
+### ⚠️ Změny, které vyžadují zásah
+
+- V konfiguraci karty doplň `ac_in.dc_current` a `ac_in.dc_voltage` (DC proud
+  a napětí měniče) a stejné entity v možnostech integrace. Bez nich se „do baterie“
+  neukazuje.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.2 — 2026-10-20
 
 ### ✨ Novinky

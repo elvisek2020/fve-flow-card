@@ -17,7 +17,9 @@ from .const import (
     CONF_BATTERY_POWER,
     CONF_CAPACITY,
     CONF_DAILY_LOAD,
+    CONF_DC_CURRENT,
     CONF_DC_POWER,
+    CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
     CONF_HDO_SENSOR,
     CONF_INVERTER_POWER,
@@ -55,7 +57,15 @@ def _schema(values: dict[str, Any]) -> vol.Schema:
     }
     for name in CONF_SOLCAST[1:]:
         fields[key(name)] = SENSOR
-    for name in (CONF_INVERTER_POWER, CONF_AC_IN_POWER, CONF_DC_POWER, CONF_ACTIVE_INPUT, CONF_INVERTER_STATE):
+    for name in (
+        CONF_INVERTER_POWER,
+        CONF_AC_IN_POWER,
+        CONF_DC_POWER,
+        CONF_DC_CURRENT,
+        CONF_DC_VOLTAGE,
+        CONF_ACTIVE_INPUT,
+        CONF_INVERTER_STATE,
+    ):
         fields[key(name)] = SENSOR
     fields[key(CONF_AC_IN_SWITCH)] = SWITCH
     fields[key(CONF_FAN_SWITCH)] = SWITCH

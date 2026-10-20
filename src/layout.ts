@@ -149,9 +149,15 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     pvSolcast: `M ${pv.x + pv.w} ${pv.y + pv.h / 2} H ${solcast.x}`,
     mpptInv: `M ${mppt.x + mppt.w} ${mpptMidY} H ${inverter.x - 80} V ${invDcY} H ${inverter.x}`,
     batInv: `M ${battery.x + battery.w} ${batPortY} H ${inverter.x - 40} V ${invBatY} H ${inverter.x}`,
-    // Síť → AC IN: z levého boku sítě mezi sloupci dolů a shora do měniče
-    // (pod boxem Solcastu, mimo ostrovní trunk vpravo).
+    // Nabíjení ze sítě → AC IN: z pravého boku bloku nabíjení podél
+    // spojky baterie nahoru do levého boku měniče pod vstupem baterie.
+    // Bez bloku (integrace není) z levého boku sítě mezi sloupci dolů
+    // a shora do měniče (pod boxem Solcastu, mimo ostrovní trunk vpravo).
     gridAcIn: (() => {
+      if (chargeBlock) {
+        const acInY = inverter.y + inverter.h - 40;
+        return `M ${chargeBlock.x + chargeBlock.w} ${chargeBlock.y + 60} H ${inverter.x - 20} V ${acInY} H ${inverter.x}`;
+      }
       const bendX = Math.round((inverter.x + inverter.w + FLOOR_X) / 2) - 20;
       const midY = Math.round((solcast.y + solcast.h + inverter.y) / 2);
       return `M ${grid.x} ${grid.y + grid.h * 0.75} H ${bendX} V ${midY} H ${inverter.x + inverter.w - 50} V ${inverter.y}`;
@@ -262,9 +268,10 @@ export function computeMobileLayout(floorCount: number, opts: LayoutOptions = {}
   // Baterie ↔ Měnič jsou přímí sousedi — přímá svislá spojka.
   const batInv = `M ${battery.x + battery.w / 2} ${battery.y + battery.h} L ${inverter.x + inverter.w / 2} ${inverter.y}`;
 
-  // Síť → AC IN měniče: pravým okrajem nahoru (mezi měničem a sítí je volný)
-  // do pravého boku měniče pod vstupem z MPPT.
-  const gridAcIn = `M ${grid.x + grid.w} ${grid.y + 30} H ${MOBILE_GRID_TRUNK_X} V ${inverter.y + inverter.h * 0.7} H ${inverter.x + inverter.w}`;
+  // Nabíjení ze sítě (bez bloku síť) → AC IN měniče: pravým okrajem nahoru
+  // (mezi měničem a blokem je volný) do pravého boku měniče pod vstupem z MPPT.
+  const acInSrc = chargeBlock ?? grid;
+  const gridAcIn = `M ${acInSrc.x + acInSrc.w} ${acInSrc.y + 30} H ${MOBILE_GRID_TRUNK_X} V ${inverter.y + inverter.h * 0.7} H ${inverter.x + inverter.w}`;
 
   const invPortY = inverter.y + inverter.h - 24;
   const gridPortY = grid.y + grid.h / 2;

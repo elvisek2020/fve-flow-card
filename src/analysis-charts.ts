@@ -672,6 +672,8 @@ export interface HeatmapOptions {
   cellColor: (v: number) => { color: string; opacity: number };
   markColor: string;
   markLabel: string;
+  /** Druhé zvýraznění s vlastní barvou (má přednost před `marks`). */
+  altMarks?: { marks: Map<string, boolean[]>; color: string; label: string };
   valueFormat: (v: number) => string;
   /** Popisek hodnoty v bublině (např. „Výroba“, „SoC“). */
   tipLabel: string;
@@ -699,23 +701,27 @@ export function renderHeatmap(o: HeatmapOptions): { tpl: TemplateResult; height:
   o.days.forEach((day, i) => {
     const vals = o.values.get(day.key);
     const marks = o.marks.get(day.key);
+    const alt = o.altMarks?.marks.get(day.key);
     for (let h = hMin; h < hTo; h++) {
       const v = vals?.[h];
       const x = pl + i * cellW;
       const y = pt + (h - hMin) * cellH;
       const c = v == null ? { color: 'rgba(148,170,190,1)', opacity: 0.03 } : o.cellColor(v);
-      const mark = !!marks?.[h];
+      const altMark = !!alt?.[h];
+      const mark = altMark || !!marks?.[h];
+      const markColor = altMark ? o.altMarks!.color : o.markColor;
+      const markLabel = altMark ? o.altMarks!.label : o.markLabel;
       const tip: Tip = {
         h: `${day.label} ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00`,
         r: [
           { c: v == null ? undefined : c.color, l: o.tipLabel, v: v == null ? 'bez dat' : o.valueFormat(v) },
           ...(o.tipExtra?.(day.key, h) ?? []),
         ],
-        n: mark && o.markLabel ? o.markLabel : undefined,
+        n: mark && markLabel ? markLabel : undefined,
       };
       cells.push(svg`<rect class="cell" x="${f1(x + gap / 2)}" y="${f1(y + gap / 2)}" width="${f1(Math.max(1, cellW - gap))}"
         height="${f1(cellH - gap)}" rx="1.5" fill="${c.color}" fill-opacity="${c.opacity.toFixed(3)}"
-        stroke="${mark ? o.markColor : 'none'}" stroke-width="${mark ? 1.2 : 0}" stroke-opacity="0.9"
+        stroke="${mark ? markColor : 'none'}" stroke-width="${altMark ? 1.6 : mark ? 1.2 : 0}" stroke-opacity="0.9"
         data-tip="${tipAttr(tip)}"/>`);
     }
   });

@@ -144,3 +144,13 @@ def test_learned_charge_power_from_full_ac_in_hours():
     acin = [HourRow(at(D, h), mean=m) for h, m in ((4, 3100.0), (5, 3150.0), (6, 1000.0), (7, 0.0))]
     assert learned_charge_power(dc, acin) == pytest.approx(2650)
     assert learned_charge_power(dc[:1], acin[:1]) is None
+
+
+def test_product_rows_multiplies_current_and_voltage():
+    from custom_components.island_energy.core.forecast import product_rows
+
+    amps = [HourRow(at(D, 4), mean=50.0), HourRow(at(D, 5), mean=None), HourRow(at(D, 6), mean=52.0)]
+    volts = [HourRow(at(D, 4), mean=52.0), HourRow(at(D, 5), mean=53.0)]
+    (row,) = product_rows(amps, volts)
+    assert row.start == at(D, 4)
+    assert row.mean == pytest.approx(2600)

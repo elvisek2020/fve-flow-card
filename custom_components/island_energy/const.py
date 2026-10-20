@@ -21,7 +21,9 @@ CONF_CAPACITY: Final = "capacity"
 CONF_NOMINAL_VOLTAGE: Final = "nominal_voltage"  # number, V
 CONF_INVERTER_POWER: Final = "inverter_power"  # AC out
 CONF_AC_IN_POWER: Final = "ac_in_power"
-CONF_DC_POWER: Final = "dc_power"
+CONF_DC_POWER: Final = "dc_power"  # signed inverter power; on Victron the AC side
+CONF_DC_CURRENT: Final = "dc_current"  # inverter DC current (A, + = into battery)
+CONF_DC_VOLTAGE: Final = "dc_voltage"  # inverter DC voltage (V)
 CONF_ACTIVE_INPUT: Final = "active_input"
 CONF_INVERTER_STATE: Final = "inverter_state"
 CONF_AC_IN_SWITCH: Final = "ac_in_switch"

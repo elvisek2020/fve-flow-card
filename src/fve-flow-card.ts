@@ -31,7 +31,6 @@ import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
 import { findPlanner, plannerMinSoc, type PlannerEntities } from './planner';
 import { fetchStats } from './analysis-stats';
-import { chargeEff } from './analysis-data';
 import {
   capacityToKwh,
   flowDuration,
@@ -142,7 +141,7 @@ export class FveFlowCard extends LitElement {
       void this._refreshSparklines();
     }
     const a = this._config.ac_in;
-    const acKey = `${a?.energy_to_charger ?? ''}|${a?.energy_passthrough ?? ''}|${a?.dc_power ?? ''}`;
+    const acKey = `${a?.energy_to_charger ?? ''}|${a?.energy_passthrough ?? ''}|${a?.dc_current ?? ''}|${a?.dc_voltage ?? ''}`;
     if (acKey !== this._acInTodayKey) {
       this._acInTodayKey = acKey;
       void this._refreshAcInToday();
@@ -156,8 +155,9 @@ export class FveFlowCard extends LitElement {
   private async _refreshAcInToday(): Promise<void> {
     const a = this._config?.ac_in;
     const ids = [a?.energy_to_charger, a?.energy_passthrough].filter((x): x is string => !!x);
-    const powerIds = [a?.dc_power, a?.power].filter((x): x is string => !!x);
-    if (!this.hass || (!ids.length && !a?.dc_power)) {
+    const dcIds = a?.dc_current && a?.dc_voltage ? [a.dc_current, a.dc_voltage] : [];
+    const powerIds = [...dcIds, a?.power].filter((x): x is string => !!x);
+    if (!this.hass || (!ids.length && !dcIds.length)) {
       this._acInToday = null;
       return;
     }
@@ -170,13 +170,17 @@ export class FveFlowCard extends LitElement {
       ]);
       const sum = (id?: string) =>
         id && rows.has(id) ? rows.get(id)!.reduce((s, r) => s + Math.max(0, r.change ?? 0), 0) : null;
-      // Do baterie: kladný DC výkon MultiPlusu (nabíječ) jen při běžícím AC IN; FV nabíjí přes MPPT zvlášť.
+      // Do baterie: DC výstup nabíječe = proud × napětí MultiPlusu (+ = do baterie), jen při
+      // běžícím AC IN; FV nabíjí přes MPPT zvlášť.
       const acMean = new Map((a?.power ? power.get(a.power) ?? [] : []).map((r) => [r.start, r.mean ?? 0]));
-      const dcRows = a?.dc_power ? power.get(a.dc_power) : undefined;
-      const battery = dcRows
-        ? dcRows.reduce((s, r) => {
+      const iRows = dcIds.length ? power.get(dcIds[0]) : undefined;
+      const uMean = new Map((dcIds.length ? power.get(dcIds[1]) ?? [] : []).map((r) => [r.start, r.mean]));
+      const battery = iRows
+        ? iRows.reduce((s, r) => {
+            const u = uMean.get(r.start);
             const on = !a?.power || (acMean.get(r.start) ?? 0) > 50;
-            return s + (on ? (Math.max(0, r.mean ?? 0) * (r.end - r.start)) / 3600000 / 1000 : 0);
+            if (!on || u == null) return s;
+            return s + (Math.max(0, (r.mean ?? 0) * u) * (r.end - r.start)) / 3600000 / 1000;
           }, 0)
         : null;
       this._acInToday = { charger: sum(a?.energy_to_charger), pass: sum(a?.energy_passthrough), battery };
@@ -676,18 +680,16 @@ export class FveFlowCard extends LitElement {
             Příkon ze sítě <tspan class="strong" style="fill: ${acInW > 0 ? C.grid : '#e6f4fa'}">${formatPower(acInW)}</tspan>
           </text>`
         : nothing}
-      ${this._acInToday && (this._acInToday.charger != null || this._acInToday.pass != null)
+      ${this._acInToday && (this._acInToday.charger != null || this._acInToday.battery != null)
         ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 136}">
-            Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.pass != null
-              ? svg` · průchod ${formatEnergy(this._acInToday.pass)}`
+            Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.battery != null
+              ? svg`, do baterie <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(this._acInToday.battery)}</tspan>`
               : nothing}
           </text>`
         : nothing}
-      ${this._acInToday?.battery != null
+      ${this._acInToday?.pass != null
         ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 155}">
-            Do baterie <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(this._acInToday.battery)}</tspan>${chargeEff(this._acInToday.battery, this._acInToday.charger) != null
-              ? svg` · účinnost nabíjení ${Math.round(chargeEff(this._acInToday.battery, this._acInToday.charger)! * 100)} %`
-              : nothing}
+            Průchod ze sítě do domu <tspan class="strong">${formatEnergy(this._acInToday.pass)}</tspan>
           </text>`
         : nothing}
       ${btn(r.x + 20, 'Nabít teď', charging, C.grid, press(p.chargeNow))}
@@ -1141,7 +1143,7 @@ export class FveFlowCard extends LitElement {
 
   /**
    * AC IN Victronu: aktivní, když má příkon nad deadband nebo GX hlásí vstup `grid`.
-   * Nabíjení baterie ze sítě = kladný DC výkon měniče během AC IN.
+   * Nabíjení baterie ze sítě = DC proud × napětí měniče (jinak výkon měniče) během AC IN.
    */
   private _acIn(): { active: boolean; power: number; chargeW: number | null; state: string | null } {
     const a = this._config?.ac_in;
@@ -1149,7 +1151,12 @@ export class FveFlowCard extends LitElement {
     const power = hasNum(this.hass, a.power) ? toNum(this.hass, a.power) : 0;
     const input = a.active_input ? this.hass?.states[a.active_input]?.state : undefined;
     const active = power >= this._flowBase().deadband || input === 'grid';
-    const chargeW = hasNum(this.hass, a.dc_power) ? Math.max(0, toNum(this.hass, a.dc_power)) : null;
+    const chargeW =
+      hasNum(this.hass, a.dc_current) && hasNum(this.hass, a.dc_voltage)
+        ? Math.max(0, toNum(this.hass, a.dc_current) * toNum(this.hass, a.dc_voltage))
+        : hasNum(this.hass, a.dc_power)
+          ? Math.max(0, toNum(this.hass, a.dc_power))
+          : null;
     const state = a.state ? formatState(this.hass, a.state) : null;
     return { active, power, chargeW, state: state && state !== '—' ? state : null };
   }
