@@ -390,3 +390,29 @@ async def test_stale_ignore_is_released_after_start(hass: HomeAssistant, freezer
     await entry.runtime_data.async_control()  # only once after a start
     assert calls == [("switch.ignore", False)]
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_manual_charge_survives_restart_with_restored_settings(
+    hass: HomeAssistant, freezer, hass_storage
+) -> None:
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import mock_restore_cache
+
+    until = datetime(2026, 10, 21, 9, 59, tzinfo=dt_util.get_time_zone(TZ))
+    hass_storage[f"{DOMAIN}.he1"] = {
+        "version": 1,
+        "key": f"{DOMAIN}.he1",
+        "data": {"we_switched_on": True, "manual": {"target": 90.0, "until": until.isoformat()}},
+    }
+    # restored settings are applied while the entities are added (this used to save
+    # an empty state over the file before it was read)
+    mock_restore_cache(hass, [State("switch.hybrid_energy_allow_automatic_charging", "on")])
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    assert rt.settings["auto_charging"] is True
+    assert rt.manual is not None and rt.manual.target == 90.0
+    assert rt.status == "manual"
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=11))
+    await hass.async_block_till_done()
+    assert hass_storage[f"{DOMAIN}.he1"]["data"]["manual"]["target"] == 90.0
+    await hass.config_entries.async_unload(entry.entry_id)

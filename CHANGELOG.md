@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.12 — 2026-10-21
+
+### 🐛 Opravy
+
+- Běžící nabíjení (i ruční **Nabít teď**) teď opravdu přežije restart Home
+  Assistantu. Nastavení obnovená při startu (např. *Povolit automatické nabíjení*)
+  přepsala uložený stav prázdným dřív, než se stihl načíst. Uložený stav se teď
+  načte před entitami a do té doby se nic neukládá.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant. Pokud zrovna běží ruční nabíjení,
+> po tomto jednom restartu ho spusť znovu (**Nabít teď**).
+
 ## v2.0.11 — 2026-10-21
 
 ### 🐛 Opravy

@@ -162,11 +162,11 @@ class IslandEnergyRuntime:
         #: Who switched AC IN on and the running charge survive an HA restart;
         #: otherwise a restart mid-charge turns our own charging into "external".
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
+        self._restored = False
 
     # ------------------------------------------------------------------ lifecycle
 
     async def async_start(self) -> None:
-        await self._async_restore()
         await self.async_refresh_history()
         await self.async_recompute()
         self._unsubs += [
@@ -193,13 +193,19 @@ class IslandEnergyRuntime:
             self._pending()
         self._pending = None
 
-    async def _async_restore(self) -> None:
-        """Restore the control state saved before a restart (expired parts are dropped)."""
+    async def async_restore(self) -> None:
+        """Restore the control state saved before a restart (expired parts are dropped).
+
+        Runs before the entities are added: their restored settings trigger a save,
+        and a pending save would be what ``async_load`` returns instead of the file.
+        """
         try:
             data = await self._store.async_load() or {}
         except Exception:
             _LOGGER.exception("Reading the saved control state failed")
-            return
+            data = {}
+        finally:
+            self._restored = True
         now = dt_util.now()
 
         def when(key: str) -> datetime | None:
@@ -228,6 +234,9 @@ class IslandEnergyRuntime:
 
     @callback
     def _save(self) -> None:
+        if not self._restored:
+            return  # never overwrite the saved state before it was read
+
         def iso(t: datetime | None) -> str | None:
             return t.isoformat() if t else None
 

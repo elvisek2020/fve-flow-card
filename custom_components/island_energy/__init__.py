@@ -115,6 +115,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: IslandEnergyConfigEntry
 async def async_setup_entry(hass: HomeAssistant, entry: IslandEnergyConfigEntry) -> bool:
     runtime = IslandEnergyRuntime(hass, entry)
     entry.runtime_data = runtime
+    await runtime.async_restore()  # before the entities restore their settings
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_create_background_task(hass, runtime.async_start(), f"{DOMAIN} start")
     entry.async_on_unload(runtime.async_stop)
