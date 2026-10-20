@@ -44,11 +44,14 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
         night = self.runtime.result.next_night if self.runtime.result else None
         return night.needed_kwh if night else None
 
+    _unrecorded_attributes = frozenset({"session"})
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         night = self.runtime.result.next_night if self.runtime.result else None
+        session = self.runtime.session_info()
         if night is None:
-            return {"reason": self.runtime.reason()}
+            return {"reason": self.runtime.reason(), "session": session}
         return {
             "target_day": night.target_day.isoformat(),
             "deadline": night.deadline.isoformat(),
@@ -58,6 +61,8 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
             "reason": self.runtime.reason(),
             "hdo": self.runtime.nt is not None,
             "learned_charge_power_w": round(self.runtime.learned_charge_w) if self.runtime.learned_charge_w else None,
+            # Charging in progress (planned or manual): target SoC, energy left, estimated end.
+            "session": session,
         }
 
 

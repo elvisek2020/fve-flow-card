@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.8 — 2026-10-20
+
+### ✨ Novinky
+
+- Blok **Nabíjení ze sítě** při běžícím nabíjení (podle plánu i ručním) ukazuje
+  místo přepočítaného plánu na zbytek noci cíl a odhad konce, např.
+  „Do 62 %, cca do 22:40“ a „Nabije ještě 2,1 kWh“.
+- Senzor plánu nabíjení má atribut `session` (cíl SoC, zbývající kWh, odhad
+  konce). Odhad počítá z aktuálního výkonu do baterie (DC proud × napětí), jinak
+  z naučeného nebo nastaveného výkonu nabíjení.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.7 — 2026-10-20
 
 ### ✨ Novinky

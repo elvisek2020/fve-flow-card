@@ -56,7 +56,7 @@ export interface LayoutOptions {
 const inverterH = (opts: LayoutOptions): number => 260 + 24 * (opts.inverterExtraRows ?? 0);
 
 /** Výška bloku „Nabíjení ze sítě“. */
-const CHARGE_BLOCK_H = 228;
+const CHARGE_BLOCK_H = 252;
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
 // odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.

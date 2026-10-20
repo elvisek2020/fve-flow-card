@@ -1,6 +1,6 @@
 {
   "name": "fve-flow-card",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Integrace pro Home Assistant — plánované nabíjení ostrovní FVE ze sítě, chlazení a karta toků energie (Victron, Shelly, Solcast).",
   "type": "module",
   "main": "custom_components/island_energy/frontend/fve-flow-card.js",

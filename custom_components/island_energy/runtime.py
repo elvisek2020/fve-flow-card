@@ -415,6 +415,8 @@ class IslandEnergyRuntime:
                 return
             await self._switch(sw, False, reason)
         self._update_status()
+        if self.manual or self.session:
+            self._notify_listeners()  # session estimate (kWh left, end) once a minute
 
     async def _switch(self, entity_id: str, on: bool, reason: str) -> None:
         """Switch the AC IN contactor; off is graceful when "ignore AC input" is configured.
@@ -669,6 +671,27 @@ class IslandEnergyRuntime:
         if self.nt is None:
             text += " Bez HDO: nabíjí se kdykoli."
         return text
+
+    def session_info(self) -> dict[str, Any] | None:
+        """Running charge (planned or manual): target SoC, kWh left and estimated end."""
+        active = self.manual or self.session
+        sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
+        if active is None or sw is None or sw.state != STATE_ON:
+            return None
+        info: dict[str, Any] = {"kind": "manual" if self.manual else "planned", "target": round(active.target)}
+        soc = state_float(self.hass, self.cfg.get(CONF_SOC))
+        if soc is None or self.capacity <= 0:
+            return info
+        left = max(0.0, (active.target - soc) / 100 * self.capacity)
+        # Charging power into the battery: measured now (DC current × voltage),
+        # else learned from history, else the setting.
+        amps = state_float(self.hass, self.cfg.get(CONF_DC_CURRENT))
+        volts = state_float(self.hass, self.cfg.get(CONF_DC_VOLTAGE))
+        now_w = amps * volts if amps is not None and volts is not None else 0.0
+        power = now_w if now_w > 300 else self.learned_charge_w or float(self.settings[SET_CHARGE_POWER])
+        eta = dt_util.now() + timedelta(hours=left * 1000 / power) if power > 0 else active.until
+        info.update(remaining_kwh=round(left, 1), eta=min(eta, active.until).isoformat())
+        return info
 
     def history_points(self) -> list[SocPoint]:
         return measured_points(self._history.get(self.cfg.get(CONF_SOC) or "", []), None)

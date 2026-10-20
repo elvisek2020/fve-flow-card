@@ -285,3 +285,18 @@ async def test_on_without_grid_voltage_is_a_fault(hass: HomeAssistant, freezer) 
     await hass.services.async_call(DOMAIN, "charge_now", {}, blocking=True)
     assert rt.status == "manual" and hass.states.get("switch.ac_in").state == "on"
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_running_charge_is_on_the_plan_sensor(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {})
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 80}, blocking=True)
+    await hass.async_block_till_done()
+    session = hass.states.get("sensor.hybrid_energy_grid_charge_plan").attributes["session"]
+    # 400 Ah × 50 V = 20 kWh, 40 → 80 % = 8 kWh at the 2600 W setting ≈ 3 h 5 min
+    assert session["kind"] == "manual" and session["target"] == 80
+    assert session["remaining_kwh"] == 8.0
+    eta = dt_util.parse_datetime(session["eta"])
+    assert timedelta(hours=3) < eta - dt_util.now() < timedelta(hours=3, minutes=10)
+    await hass.config_entries.async_unload(entry.entry_id)

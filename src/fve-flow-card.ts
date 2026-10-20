@@ -662,6 +662,19 @@ export class FveFlowCard extends LitElement {
         : Number.isFinite(kwh)
           ? 'Noc: ze sítě nenabíjí'
           : 'Plán se počítá…';
+    // Běžící nabíjení (plán i ručně): cíl, odhad konce a kolik ještě nabije —
+    // místo přepočítaného plánu na zbytek noci, který by mátl.
+    const session = charging
+      ? (plan?.attributes.session as { target?: number; remaining_kwh?: number; eta?: string } | null | undefined)
+      : undefined;
+    const lines: string[] = session?.target != null
+      ? [
+          `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
+          ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
+        ]
+      : [planText];
+    const acInY = r.y + 90 + lines.length * 24;
+    const tinyY = acInY + (this._config?.ac_in?.power ? 22 : -2);
     const press = (entityId?: string) => (e: Event) => {
       e.stopPropagation();
       if (entityId) void hass.callService?.('button', 'press', { entity_id: entityId });
@@ -683,21 +696,21 @@ export class FveFlowCard extends LitElement {
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${fault ? C.crit : charging ? C.grid : '#e6f4fa'}">
         ${status ? STATUS[status] ?? status : '—'}
       </text>
-      <text class="small" x="${r.x + 80}" y="${r.y + 90}">${planText}</text>
+      ${lines.map((t, i) => svg`<text class="small" x="${r.x + 80}" y="${r.y + 90 + i * 24}">${t}</text>`)}
       ${this._config?.ac_in?.power
-        ? svg`<text class="small" x="${r.x + 80}" y="${r.y + 114}">
+        ? svg`<text class="small" x="${r.x + 80}" y="${acInY}">
             Příkon ze sítě <tspan class="strong" style="fill: ${acInW > 0 ? C.grid : '#e6f4fa'}">${formatPower(acInW)}</tspan>
           </text>`
         : nothing}
       ${this._acInToday && (this._acInToday.charger != null || this._acInToday.battery != null)
-        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 136}">
+        ? svg`<text class="tiny" x="${r.x + 20}" y="${tinyY}">
             Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.battery != null
               ? svg`, do baterie <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(this._acInToday.battery)}</tspan>`
               : nothing}
           </text>`
         : nothing}
       ${this._acInToday?.pass != null
-        ? svg`<text class="tiny" x="${r.x + 20}" y="${r.y + 155}">
+        ? svg`<text class="tiny" x="${r.x + 20}" y="${tinyY + 19}">
             Průchod ze sítě do domu <tspan class="strong">${formatEnergy(this._acInToday.pass)}</tspan>
           </text>`
         : nothing}
