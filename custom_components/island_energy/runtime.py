@@ -775,6 +775,10 @@ class IslandEnergyRuntime:
                 "measured": d.measured,
                 "grid_kwh": round(d.grid_kwh, 2),
                 "grid_windows": [{"start": iso(w.start), "end": iso(w.end)} for w in d.grid_windows],
+                "grid_start_soc": r1(d.grid_start_soc),
+                "grid_start_at": iso(d.grid_start_at),
+                "grid_end_soc": r1(d.grid_end_soc),
+                "grid_end_at": iso(d.grid_end_at),
             }
             for d in self.days
         ]

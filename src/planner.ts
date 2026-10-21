@@ -34,6 +34,11 @@ export interface PlannerDay {
   measured: boolean;
   grid_kwh: number;
   grid_windows: Array<{ start: string; end: string }>;
+  /** SoC a čas začátku / konce nočního nabíjení ze sítě (integrace od 2.0.15). */
+  grid_start_soc?: number | null;
+  grid_start_at?: string | null;
+  grid_end_soc?: number | null;
+  grid_end_at?: string | null;
 }
 
 export type LoadSource = 'dc' | 'ac' | 'flat';

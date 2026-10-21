@@ -5,6 +5,23 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.15 — 2026-10-21
+
+### 🎨 Vzhled
+
+- **Prognóza výdrže**: sloupec AC IN je rozdělený na **AC IN od** (SoC a čas,
+  kdy nabíjení ze sítě začne), **AC IN do** (SoC a čas konce) a **Ze sítě**
+  (kWh a jak dlouho, okna v bublině). Je tak vidět, proč je ráno baterie nabitější.
+  Okno je širší (1000 px). Na mobilu jsou jen sloupce *od* a *do*.
+
+### 🛠️ Pod kapotou
+
+- Prognóza (atribut `days`) má u každé noci `grid_start_soc`, `grid_start_at`,
+  `grid_end_soc` a `grid_end_at`.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.14 — 2026-10-21
 
 ### ✨ Novinky

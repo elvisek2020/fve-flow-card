@@ -89,6 +89,11 @@ class DayResult:
     #: Grid charging attributed to this day (the night before it), kWh.
     grid_kwh: float = 0.0
     grid_windows: tuple[ChargeWindow, ...] = field(default_factory=tuple)
+    #: Grid charging of that night: SoC and time when it starts and when it ends.
+    grid_start_soc: float | None = None
+    grid_start_at: datetime | None = None
+    grid_end_soc: float | None = None
+    grid_end_at: datetime | None = None
 
 
 def clamp_soc(soc: float) -> float:
@@ -389,5 +394,19 @@ def analyze_days(days: Sequence[ForecastDay], points: Sequence[SocPoint], min_so
     return out
 
 
-def with_grid(result: DayResult, kwh: float, windows: Sequence[ChargeWindow]) -> DayResult:
-    return replace(result, grid_kwh=kwh, grid_windows=tuple(windows))
+def with_grid(
+    result: DayResult, kwh: float, windows: Sequence[ChargeWindow], points: Sequence[SocPoint] = ()
+) -> DayResult:
+    """Attach the night's grid charging; ``points`` give SoC at its start and end."""
+    idx = [i for i, p in enumerate(points) if p.grid_kwh > 0 and any(w.start <= p.t < w.end for w in windows)]
+    extra: dict[str, object] = {}
+    if idx:
+        first, last = points[idx[0]], idx[-1]
+        after = points[last + 1] if last + 1 < len(points) else points[last]
+        extra = {
+            "grid_start_soc": first.lo,
+            "grid_start_at": first.t,
+            "grid_end_soc": after.lo,
+            "grid_end_at": after.t if after is not points[last] else points[last].t + STEP,
+        }
+    return replace(result, grid_kwh=kwh, grid_windows=tuple(windows), **extra)

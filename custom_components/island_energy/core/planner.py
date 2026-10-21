@@ -236,7 +236,7 @@ def plan(
         night = by_day.get(r.day.start.astimezone(tz).date())
         if night and night.windows:
             kwh = sum(p.grid_kwh for p in points if any(w.start <= p.t < w.end for w in night.windows))
-            r = with_grid(r, round(kwh, 2), night.windows)
+            r = with_grid(r, round(kwh, 2), night.windows, points)
         out.append(r)
     return PlanResult(nights=nights, points=points, days=out, windows=windows)
 

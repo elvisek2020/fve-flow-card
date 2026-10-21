@@ -93,3 +93,17 @@ def test_schedule_latest_reports_short_time():
     out, short = schedule_latest(allowed, timedelta(hours=2), 90)
     assert short
     assert out == [ChargeWindow(at(D, 23), at(T, 0), 90)]
+
+
+def test_day_reports_soc_at_start_and_end_of_grid_charging():
+    res = run(soc_now=50, tomorrow_kwh=8)
+    night = res.next_night
+    day = next(d for d in res.days if d.day.kind == "tomorrow")
+    assert day.grid_kwh > 0
+    assert day.grid_start_at == night.windows[0].start
+    assert day.grid_end_at == night.windows[-1].end
+    # charging (plus early PV) raises the SoC up to the 90 % ceiling
+    assert day.grid_start_soc < day.grid_end_soc <= 90.0001
+    # a day without grid charging has no start / end
+    other = next(d for d in res.days if d.day.kind == "today")
+    assert other.grid_start_soc is None and other.grid_end_soc is None

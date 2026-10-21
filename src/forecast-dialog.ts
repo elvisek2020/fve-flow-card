@@ -55,22 +55,35 @@ function dayState(day: PlannerDay): { cls: string; title: string } {
   return { cls: 'none', title: 'Nenabíjí se' };
 }
 
-/** Sloupec AC IN: kWh a pod tím okna nabíjení se součtem délky. */
-function gridCell(day: PlannerDay): string {
-  if (!day.grid_kwh || !day.grid_windows.length) return '<span class="muted">—</span>';
+const MUTED_DASH = '<span class="muted">—</span>';
+
+function hasGrid(day: PlannerDay): boolean {
+  return day.kind !== 'past' && !!day.grid_kwh && day.grid_windows.length > 0;
+}
+
+/** AC IN od / do: SoC a pod ním čas, kdy noční nabíjení ze sítě začne / skončí. */
+function gridEdgeCell(day: PlannerDay, edge: 'start' | 'end'): string {
+  if (!hasGrid(day)) return MUTED_DASH;
+  const soc = edge === 'start' ? day.grid_start_soc : day.grid_end_soc;
+  const at =
+    (edge === 'start' ? day.grid_start_at : day.grid_end_at) ??
+    (edge === 'start' ? day.grid_windows[0].start : day.grid_windows[day.grid_windows.length - 1].end);
+  const time = escapeHtml(fmtTime.format(Date.parse(at)));
+  return soc == null ? `<small>${time}</small>` : `${escapeHtml(formatSoc(soc))}<small>${time}</small>`;
+}
+
+/** Ze sítě: kWh a pod tím, jak dlouho se nabíjí (okna v bublině). */
+function gridAmountCell(day: PlannerDay): string {
+  if (!hasGrid(day)) return MUTED_DASH;
   let minutes = 0;
   for (const w of day.grid_windows) minutes += (Date.parse(w.end) - Date.parse(w.start)) / 60000;
-  // Kompaktně: od začátku prvního do konce posledního okna (mezery přes VT neukazuje).
-  const first = Date.parse(day.grid_windows[0].start);
-  const last = Date.parse(day.grid_windows[day.grid_windows.length - 1].end);
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   const dur = h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
-  const span = `${fmtTime.format(first)}–${fmtTime.format(last)}`;
   const title = day.grid_windows
     .map((w) => `${fmtTime.format(Date.parse(w.start))}–${fmtTime.format(Date.parse(w.end))}`)
     .join(', ');
-  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(day.grid_kwh))}<small>${escapeHtml(span)}<span class="dur"> · ${dur}</span></small></span>`;
+  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(day.grid_kwh))}<small class="dur">${dur}</small></span>`;
 }
 
 class FveFlowForecastDialog extends HTMLElement {
@@ -92,7 +105,7 @@ class FveFlowForecastDialog extends HTMLElement {
           font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif);
         }
         dialog {
-          width: min(820px, calc(100vw - 32px));
+          width: min(1000px, calc(100vw - 32px));
           max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           padding: 0;
           overflow: hidden;
@@ -186,17 +199,23 @@ class FveFlowForecastDialog extends HTMLElement {
         }
         /* Volné místo rozdělit mezi sloupce, ne jen před AC IN. */
         th:nth-child(1) {
-          width: 14%;
+          width: 13%;
         }
         th:nth-child(2),
         th:nth-child(3) {
-          width: 15%;
+          width: 12%;
         }
         th:nth-child(4),
-        th:nth-child(5) {
+        th:nth-child(5),
+        th:nth-child(6),
+        th:nth-child(7) {
+          width: 10%;
+        }
+        th:nth-child(8) {
           width: 12%;
         }
         th {
+          white-space: nowrap;
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.55));
           font-weight: 600;
           font-size: 11px;
@@ -215,8 +234,11 @@ class FveFlowForecastDialog extends HTMLElement {
           table {
             font-size: 12.5px;
           }
-          /* Na mobilu se nevejde: spotřeba je u předpovědi stejná, délka je vidět z času. */
+          /* Na mobilu se nevejde: spotřeba je u předpovědi stejná, kWh ze sítě je
+             vidět z rozdílu SoC od / do (v bublině okna), hlavičky jen „od“ / „do“. */
           .col-load,
+          .col-grid,
+          .m-hide,
           .dur {
             display: none;
           }
@@ -285,7 +307,9 @@ class FveFlowForecastDialog extends HTMLElement {
                 <th class="col-load">Spotřeba</th>
                 <th title="Nejnižší SoC, než se baterie začne nabíjet">Ráno</th>
                 <th title="Nejvyšší SoC dne, u 100 % čas nabití">Max</th>
-                <th title="Očekávané nabíjení ze sítě (AC IN) před tímto dnem">AC IN</th>
+                <th title="SoC a čas, kdy noční nabíjení ze sítě (AC IN) začne"><span class="m-hide">AC IN </span>od</th>
+                <th title="SoC a čas, kdy nabíjení ze sítě skončí"><span class="m-hide">AC IN </span>do</th>
+                <th class="col-grid" title="Kolik se nabije ze sítě a jak dlouho (okna v bublině)">Ze sítě</th>
                 <th></th>
               </tr>
             </thead>
@@ -335,7 +359,7 @@ class FveFlowForecastDialog extends HTMLElement {
     this._tbody.replaceChildren();
     if (!days.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="7" class="empty">Integrace zatím prognózu nespočítala.</td>';
+      tr.innerHTML = '<td colspan="9" class="empty">Integrace zatím prognózu nespočítala.</td>';
       this._tbody.append(tr);
     }
     for (const day of days) {
@@ -361,7 +385,9 @@ class FveFlowForecastDialog extends HTMLElement {
         <td class="col-load ${day.load_kwh == null ? 'muted' : ''}">${escapeHtml(kwh(day.load_kwh))}</td>
         <td>${trough}</td>
         <td>${max}</td>
-        <td>${day.kind === 'past' ? '<span class="muted">—</span>' : gridCell(day)}</td>
+        <td>${gridEdgeCell(day, 'start')}</td>
+        <td>${gridEdgeCell(day, 'end')}</td>
+        <td class="col-grid">${gridAmountCell(day)}</td>
         <td>${state.cls ? `<span class="dot ${state.cls}" title="${state.title}"></span>` : ''}</td>
       `;
       this._tbody.append(tr);
@@ -371,9 +397,9 @@ class FveFlowForecastDialog extends HTMLElement {
     this._note.replaceChildren(
       ...[
         'Prognózu a plán nabíjení počítá integrace Hybrid Energy po 15 minutách: výroba podle Solcastu minus spotřeba.',
-        'Ráno = nejnižší SoC, než se baterie začne nabíjet.',
+        'Ráno = nejnižší SoC, než začnou nabíjet panely (po případném nočním nabíjení ze sítě).',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
-        'AC IN = plánované nabíjení ze sítě v noci před daným dnem (jen v nízkém tarifu).',
+        'AC IN od / do = SoC a čas, kdy plánované nabíjení ze sítě v noci před daným dnem začne a skončí (jen v nízkém tarifu); Ze sítě = kolik kWh a jak dlouho.',
         LOAD_TEXT[source] ?? LOAD_TEXT.dc,
       ].map((text) => {
         const line = document.createElement('p');
