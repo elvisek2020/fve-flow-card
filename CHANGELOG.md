@@ -5,6 +5,18 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.13 — 2026-10-21
+
+### 🐛 Opravy
+
+- **Nabít teď** při už sepnutém AC IN (např. zapnutém mimo plánovač) nabíjení
+  převezme, takže ho na cíli zase vypne.
+- Během šetrného odpojování se v historii stavu plánovače už neobjeví krátké
+  „Zapnuto mimo plánovač“.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.12 — 2026-10-21
 
 ### 🐛 Opravy

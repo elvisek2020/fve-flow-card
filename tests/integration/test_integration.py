@@ -416,3 +416,18 @@ async def test_manual_charge_survives_restart_with_restored_settings(
     await hass.async_block_till_done()
     assert hass_storage[f"{DOMAIN}.he1"]["data"]["manual"]["target"] == 90.0
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_charge_now_takes_over_an_external_ac_in(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await rt.async_control()
+    assert rt.status == "external"
+    await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 60}, blocking=True)
+    assert rt.status == "manual" and calls == []
+    hass.states.async_set("sensor.soc", "61", {"unit_of_measurement": "%"})
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False)]  # switched off at the target
+    await hass.config_entries.async_unload(entry.entry_id)

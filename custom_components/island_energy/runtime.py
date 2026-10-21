@@ -631,6 +631,10 @@ class IslandEnergyRuntime:
         st = self.hass.states.get(sw) if sw else None
         if sw and st is not None and st.state != STATE_ON:
             await self._switch(sw, True, f"ručně, do {self.manual.target:.0f} %")
+        elif st is not None and st.state == STATE_ON:
+            # Already on (e.g. switched on externally): "charge now" takes it over,
+            # so it is switched off again at the target.
+            self._we_switched_on = True
         self._update_status()
         self._notify_listeners()
 
@@ -707,6 +711,8 @@ class IslandEnergyRuntime:
 
     @callback
     def _on_ac_in_change(self, _event: Event) -> None:
+        if self._switch_lock.locked():
+            return  # mid-sequence states (ignore on, contactor still on) are not a status
         before = self.status
         self._update_status()
         if self.status != before:
