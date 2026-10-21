@@ -105,6 +105,8 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 #: Control state is saved with this delay (coalesces bursts of changes).
 SAVE_DELAY = 10
+#: A learned charging power outside this range is not trusted (W).
+LEARNED_POWER_RANGE = (300.0, 10000.0)
 
 
 @dataclass
@@ -278,12 +280,25 @@ class IslandEnergyRuntime:
         self._update_status()
         self._notify_listeners()
 
+    @property
+    def charge_power_source(self) -> str:
+        """ "learned" (from DC current × voltage history) or "setting" (the fallback number)."""
+        lo, hi = LEARNED_POWER_RANGE
+        return "learned" if self.learned_charge_w and lo <= self.learned_charge_w <= hi else "setting"
+
+    @property
+    def charge_power_w(self) -> float:
+        """Grid charging power into the battery the plan works with (W)."""
+        if self.charge_power_source == "learned":
+            return float(self.learned_charge_w or 0)
+        return float(self.settings[SET_CHARGE_POWER])
+
     def _cooling_cfg(self) -> CoolingConfig:
         return CoolingConfig(on_w=float(self.settings[SET_COOLING_ON]), off_w=float(self.settings[SET_COOLING_OFF]))
 
     def _planner_cfg(self) -> PlannerConfig:
         return PlannerConfig(
-            charge_power_w=float(self.settings[SET_CHARGE_POWER]),
+            charge_power_w=self.charge_power_w,
             ceiling_pct=float(self.settings[SET_CEILING]),
             full_every_days=int(self.settings[SET_FULL_EVERY]),
             min_soc_pct=float(self.settings[SET_MIN_SOC]),
@@ -331,6 +346,7 @@ class IslandEnergyRuntime:
             fallback_daily_kwh=state_float(self.hass, self.cfg.get(CONF_DAILY_LOAD)) or 14.0,
         )
         # Charger DC output = DC current × voltage (dc_power is the AC side on Victron).
+        before = self.learned_charge_w
         self.learned_charge_w = learned_charge_power(
             product_rows(
                 self._history.get(self.cfg.get(CONF_DC_CURRENT) or "", []),
@@ -338,6 +354,8 @@ class IslandEnergyRuntime:
             ),
             self._history.get(self.cfg.get(CONF_AC_IN_POWER) or "", []),
         )
+        if self.learned_charge_w != before and self.result is not None:
+            self._schedule_recompute(5)  # the plan works with the learned power
         soc_rows = self._history.get(self.cfg.get(CONF_SOC) or "", [])
         fulls = [r.start for r in soc_rows if (r.max if r.max is not None else r.mean or 0) >= FULL_SOC]
         if fulls:
@@ -800,7 +818,7 @@ class IslandEnergyRuntime:
         amps = state_float(self.hass, self.cfg.get(CONF_DC_CURRENT))
         volts = state_float(self.hass, self.cfg.get(CONF_DC_VOLTAGE))
         now_w = amps * volts if amps is not None and volts is not None else 0.0
-        power = now_w if now_w > 300 else self.learned_charge_w or float(self.settings[SET_CHARGE_POWER])
+        power = now_w if now_w > 300 else self.charge_power_w
         eta = dt_util.now() + timedelta(hours=left * 1000 / power) if power > 0 else active.until
         info.update(remaining_kwh=round(left, 1), eta=min(eta, active.until).isoformat())
         return info

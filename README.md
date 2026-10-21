@@ -116,7 +116,7 @@ Při přidání vybereš entity (vše jde později změnit v možnostech integra
 | Výkon FV, kapacita baterie | `sensor.smartsolar_mppt_…_vykon_fotovoltaiky`, `…_instalovana_kapacita` | kapacita v kWh / Wh / Ah; Ah přes jmenovité napětí (48 V) |
 | Solcast dnes … den 7 | `sensor.solcast_pv_forecast_forecast_today` … `_day_7` | z atributu `detailedForecast` |
 | AC out, příkon AC IN, výkon měniče se znaménkem | `…_vystupni_vykon_l1`, `…_prikon_l1`, `…_vykon_dc` | pro chlazení |
-| DC proud a napětí měniče | `…_proud_dc`, `…_napeti_dc` | proud × napětí = skutečný výkon nabíjení do baterie (atribut `learned_charge_power_w`) |
+| DC proud a napětí měniče | `…_proud_dc`, `…_napeti_dc` | proud × napětí = skutečný výkon nabíjení do baterie; plán s ním počítá (atribut `learned_charge_power_w`) |
 | Aktivní vstup GX, stav měniče | `sensor.gx_device_aktivni_vstupni_zdroj_ac`, `…_stav` | kontrola, že AC IN opravdu nabíjí |
 | Spínač AC IN, spínač chlazení | `switch.…_ac_in`, `switch.…` | co integrace spíná |
 | Ignorovat AC vstup (volitelné) | `switch.multiplus_…_ovladani_ignore_ac_in_1` | šetrné odpojení: stykač se rozepíná bez proudu |
@@ -139,6 +139,10 @@ automatické chlazení**).
   posledních 7 dní nebyla plná) a tak, aby ranní SoC neklesl pod **minimum**,
 - nabíjí jen v oknech **nízkého tarifu** a **co nejpozději** — skončí, když
   začnou nabíjet panely; začaté nabíjení dojede do cíle (přepočet ho nepřeruší),
+- délku nabíjení počítá s **naučeným výkonem** do baterie (medián DC proud × napětí
+  v hodinách, kdy AC IN běžel naplno, aspoň 2 hodiny historie); dokud ho nezná,
+  použije nastavení *Výkon nabíjení ze sítě (záloha)*; co plán bere, ukazují
+  atributy `charge_power_w` a `charge_power_source` senzoru plánu,
 - plán přepočítává každých 15 minut a při změně SoC, Solcastu nebo HDO.
 
 **Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min. AC IN vypíná jen
@@ -162,7 +166,7 @@ a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
 *Další nabíjení*, *Prognóza výdrže* (atribut `days` pro kartu), *Stav plánovače*;
 binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automatické
 nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
-*Výkon nabíjení ze sítě*, *Plné nabití aspoň jednou za*, *Chlazení zapnout nad /
+*Výkon nabíjení ze sítě (záloha)*, *Plné nabití aspoň jednou za*, *Chlazení zapnout nad /
 vypnout pod*; tlačítka *Nabít teď*, *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
 
 **Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min),

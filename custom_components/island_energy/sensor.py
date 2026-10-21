@@ -61,6 +61,9 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
             "reason": self.runtime.reason(),
             "hdo": self.runtime.nt is not None,
             "learned_charge_power_w": round(self.runtime.learned_charge_w) if self.runtime.learned_charge_w else None,
+            # What the plan uses: the learned power, else the "grid charge power" setting.
+            "charge_power_w": round(self.runtime.charge_power_w),
+            "charge_power_source": self.runtime.charge_power_source,
             # Charging in progress (planned or manual): target SoC, energy left, estimated end.
             "session": session,
         }

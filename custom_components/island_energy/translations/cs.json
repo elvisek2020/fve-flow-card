@@ -134,7 +134,7 @@
         "name": "Minimální SoC"
       },
       "charge_power": {
-        "name": "Výkon nabíjení ze sítě"
+        "name": "Výkon nabíjení ze sítě (záloha)"
       },
       "full_every_days": {
         "name": "Plné nabití aspoň jednou za"

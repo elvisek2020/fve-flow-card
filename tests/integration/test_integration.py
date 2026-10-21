@@ -431,3 +431,20 @@ async def test_charge_now_takes_over_an_external_ac_in(hass: HomeAssistant, free
     await rt.async_control()
     assert calls == [("switch.ac_in", False)]  # switched off at the target
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_plan_uses_learned_charge_power(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    assert rt.charge_power_source == "setting"
+    assert rt._planner_cfg().charge_power_w == 2600.0
+    rt.learned_charge_w = 1999.0
+    assert rt.charge_power_source == "learned"
+    assert rt._planner_cfg().charge_power_w == 1999.0
+    await rt.async_recompute()
+    await hass.async_block_till_done()
+    attrs = hass.states.get("sensor.hybrid_energy_grid_charge_plan").attributes
+    assert attrs["charge_power_w"] == 1999 and attrs["charge_power_source"] == "learned"
+    rt.learned_charge_w = 50.0  # implausible: back to the setting
+    assert rt._planner_cfg().charge_power_w == 2600.0
+    await hass.config_entries.async_unload(entry.entry_id)

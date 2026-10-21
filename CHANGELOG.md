@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.14 — 2026-10-21
+
+### ✨ Novinky
+
+- Plán nabíjení počítá se **skutečným výkonem nabíjení**, který se integrace
+  naučila z historie (DC proud × napětí MultiPlusu), třeba ~2 kW po snížení
+  limitu vstupu. Dokud ho nezná, bere nastavení, které se teď jmenuje
+  *Výkon nabíjení ze sítě (záloha)*. Co plán používá, ukazují atributy
+  `charge_power_w` a `charge_power_source` senzoru plánu.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.13 — 2026-10-21
 
 ### 🐛 Opravy

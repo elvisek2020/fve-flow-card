@@ -134,7 +134,7 @@
         "name": "Minimum SoC"
       },
       "charge_power": {
-        "name": "Grid charge power"
+        "name": "Grid charge power (fallback)"
       },
       "full_every_days": {
         "name": "Full charge at least every"
