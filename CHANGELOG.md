@@ -5,6 +5,26 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.0.16 — 2026-10-23
+
+### 🐛 Opravy
+
+- Automatické nabíjení podle plánu se ve **vysokém tarifu** šetrně přeruší
+  a v dalším okně nízkého tarifu pokračuje podle přepočítaného plánu. Dřív
+  začaté nabíjení jelo až do cíle i přes VT (22. 10. ráno 7:15–8:15).
+- Výjimky: když je SoC pod minimem, nabíjí se i ve VT (do minima + 2 %,
+  s důvodem v logbooku), a ruční **Nabít teď** jede do cíle bez ohledu na tarif.
+- Plánované nabíjení **nepřebíjí**: jeho cíl se s každým přepočtem plánu
+  snižuje a nabíjení skončí, jakmile plán ze sítě už nic nepotřebuje (např.
+  ráno, když panely zbytek dobijí). 22. 10. jelo o ~1,4 h déle a odpoledne se
+  pak kvůli plné baterii ztrácela výroba.
+- Nabíjení začne, až se na začátku shodnou dva přepočty plánu po sobě — jeden
+  výkyv přepočtu (22. 10. v 5:02) už nespustí celou noc dřív.
+- Záznam v logbooku při zapnutí uvádí i okno plánu, které nabíjení spustilo.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.0.15 — 2026-10-21
 
 ### 🎨 Vzhled

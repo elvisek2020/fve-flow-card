@@ -57,7 +57,4 @@ class LowTariffSensor(IslandEnergyEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        if self.runtime.nt is None:
-            return None
-        now = dt_util.now()
-        return any(w.start <= now < w.end for w in self.runtime.nt)
+        return self.runtime.in_low_tariff(dt_util.now())

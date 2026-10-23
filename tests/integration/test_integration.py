@@ -448,3 +448,131 @@ async def test_plan_uses_learned_charge_power(hass: HomeAssistant, freezer) -> N
     rt.learned_charge_w = 50.0  # implausible: back to the setting
     assert rt._planner_cfg().charge_power_w == 2600.0
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def _charging_session(hass: HomeAssistant, freezer, soc: float = 40):
+    """Planned session running (switched on by us) with NT 22:00–22:30 and VT after it."""
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.core.forecast import ChargeWindow
+    from custom_components.island_energy.runtime import ManualCharge
+
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    now = dt_util.now()
+    rt.nt = [
+        ChargeWindow(now, now + timedelta(minutes=30)),
+        ChargeWindow(now + timedelta(hours=1), now + timedelta(hours=2)),
+    ]
+    rt._we_switched_on = True
+    rt.session = ManualCharge(target=80, until=now + timedelta(hours=8))
+    hass.states.async_set("sensor.soc", str(soc), {"unit_of_measurement": "%"})
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    return entry, rt, calls
+
+
+async def test_planned_charging_pauses_in_high_tariff(hass: HomeAssistant, freezer) -> None:
+    entry, rt, calls = await _charging_session(hass, freezer)
+    await rt.async_control()
+    assert calls == [] and rt.session is not None  # NT: keeps charging
+    freezer.tick(timedelta(minutes=35))  # VT
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False)]
+    assert rt.session is None
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_manual_charging_ignores_the_tariff(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.runtime import ManualCharge
+
+    entry, rt, calls = await _charging_session(hass, freezer)
+    rt.session = None
+    rt.manual = ManualCharge(target=80, until=dt_util.now() + timedelta(hours=8))
+    freezer.tick(timedelta(minutes=35))  # VT
+    await rt.async_control()
+    assert calls == [] and rt.status == "manual"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_minimum_soc_may_charge_in_high_tariff(hass: HomeAssistant, freezer) -> None:
+    entry, rt, calls = await _charging_session(hass, freezer, soc=21)  # minimum 20 % + margin 2
+    freezer.tick(timedelta(minutes=35))  # VT
+    await rt.async_control()
+    assert calls == [] and rt.session is not None  # keeps protecting the minimum
+
+    # not charging, below the minimum in VT: starts charging up to minimum + margin
+    rt.session = None
+    hass.states.async_set("switch.ac_in", "off")
+    hass.states.async_set("sensor.soc", "15", {"unit_of_measurement": "%"})
+    await rt.async_control()
+    assert calls == [("switch.ac_in", True)]
+    assert rt.session is not None and rt.session.target == 22.0
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+def _fake_plan(rt, needed_kwh: float, windows) -> None:
+    from custom_components.island_energy.core.planner import NightPlan, PlanResult
+
+    now = dt_util.now()
+    night = NightPlan(now.date(), now + timedelta(hours=8), 90.0, needed_kwh, tuple(windows), 40.0, 90.0)
+    rt.result = PlanResult(nights=[night], points=[], days=[], windows=list(windows))
+
+
+async def test_planned_session_ends_when_the_plan_needs_nothing_more(hass: HomeAssistant, freezer) -> None:
+    entry, rt, calls = await _charging_session(hass, freezer, soc=60)
+    _fake_plan(rt, 2.0, [])
+    await rt.async_control()
+    assert calls == [] and rt.session is not None
+    # 20 kWh battery (400 Ah × 50 V): 60 % + 2 kWh → target follows the plan down to 70 %
+    assert rt.session.target == pytest.approx(70.0)
+    _fake_plan(rt, 0.0, [])  # e.g. at sunrise: "PV will fill the battery"
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False)] and rt.session is None
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_planned_session_starts_only_when_two_plans_agree(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    now = dt_util.now()
+    window = ChargeWindow(now - timedelta(minutes=5), now + timedelta(hours=1), 90.0)
+    _fake_plan(rt, 3.0, [window])
+    rt._prev_windows = [ChargeWindow(now + timedelta(minutes=45), now + timedelta(hours=2), 90.0)]
+    await rt.async_control()
+    assert calls == []  # an outlying recompute alone does not start charging
+    rt._prev_windows = [window]
+    await rt.async_control()
+    assert calls == [("switch.ac_in", True)]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_no_restart_cycling_after_the_plan_said_done(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry, rt, calls = await _charging_session(hass, freezer, soc=60)
+    now = dt_util.now()
+    window = ChargeWindow(now - timedelta(minutes=30), now + timedelta(hours=2), 90.0)
+    rt.nt = [window]
+    _fake_plan(rt, 0.25, [window])
+    rt._prev_windows = [window]
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False)] and rt.session is None  # done (< 0.3 kWh)
+
+    # the plan wobbles back to 0.55 kWh, both recomputes agree: no restart within MIN_OFF
+    _fake_plan(rt, 0.55, [window])
+    for _ in range(9):
+        freezer.tick(timedelta(minutes=1))
+        await rt.async_control()
+    assert calls == [("switch.ac_in", False)]
+    # after 10 min off and two agreeing plans a new start is allowed (contactor protection holds)
+    freezer.tick(timedelta(minutes=2))
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False), ("switch.ac_in", True)]
+    await hass.config_entries.async_unload(entry.entry_id)

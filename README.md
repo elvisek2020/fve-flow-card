@@ -138,7 +138,12 @@ automatické chlazení**).
   100 %, ale ze sítě nejvýš na **strop** (výchozí 90 %, 100 %, když baterie za
   posledních 7 dní nebyla plná) a tak, aby ranní SoC neklesl pod **minimum**,
 - nabíjí jen v oknech **nízkého tarifu** a **co nejpozději** — skončí, když
-  začnou nabíjet panely; začaté nabíjení dojede do cíle (přepočet ho nepřeruší),
+  začnou nabíjet panely; začne, až se na „teď“ shodnou dva přepočty plánu po sobě
+  (jeden výkyv nespustí celou noc), a skončí, jakmile přepočítaný plán ze sítě už
+  nic nepotřebuje (s rostoucím SoC se cíl snižuje — nepřebíjí, když panely
+  dobijí zbytek); ve **vysokém tarifu** se šetrně přeruší a v dalším okně NT
+  pokračuje podle přepočítaného plánu; výjimkou je SoC pod minimem (nabíjí i ve VT) a ruční
+  **Nabít teď** (jede do cíle bez ohledu na tarif),
 - délku nabíjení počítá s **naučeným výkonem** do baterie (medián DC proud × napětí
   v hodinách, kdy AC IN běžel naplno, aspoň 2 hodiny historie); dokud ho nezná,
   použije nastavení *Výkon nabíjení ze sítě (záloha)*; co plán bere, ukazují

@@ -105,6 +105,10 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 #: Control state is saved with this delay (coalesces bursts of changes).
 SAVE_DELAY = 10
+#: Planned charging continues into the high tariff only below minimum SoC + this (%).
+PROTECT_MARGIN = 2.0
+#: A planned session ends once the recomputed plan needs less than this from the grid (kWh).
+SESSION_DONE_KWH = 0.3
 #: A learned charging power outside this range is not trusted (W).
 LEARNED_POWER_RANGE = (300.0, 10000.0)
 
@@ -165,6 +169,8 @@ class IslandEnergyRuntime:
         #: otherwise a restart mid-charge turns our own charging into "external".
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._restored = False
+        self._session_note = ""
+        self._prev_windows: list[ChargeWindow] | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -397,6 +403,9 @@ class IslandEnergyRuntime:
                 cfg=self._planner_cfg(),
             )
         )
+        # Previous plan's windows: a planned session starts only when both agree on
+        # "now", so one outlying recompute does not start the whole night early.
+        self._prev_windows = list(self.result.windows) if self.result else None
         self.result = result
         self.days = result.days
         self.generated = now
@@ -455,6 +464,15 @@ class IslandEnergyRuntime:
             return None
         return source.state == "grid"
 
+    def in_low_tariff(self, now: datetime) -> bool | None:
+        """Inside an NT window now; None = unknown (no HDO sensor → any time is fine)."""
+        if self.nt is None:
+            return None
+        return any(w.start <= now < w.end for w in self.nt)
+
+    def _next_low_tariff(self, now: datetime) -> datetime | None:
+        return min((w.start for w in self.nt or () if w.start > now), default=None)
+
     def _planned_session(self, now: datetime, soc: float) -> ManualCharge | None:
         """Start a charging session when a planned window is active."""
         if not self.result or self._blocked(now):
@@ -463,7 +481,11 @@ class IslandEnergyRuntime:
         night = self.result.next_night
         if window is None or night is None or self.capacity <= 0:
             return None
+        if self._prev_windows is not None and not any(w.start <= now < w.end for w in self._prev_windows):
+            return None  # only one recompute says "now" (plans jitter by ¼ h): wait for the next
         target = min(window.ceiling, soc + night.needed_kwh / self.capacity * 100)
+        # Logged with the switch-on: which plan window started it (plans move as they are recomputed).
+        self._session_note = f"okno {_hm(window.start)}–{_hm(window.end)}"
         return ManualCharge(target=target, until=night.deadline) if target > soc else None
 
     async def async_control(self) -> None:
@@ -492,6 +514,7 @@ class IslandEnergyRuntime:
             self._no_grid_since = None
         desired: bool | None = None
         reason = ""
+        high_vt = self.in_low_tariff(now) is False
         if self.manual:
             if soc >= self.manual.target or now >= self.manual.until:
                 self.manual = None
@@ -499,13 +522,37 @@ class IslandEnergyRuntime:
             else:
                 desired, reason = True, f"ruční nabíjení do {self.manual.target:.0f} %"
         elif self.settings[SET_AUTO_CHARGING]:
+            min_soc = float(self.settings[SET_MIN_SOC])
+            high_tariff = self.in_low_tariff(now) is False
+            # Below the minimum the battery may charge even in the high tariff (VT).
+            protect = soc < min_soc + PROTECT_MARGIN
+            night = self.result.next_night if self.result else None
+            if self.session and night is not None and self.capacity > 0 and not protect:
+                # The target follows the recomputed plan: as the SoC rises (or PV
+                # turns out better) the plan needs less, the session ends sooner.
+                self.session.target = min(self.session.target, soc + night.needed_kwh / self.capacity * 100)
             if self.session and (soc >= self.session.target or now >= self.session.until or self._blocked(now)):
                 self.session = None
                 desired, reason = False, "plánované nabíjení dokončeno"
+            elif self.session and night is not None and night.needed_kwh < SESSION_DONE_KWH and not protect:
+                self.session = None
+                desired, reason = False, "plán už nabíjení ze sítě nepotřebuje"
+            elif self.session and high_tariff and not protect:
+                # Planned charging pauses in VT; the next NT window continues with
+                # a fresh session from the recomputed plan.
+                self.session = None
+                desired, reason = False, "vysoký tarif – pauza, pokračuje v dalším nízkém tarifu"
             elif not self.session:
                 self.session = self._planned_session(now, soc)
+                if self.session is None and high_tariff and soc < min_soc and not self._blocked(now):
+                    until = self._next_low_tariff(now) or now + timedelta(hours=2)
+                    self.session = ManualCharge(target=min_soc + PROTECT_MARGIN, until=until)
+                    self._log(f"SoC {soc:.0f} % je pod minimem {min_soc:.0f} %, nabíjím i ve vysokém tarifu.")
             if self.session:
-                desired, reason = True, f"podle plánu do {self.session.target:.0f} %"
+                note = f", {self._session_note}" if self._session_note else ""
+                desired, reason = True, f"podle plánu do {self.session.target:.0f} %{note}"
+                if high_tariff:
+                    reason = f"ochrana minima {min_soc:.0f} % i ve vysokém tarifu, do {self.session.target:.0f} %"
             elif desired is None:
                 desired, reason = False, "mimo plán"
         if desired is True and not is_on:
@@ -513,7 +560,8 @@ class IslandEnergyRuntime:
                 return
             await self._switch(sw, True, reason)
         elif desired is False and is_on and self._we_switched_on:
-            if self._last_switch and now - self._last_switch < MIN_ON and soc < FULL_SOC:
+            # The minimum on-time protects the contactor, but not into the high tariff.
+            if self._last_switch and now - self._last_switch < MIN_ON and soc < FULL_SOC and not high_vt:
                 return
             await self._switch(sw, False, reason)
         self._update_status()
