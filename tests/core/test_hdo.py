@@ -106,3 +106,32 @@ def test_slot_text_strings_for_tomorrow_repeat():
     d3 = D + timedelta(days=3)
     assert any(w.start == at(d3, 8, 15) and w.end == at(d3, 9, 15) for w in out)
     assert any(w.start == at(D + timedelta(days=1), 21, 15) and w.end == at(D + timedelta(days=2), 7, 15) for w in out)
+
+
+WEEKEND = [(0, 0, 8, 15), (9, 15, 10, 15), (11, 15, 18, 15), (19, 15, 20, 15), (21, 15, 24, 0)]
+
+
+def test_extension_repeats_weekday_and_weekend_patterns_separately():
+    from custom_components.island_energy.core.hdo import extend_pattern, windows_from_hourly
+
+    fri, sat = date(2026, 10, 23), date(2026, 10, 24)
+    hourly = {**_hourly([fri], 3.83, 4.65, D57D), **_hourly([sat], 3.83, 4.65, WEEKEND)}
+    ext = extend_pattern(windows_from_hourly(hourly, TZ, 3.83), at(date(2026, 10, 28), 0), TZ)
+    sun, mon = date(2026, 10, 25), date(2026, 10, 26)
+
+    def night_end(d):
+        return next(w.end for w in ext if w.start < at(d, 1) < w.end)
+
+    assert night_end(sun) == at(sun, 8, 15)  # weekend pattern
+    assert night_end(mon) == at(mon, 7, 15)  # back to the weekday pattern
+    assert any(w.start == at(sun, 9, 15) for w in ext) and any(w.start == at(mon, 8, 15) for w in ext)
+
+
+def test_slot_texts_repeat_by_day_kind():
+    fri = date(2026, 10, 23)
+    weekday = "00-07:15, 08:15-09:15, 10:15-18:15, 19:15-20:15, 21:15-23:59"
+    weekend = "00-08:15, 09:15-10:15, 11:15-18:15, 19:15-20:15, 21:15-23:59"
+    out = nt_windows(weekday, weekend, fri, TZ, horizon_days=5)
+    sun, mon = date(2026, 10, 25), date(2026, 10, 26)
+    assert any(w.start == at(sun, 9, 15) for w in out)
+    assert any(w.start == at(mon, 8, 15) for w in out)

@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import IslandEnergyConfigEntry
+from .const import SET_RESERVE
 from .entity import IslandEnergyEntity
 
 STATUSES = ["shadow", "idle", "planned", "charging", "manual", "external", "skipped", "fault"]
@@ -58,6 +59,11 @@ class PlanSensor(IslandEnergyEntity, SensorEntity):
             "ceiling": night.ceiling,
             "windows": [{"start": w.start.isoformat(), "end": w.end.isoformat()} for w in night.windows],
             "short": night.short,
+            # Reserve until the next night: lowest SoC without / with this plan.
+            "reserve": float(self.runtime.settings[SET_RESERVE]),
+            "reserve_min_without": round(night.reserve_min_without, 1),
+            "reserve_min": round(night.reserve_min, 1) if night.reserve_min is not None else None,
+            "boosted": night.boosted,
             "reason": self.runtime.reason(),
             "hdo": self.runtime.nt is not None,
             "learned_charge_power_w": round(self.runtime.learned_charge_w) if self.runtime.learned_charge_w else None,

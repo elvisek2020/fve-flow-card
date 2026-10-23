@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.components.number import NumberEntityDescription, NumberMode, RestoreNumber
-from homeassistant.const import PERCENTAGE, UnitOfPower, UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -16,8 +16,8 @@ from .const import (
     SET_CHARGE_POWER,
     SET_COOLING_OFF,
     SET_COOLING_ON,
-    SET_FULL_EVERY,
     SET_MIN_SOC,
+    SET_RESERVE,
 )
 from .entity import IslandEnergyEntity
 
@@ -42,11 +42,7 @@ DESCRIPTIONS = (
         native_unit_of_measurement=UnitOfPower.WATT,
     ),
     SettingDescription(
-        key=SET_FULL_EVERY,
-        native_min_value=1,
-        native_max_value=30,
-        native_step=1,
-        native_unit_of_measurement=UnitOfTime.DAYS,
+        key=SET_RESERVE, native_min_value=10, native_max_value=80, native_step=1, native_unit_of_measurement=PERCENTAGE
     ),
     SettingDescription(
         key=SET_COOLING_ON,

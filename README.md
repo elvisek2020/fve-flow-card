@@ -23,9 +23,10 @@ Integrace:
 - **Prognóza výdrže baterie** — simulace SoC po 15 minutách na 7 dní (Solcast
   minus hodinový profil odběru z baterie); ráno = nejnižší SoC před nabíjením
   z panelů, max = nejvyšší SoC dne
-- **Plán nabíjení ze sítě (AC IN)** — dobije jen to, co panely nestihnou, aby
-  baterie po dni z panelů došla na 100 %; ze sítě nejvýš na strop (90 %, jednou
-  týdně 100 %), nabíjí jen v nízkém tarifu (EG.D HDO) a co nejpozději
+- **Plán nabíjení ze sítě (AC IN)** — v noci dobije jen **rezervu do další
+  noci** (výchozí 30 %), aby baterie do dalšího večera nespadla pod rezervu;
+  ze sítě nejvýš na strop (90 %), jen v noci v nízkém tarifu (EG.D HDO) a co
+  nejpozději — zbytek dobijí panely, takže se neztrácí výroba
 - **Řízení AC IN** se stínovým režimem, ochranou stykače a kontrolou, že měnič
   opravdu nabíjí ze sítě; ruční **Nabít teď** / **Vypnout nabíjení**
 - **Chlazení** měniče podle jeho zátěže (včetně nabíjení ze sítě) s hysterezí
@@ -134,11 +135,16 @@ automatické chlazení**).
   odběru z baterie (průměr posledních 7 celých dní, výroba − nabíjení, tedy
   včetně ztrát měniče; hodiny s nabíjením ze sítě přes AC IN se berou z výstupu
   měniče, takže nabíjení ze sítě není ani výroba, ani odběr),
-- pro každou noc spočítá, kolik dobít, aby baterie po dni z panelů došla na
-  100 %, ale ze sítě nejvýš na **strop** (výchozí 90 %, 100 %, když baterie za
-  posledních 7 dní nebyla plná) a tak, aby ranní SoC neklesl pod **minimum**,
-- nabíjí jen v oknech **nízkého tarifu** a **co nejpozději** — skončí, když
-  začnou nabíjet panely; začne, až se na „teď“ shodnou dva přepočty plánu po sobě
+- pro každou noc spočítá, kolik dobít, aby simulovaný SoC od konce noci až do
+  začátku další noci neklesl pod **rezervu** (výchozí 30 %); ze sítě nejvýš na
+  **strop** (výchozí 90 %, jen limit — na 100 % baterii dotáhnou slunečné dny) a
+  tak, aby SoC před nabíjením neklesl pod **minimum** (ochrana minima smí
+  nabíjet i dřív, v jakémkoli NT),
+- nabíjí jen **v noci** — mezi *Nabíjet ze sítě nejdřív od* (21:00) a *nejpozději
+  do* (08:00), v oknech **nízkého tarifu** (ve všední dny tedy 21:15–07:15, o
+  víkendu do 08:15) a **co nejpozději**; denní NT okna se nepoužijí, takže se ze
+  sítě nenabíjí souběžně s výrobou; když jedné noci nestačí NT čas, dobije víc
+  už noc předtím (až po strop); začne, až se na „teď“ shodnou dva přepočty plánu po sobě
   (jeden výkyv nespustí celou noc), a skončí, jakmile přepočítaný plán ze sítě už
   nic nepotřebuje (s rostoucím SoC se cíl snižuje — nepřebíjí, když panely
   dobijí zbytek); ve **vysokém tarifu** se šetrně přeruší a v dalším okně NT
@@ -171,7 +177,8 @@ a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
 *Další nabíjení*, *Prognóza výdrže* (atribut `days` pro kartu), *Stav plánovače*;
 binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automatické
 nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
-*Výkon nabíjení ze sítě (záloha)*, *Plné nabití aspoň jednou za*, *Chlazení zapnout nad /
+*Výkon nabíjení ze sítě (záloha)*, *Rezerva do další noci*, časy *Nabíjet ze sítě
+nejdřív od / nejpozději do*, *Chlazení zapnout nad /
 vypnout pod*; tlačítka *Nabít teď*, *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
 
 **Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min),

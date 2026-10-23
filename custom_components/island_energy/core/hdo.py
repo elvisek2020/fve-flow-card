@@ -68,11 +68,17 @@ def nt_windows(
     tz: tzinfo,
     horizon_days: int = 8,
 ) -> list[ChargeWindow]:
-    """NT windows from today over ``horizon_days``; days after tomorrow repeat tomorrow's pattern."""
-    windows = parse_slots(today_texts, today, tz)
-    pattern = _texts(tomorrow_texts) or _texts(today_texts)
-    for d in range(1, horizon_days):
-        windows += parse_slots(pattern, today + timedelta(days=d), tz)
+    """NT windows from today over ``horizon_days``; later days repeat the known day
+    of the same kind (weekday / weekend), else tomorrow's pattern."""
+    known = {today: _texts(today_texts), today + timedelta(days=1): _texts(tomorrow_texts)}
+    known = {d: t for d, t in known.items() if t}
+    windows: list[ChargeWindow] = []
+    for i in range(horizon_days):
+        day = today + timedelta(days=i)
+        texts = known.get(day)
+        if texts is None and known:
+            texts = known[_source_day(day, list(known))]
+        windows += parse_slots(texts, day, tz)
     return merge(windows)
 
 
@@ -116,29 +122,43 @@ def windows_from_hourly(
 
 
 def extend_pattern(windows: Sequence[ChargeWindow], until: datetime, tz: tzinfo) -> list[ChargeWindow]:
-    """Repeat the last known day's NT pattern up to ``until`` (HDO only knows today + tomorrow)."""
+    """Repeat known days' NT pattern up to ``until`` (HDO only knows today + tomorrow).
+
+    A later day takes the latest known day of the same kind — weekday or weekend
+    (EG.D shifts the weekend windows, e.g. NT until 08:15) — else the last known day.
+    """
     if not windows:
         return []
+    first_day = min(w.start for w in windows).astimezone(tz).date()
     last_day = max(w.start for w in windows).astimezone(tz).date()
-    # The last day's windows clipped to that day — including the part of a window
+
+    def bounds(d: date) -> tuple[datetime, datetime]:
+        return datetime.combine(d, time(0, 0), tz), datetime.combine(d + timedelta(days=1), time(0, 0), tz)
+
+    # Each known day's windows clipped to that day — including the part of a window
     # that started the evening before (e.g. 21:15 → 07:15 gives 00:00–07:15).
-    day_start = datetime.combine(last_day, time(0, 0), tz)
-    day_end = datetime.combine(last_day + timedelta(days=1), time(0, 0), tz)
-    pattern = clip(windows, day_start, day_end)
+    known = {
+        first_day + timedelta(days=i): clip(windows, *bounds(first_day + timedelta(days=i)))
+        for i in range((last_day - first_day).days + 1)
+    }
     out = list(windows)
-    shift = 1
-    while True:
-        added = False
-        for w in pattern:
+    day = last_day + timedelta(days=1)
+    while bounds(day)[0] < until:
+        src = _source_day(day, list(known))
+        shift = (day - src).days
+        for w in known[src]:
             s = _shift(w.start, shift, tz)
-            if s >= until:
-                continue
-            out.append(ChargeWindow(s, _shift(w.end, shift, tz)))
-            added = True
-        if not added:
-            break
-        shift += 1
+            if s < until:
+                out.append(ChargeWindow(s, _shift(w.end, shift, tz)))
+        day += timedelta(days=1)
     return merge(out)
+
+
+def _source_day(day: date, known: Sequence[date]) -> date:
+    """Latest known day of the same kind (weekday / weekend) as ``day``, else the last one."""
+    weekend = day.weekday() >= 5
+    same = [d for d in known if (d.weekday() >= 5) == weekend]
+    return max(same) if same else max(known)
 
 
 def _shift(t: datetime, days: int, tz: tzinfo) -> datetime:

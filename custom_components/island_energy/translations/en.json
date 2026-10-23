@@ -136,14 +136,22 @@
       "charge_power": {
         "name": "Grid charge power (fallback)"
       },
-      "full_every_days": {
-        "name": "Full charge at least every"
+      "reserve": {
+        "name": "Reserve until the next night"
       },
       "cooling_on": {
         "name": "Cooling on above"
       },
       "cooling_off": {
         "name": "Cooling off below"
+      }
+    },
+    "time": {
+      "night_start": {
+        "name": "Charge from the grid from"
+      },
+      "night_end": {
+        "name": "Charge from the grid until"
       }
     },
     "button": {

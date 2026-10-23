@@ -83,7 +83,6 @@ def test_plan_on_real_data(capsys):
         profile_w=profile,
         days=days,
         history=measured_points(soc_rows, rows(stats, BAT), rows(stats, ACIN) if ACIN in stats else None),
-        last_full=None,
     )
     assert len(res.days) == 7
     assert all(n.needed_kwh >= 0 for n in res.nights)

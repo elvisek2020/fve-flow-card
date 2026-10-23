@@ -47,7 +47,9 @@ CONF_SOLCAST: Final = (
 SET_CEILING: Final = "ceiling"
 SET_MIN_SOC: Final = "min_soc"
 SET_CHARGE_POWER: Final = "charge_power"
-SET_FULL_EVERY: Final = "full_every_days"
+SET_RESERVE: Final = "reserve"
+SET_NIGHT_START: Final = "night_start"  # local time, hours (21.0 = 21:00)
+SET_NIGHT_END: Final = "night_end"
 SET_COOLING_ON: Final = "cooling_on"
 SET_COOLING_OFF: Final = "cooling_off"
 SET_AUTO_CHARGING: Final = "auto_charging"
@@ -57,7 +59,9 @@ DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_CEILING: 90.0,
     SET_MIN_SOC: 20.0,
     SET_CHARGE_POWER: 2600.0,
-    SET_FULL_EVERY: 7.0,
+    SET_RESERVE: 30.0,
+    SET_NIGHT_START: 21.0,
+    SET_NIGHT_END: 8.0,
     SET_COOLING_ON: 1000.0,
     SET_COOLING_OFF: 900.0,
     SET_AUTO_CHARGING: False,
@@ -78,7 +82,9 @@ OBJECT_IDS: Final[dict[str, str]] = {
     SET_CEILING: "grid_charge_ceiling",
     SET_MIN_SOC: "minimum_soc",
     SET_CHARGE_POWER: "grid_charge_power",
-    SET_FULL_EVERY: "full_charge_at_least_every",
+    SET_RESERVE: "grid_charge_reserve",
+    SET_NIGHT_START: "night_charge_from",
+    SET_NIGHT_END: "night_charge_until",
     SET_COOLING_ON: "cooling_on_above",
     SET_COOLING_OFF: "cooling_off_below",
     "charge_now": "charge_now",

@@ -71,8 +71,10 @@ from .const import (
     SET_CHARGE_POWER,
     SET_COOLING_OFF,
     SET_COOLING_ON,
-    SET_FULL_EVERY,
     SET_MIN_SOC,
+    SET_NIGHT_END,
+    SET_NIGHT_START,
+    SET_RESERVE,
 )
 from .core.cooling import CoolingConfig, CoolingController, inverter_load
 from .core.forecast import (
@@ -89,7 +91,7 @@ from .core.forecast import (
     measured_points,
     product_rows,
 )
-from .core.planner import PlannerConfig, PlanResult, plan
+from .core.planner import PlannerConfig, PlanResult, hours_to_time, plan
 from .data import (
     build_days,
     capacity_kwh,
@@ -157,7 +159,6 @@ class IslandEnergyRuntime:
         #: Stale "ignore AC input" is checked once, on the first control after start.
         self._ignore_checked = False
         self._history: dict[str, list[HourRow]] = {}
-        self._last_full: datetime | None = None
         self._we_switched_on = False
         self._last_switch: datetime | None = None
         self._cooling = CoolingController(self._cooling_cfg())
@@ -281,7 +282,7 @@ class IslandEnergyRuntime:
         self.settings[key] = value
         if key in (SET_COOLING_ON, SET_COOLING_OFF):
             self._cooling.cfg = self._cooling_cfg()
-        if key in (SET_CEILING, SET_MIN_SOC, SET_CHARGE_POWER, SET_FULL_EVERY):
+        if key in (SET_CEILING, SET_MIN_SOC, SET_CHARGE_POWER, SET_RESERVE, SET_NIGHT_START, SET_NIGHT_END):
             self._schedule_recompute(5)
         self._update_status()
         self._notify_listeners()
@@ -306,8 +307,10 @@ class IslandEnergyRuntime:
         return PlannerConfig(
             charge_power_w=self.charge_power_w,
             ceiling_pct=float(self.settings[SET_CEILING]),
-            full_every_days=int(self.settings[SET_FULL_EVERY]),
+            reserve_pct=float(self.settings[SET_RESERVE]),
             min_soc_pct=float(self.settings[SET_MIN_SOC]),
+            night_start=hours_to_time(float(self.settings[SET_NIGHT_START])),
+            night_end=hours_to_time(float(self.settings[SET_NIGHT_END])),
         )
 
     # ------------------------------------------------------------------ data + plan
@@ -362,10 +365,6 @@ class IslandEnergyRuntime:
         )
         if self.learned_charge_w != before and self.result is not None:
             self._schedule_recompute(5)  # the plan works with the learned power
-        soc_rows = self._history.get(self.cfg.get(CONF_SOC) or "", [])
-        fulls = [r.start for r in soc_rows if (r.max if r.max is not None else r.mean or 0) >= FULL_SOC]
-        if fulls:
-            self._last_full = max(fulls)
 
     async def async_recompute(self) -> None:
         soc = state_float(self.hass, self.cfg.get(CONF_SOC))
@@ -376,8 +375,6 @@ class IslandEnergyRuntime:
             _LOGGER.debug("Plan skipped: soc=%s capacity=%s", soc, self.capacity)
             return
         now = dt_util.now()
-        if soc >= FULL_SOC:
-            self._last_full = now
         days, today = build_days(self.tz, now, PAST_DAYS)
         pv, totals = solcast_pv(self.hass, [self.cfg.get(k) for k in CONF_SOLCAST], today)
         self.nt = hdo_windows(self.hass, self.cfg.get(CONF_HDO_SENSOR), today.date(), self.tz)
@@ -399,7 +396,6 @@ class IslandEnergyRuntime:
                 days=days,
                 history=history,
                 nt=self.nt,
-                last_full=self._last_full,
                 cfg=self._planner_cfg(),
             )
         )
@@ -837,21 +833,28 @@ class IslandEnergyRuntime:
         if night is None:
             return "Plán zatím není spočítaný."
         when = night.target_day.strftime("%-d. %-m.")
-        peak = f"{night.peak_without:.0f} %" if night.peak_without is not None else "bez nabíjení z FV"
+        reserve = float(self.settings[SET_RESERVE])
+        low = f"{night.reserve_min_without:.0f} %"
         if night.needed_kwh <= 0:
-            return f"{when}: panely baterii dobijí (max {peak}), ze sítě nenabíjím."
+            return (
+                f"{when}: min. SoC do další noci {low} (rezerva {reserve:.0f} %) — rezerva vydrží, ze sítě nenabíjím."
+            )
         windows = ", ".join(f"{_hm(w.start)}–{_hm(w.end)}" for w in night.windows)
         kwh = f"{night.needed_kwh:.1f}".replace(".", ",")
         text = (
-            f"{when}: bez sítě ráno {night.trough_without:.0f} % a max {peak} → "
+            f"{when}: min. SoC do další noci {low} bez sítě (rezerva {reserve:.0f} %) → "
             f"dobít {kwh} kWh ({windows}), strop {night.ceiling:.0f} %."
         )
+        if night.reserve_min is not None:
+            text += f" S dobitím min. {night.reserve_min:.0f} %."
+        if night.boosted:
+            text += " Nabíjí až po strop kvůli tmavým dnům dál."
         if night.protect_min:
             text += f" Kvůli minimu {float(self.settings[SET_MIN_SOC]):.0f} % začíná dřív."
         if night.short:
-            text += " NT okna nestačí na celé dobití."
+            text += " Rezervu se nepodaří udržet (strop nebo noční NT nestačí)."
         if self.nt is None:
-            text += " Bez HDO: nabíjí se kdykoli."
+            text += " Bez HDO: nabíjí se kdykoli v noci."
         return text
 
     def session_info(self) -> dict[str, Any] | None:

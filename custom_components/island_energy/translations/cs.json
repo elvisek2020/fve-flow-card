@@ -136,14 +136,22 @@
       "charge_power": {
         "name": "Výkon nabíjení ze sítě (záloha)"
       },
-      "full_every_days": {
-        "name": "Plné nabití aspoň jednou za"
+      "reserve": {
+        "name": "Rezerva do další noci"
       },
       "cooling_on": {
         "name": "Chlazení zapnout nad"
       },
       "cooling_off": {
         "name": "Chlazení vypnout pod"
+      }
+    },
+    "time": {
+      "night_start": {
+        "name": "Nabíjet ze sítě nejdřív od"
+      },
+      "night_end": {
+        "name": "Nabíjet ze sítě nejpozději do"
       }
     },
     "button": {

@@ -30,7 +30,14 @@ from .runtime import STORAGE_VERSION, IslandEnergyRuntime
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.BUTTON]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.TIME,
+    Platform.BUTTON,
+]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 type IslandEnergyConfigEntry = ConfigEntry[IslandEnergyRuntime]

@@ -5,6 +5,35 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.0 — 2026-10-23
+
+### ✨ Novinky
+
+- **Nový cíl plánování: rezerva do další noci.** Integrace v noci dobije jen
+  tolik, aby baterie do začátku další noci neklesla pod **Rezervu do další noci**
+  (výchozí 30 %). Na 100 % baterii dotahují panely, takže se po dobití ze sítě
+  už neztrácí výroba (21.–22. 10. to bylo ~6 kWh).
+- Ze sítě se nabíjí **jen v noci**: mezi časy *Nabíjet ze sítě nejdřív od*
+  (21:00) a *nejpozději do* (08:00), v nízkém tarifu a co nejpozději. Denní okna
+  nízkého tarifu se nepoužijí. Ochrana minima SoC smí nabíjet i dřív.
+- Strop nabíjení ze sítě (90 %) je jen horní limit. Když jedné noci nestačí čas
+  v nízkém tarifu, dobije víc už noc předtím.
+- Časy nízkého tarifu na dny, které HDO ještě nezná, se opakují zvlášť pro
+  **všední dny a víkend** (o víkendu EG.D posouvá okna, např. NT do 8:15).
+- Důvod plánu ukazuje „min. SoC do další noci X % (rezerva Y %) → dobít Z kWh“,
+  senzor plánu má atributy `reserve`, `reserve_min_without`, `reserve_min`.
+
+### ⚠️ Změny, které vyžadují zásah
+
+- Týdenní nabíjení na 100 % ze sítě je zrušené i s nastavením *Plné nabití
+  aspoň jednou za*. Entitu `number.hybrid_energy_full_charge_at_least_every`
+  můžeš v HA smazat (zůstane jako nedostupná).
+- Nové entity: `number.hybrid_energy_grid_charge_reserve`,
+  `time.hybrid_energy_night_charge_from`, `time.hybrid_energy_night_charge_until`.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.0.16 — 2026-10-23
 
 ### 🐛 Opravy

@@ -399,7 +399,7 @@ class FveFlowForecastDialog extends HTMLElement {
         'Prognózu a plán nabíjení počítá integrace Hybrid Energy po 15 minutách: výroba podle Solcastu minus spotřeba.',
         'Ráno = nejnižší SoC, než začnou nabíjet panely (po případném nočním nabíjení ze sítě).',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
-        'AC IN od / do = SoC a čas, kdy plánované nabíjení ze sítě v noci před daným dnem začne a skončí (jen v nízkém tarifu); Ze sítě = kolik kWh a jak dlouho.',
+        'AC IN od / do = SoC a čas, kdy noční nabíjení ze sítě před daným dnem začne a skončí; Ze sítě = kolik kWh a jak dlouho. Dobíjí se jen rezerva do další noci, zbytek dobijí panely.',
         LOAD_TEXT[source] ?? LOAD_TEXT.dc,
       ].map((text) => {
         const line = document.createElement('p');
