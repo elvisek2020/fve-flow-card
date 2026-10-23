@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.1 — 2026-10-23
+
+### 🎨 Vzhled
+
+- **Prognóza výdrže**: ve sloupcích *AC IN od* / *do* má čas ze dne před řádkem
+  zkratku dne, např. u neděle „so 23:45“. Je tak vidět, že nabíjení začíná už
+  večer předtím.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.0 — 2026-10-23
 
 ### ✨ Novinky

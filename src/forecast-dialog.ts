@@ -14,6 +14,13 @@ const REFRESH_MS = 5000;
 const nf0 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: 'numeric', minute: '2-digit' });
 const fmtDay = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
+const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short' });
+
+/** Místní datum YYYY-MM-DD (stejný tvar jako `PlannerDay.date`). */
+function localDate(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const LOAD_TEXT: Record<LoadSource, string> = {
   dc:
@@ -68,7 +75,10 @@ function gridEdgeCell(day: PlannerDay, edge: 'start' | 'end'): string {
   const at =
     (edge === 'start' ? day.grid_start_at : day.grid_end_at) ??
     (edge === 'start' ? day.grid_windows[0].start : day.grid_windows[day.grid_windows.length - 1].end);
-  const time = escapeHtml(fmtTime.format(Date.parse(at)));
+  const t = Date.parse(at);
+  // Čas jiného dne než řádku (start večer předtím) se zkratkou dne: „so 23:45“.
+  const prefix = localDate(t) === day.date ? '' : `${fmtWeekday.format(t)} `;
+  const time = escapeHtml(prefix + fmtTime.format(t));
   return soc == null ? `<small>${time}</small>` : `${escapeHtml(formatSoc(soc))}<small>${time}</small>`;
 }
 
@@ -229,7 +239,7 @@ class FveFlowForecastDialog extends HTMLElement {
         }
         @media (max-width: 420px) {
           th, td {
-            padding: 8px 4px;
+            padding: 8px 3px;
           }
           table {
             font-size: 12.5px;
