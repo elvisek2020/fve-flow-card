@@ -63,6 +63,8 @@ function dayState(day: PlannerDay): { cls: string; title: string } {
 }
 
 const MUTED_DASH = '<span class="muted">—</span>';
+/** Kolik minulých dní tabulka ukazuje. */
+const HISTORY_DAYS = 3;
 
 function hasGrid(day: PlannerDay): boolean {
   return day.kind !== 'past' && !!day.grid_kwh && day.grid_windows.length > 0;
@@ -257,6 +259,14 @@ class FveFlowForecastDialog extends HTMLElement {
         span.muted {
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.45));
         }
+        /* Dnešek zvýrazněný podbarvením a proužkem vlevo (riziko ho přebije). */
+        tr.today td {
+          background: rgba(79, 195, 247, 0.09);
+        }
+        tr.today td:first-child {
+          box-shadow: inset 3px 0 0 #4fc3f7;
+          padding-left: 10px;
+        }
         tr.risk td {
           background: color-mix(in srgb, #ff5252 8%, transparent);
         }
@@ -361,7 +371,10 @@ class FveFlowForecastDialog extends HTMLElement {
     this._stamp = stamp;
 
     const forecast = hass.states[p.forecast];
-    const days = plannerDays(hass, p);
+    // Historie jen 3 dny zpět, dál dnešek a předpověď.
+    const all = plannerDays(hass, p);
+    const past = all.filter((d) => d.kind === 'past');
+    const days = [...past.slice(-HISTORY_DAYS), ...all.filter((d) => d.kind !== 'past')];
     const risk = days.some((d) => d.kind !== 'past' && d.risk);
     const today = days.find((d) => d.kind === 'today' || d.kind === 'tomorrow');
     this.style.setProperty('--dialog-accent', risk ? '#ff5252' : today?.full_at ? '#69f0ae' : '#ffb74d');

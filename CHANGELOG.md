@@ -5,6 +5,16 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.2 — 2026-10-24
+
+### 🎨 Vzhled
+
+- **Prognóza výdrže**: dnešní řádek je zvýrazněný (podbarvení a modrý proužek)
+  a historie ukazuje jen 3 dny zpět.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.1 — 2026-10-23
 
 ### 🎨 Vzhled
