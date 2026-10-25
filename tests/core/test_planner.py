@@ -137,3 +137,31 @@ def test_day_reports_soc_at_start_and_end_of_grid_charging():
     assert day.grid_start_soc < day.grid_end_soc <= 90.0001
     other = next(d for d in res.days if d.day.kind == "today")
     assert other.grid_start_soc is None and other.grid_end_soc is None
+
+
+def test_minimum_protection_stays_within_its_own_night():
+    # Regression: a later night's minimum protection looked for the SoC crossing from
+    # "now" and put its charging into an earlier morning (even daytime NT).
+    from datetime import datetime
+
+    d0 = date(2026, 10, 25)
+    nt = []
+    for i in range(9):
+        d = d0 + timedelta(days=i - 1)
+        weekend = d.weekday() >= 5
+        slots = [(0, 0, 8 if weekend else 7, 15), (21, 15, 24, 0)]
+        slots += [(9, 15, 10, 15), (11, 15, 18, 15)] if weekend else [(8, 15, 9, 15), (10, 15, 18, 15)]
+        for h0, m0, h1, m1 in slots:
+            nt.append(ChargeWindow(at(d, h0, m0), at(d + timedelta(days=1), 0) if h1 == 24 else at(d, h1, m1)))
+    pv = []
+    for i, kwh in enumerate((7, 14, 7, 9, 10, 12, 3)):
+        pv += pv_day(d0 + timedelta(days=i), kwh)
+    cfg = PlannerConfig(charge_power_w=2083, ceiling_pct=90, reserve_pct=30, min_soc_pct=25)
+    res = plan(
+        now=at(d0, 22), tz=TZ, soc_now=50, capacity_kwh=19.2, pv=pv, profile_w=[700.0] * 24,
+        days=days_from(d0), nt=nt, cfg=cfg,
+    )  # fmt: skip
+    for night in res.nights:
+        previous_end = datetime.combine(night.target_day - timedelta(days=1), time(8, 0), TZ)
+        assert all(w.start >= previous_end for w in night.windows), night
+    assert min(p.lo for p in res.points if p.t < at(d0 + timedelta(days=6), 21)) >= 24

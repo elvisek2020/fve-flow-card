@@ -171,6 +171,9 @@ class IslandEnergyRuntime:
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._restored = False
         self._session_note = ""
+        #: We just switched AC IN off; until the switch reports it (a few seconds),
+        #: it is not "switched on externally".
+        self._off_pending_until: datetime | None = None
         self._prev_windows: list[ChargeWindow] | None = None
 
     # ------------------------------------------------------------------ lifecycle
@@ -604,6 +607,7 @@ class IslandEnergyRuntime:
                     self._log("GX se po „Ignorovat AC vstup“ do 30 s neodpojil od sítě, stykač rozpínám i tak.")
             self._last_switch = dt_util.now()
             self._we_switched_on = on
+            self._off_pending_until = None if on else self._last_switch + timedelta(seconds=30)
             soc = state_float(self.hass, self.cfg.get(CONF_SOC))
             self._log(f"{'Zapínám' if on else 'Vypínám'} nabíjení z AC IN ({reason}, SoC {soc or 0:.0f} %)")
         self._notify_listeners()
@@ -728,6 +732,10 @@ class IslandEnergyRuntime:
     def _update_status(self) -> None:
         sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
         charging = sw is not None and sw.state == STATE_ON
+        if charging and self._off_pending_until and dt_util.now() < self._off_pending_until:
+            charging = False  # our switch-off is on its way, the state lags behind
+        elif not charging:
+            self._off_pending_until = None
         if self.manual:
             self.status = "manual"
         elif self.fault_until and dt_util.now() < self.fault_until:

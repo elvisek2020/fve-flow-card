@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.3 — 2026-10-25
+
+### 🐛 Opravy
+
+- Ochrana minima SoC pozdější noci mohla nabíjení naplánovat do dřívějšího rána,
+  i do denního nízkého tarifu (v prognóze např. noc na 31. 10. s okny 30. 10.
+  ráno). Každá noc teď hlídá minimum jen od konce předchozí noci.
+- Při šetrném vypnutí AC IN se ve stavu plánovače už neobjeví krátké „Zapnuto
+  mimo plánovač“, než spínač ohlásí vypnutí.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.1.2 — 2026-10-24
 
 ### 🎨 Vzhled

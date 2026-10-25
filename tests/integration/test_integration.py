@@ -576,3 +576,18 @@ async def test_no_restart_cycling_after_the_plan_said_done(hass: HomeAssistant, 
     await rt.async_control()
     assert calls == [("switch.ac_in", False), ("switch.ac_in", True)]
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_no_external_flash_while_the_switch_state_lags(hass: HomeAssistant, freezer) -> None:
+    entry, rt, calls = await _charging_session(hass, freezer)
+    rt._update_status()
+    assert rt.status == "charging"
+    statuses: list[str] = []
+    rt.async_add_listener(lambda: statuses.append(rt.status))
+    switch_service(hass, calls, lagging=frozenset({"switch.ac_in"}))  # Shelly reports later
+    freezer.tick(timedelta(minutes=35))  # VT → graceful off
+    await rt.async_control()
+    assert calls[-1] == ("switch.ac_in", False)
+    assert hass.states.get("switch.ac_in").state == "on"  # not reported yet
+    assert "external" not in statuses and rt.status != "external"
+    await hass.config_entries.async_unload(entry.entry_id)

@@ -179,8 +179,11 @@ def plan(
         reserve_need = room if boost else max(0.0, cfg.reserve_pct - reserve_without)
         short = reserve_need > room + 0.5
         need_pct = min(reserve_need, room)
+        # This night guards its own stretch only: from the previous night's end (the
+        # earlier stretch belongs to that night) until this night ends.
+        seg_start = max(now, datetime.combine(ne.astimezone(tz).date() - timedelta(days=1), cfg.night_end, tz))
         # Never below the minimum before the window ends (wins over the ceiling).
-        trough = min((p.lo for p in points if p.t <= span_start), default=soc_now)
+        trough = min((p.lo for p in points if seg_start <= p.t <= span_start), default=soc_now)
         min_need = max(0.0, cfg.min_soc_pct - trough)
         need_pct = max(need_pct, min_need)
         if min_need > 0:
@@ -230,11 +233,13 @@ def plan(
             # NT time (also before the night window).
             if min_need > 0:
                 trial = run(merge_keep_ceiling(windows + new))
-                if min((p.lo for p in trial if p.t <= span_start), default=100) < cfg.min_soc_pct - 0.5:
+                if min((p.lo for p in trial if seg_start <= p.t <= span_start), default=100) < cfg.min_soc_pct - 0.5:
                     base = run(windows)
-                    cross = next((p.t for p in base if p.t <= span_start and p.lo < cfg.min_soc_pct + 2), now)
-                    any_nt = nt if nt is not None else [ChargeWindow(now, span_start)]
-                    guard = clip(any_nt, max(now, cross - QUARTER), span_start)
+                    cross = next(
+                        (p.t for p in base if seg_start <= p.t <= span_start and p.lo < cfg.min_soc_pct + 2), seg_start
+                    )
+                    any_nt = nt if nt is not None else [ChargeWindow(seg_start, span_start)]
+                    guard = clip(any_nt, max(seg_start, cross - QUARTER), span_start)
                     new, time_short = schedule_earliest(guard, duration, ceiling)
                     protect = True
         night = NightPlan(
