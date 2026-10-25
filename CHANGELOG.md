@@ -5,6 +5,18 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.4 — 2026-10-26
+
+### 🎨 Vzhled
+
+- **Minimální SoC** se s integrací Hybrid Energy nastavuje jen v ní (entita
+  *Minimální SoC* zařízení Hybrid Energy). Editor karty sekci *Minimální SoC*
+  v tom případě nezobrazuje a ryska v pruhu baterie i zvýraznění v Analýze
+  berou hodnotu z integrace. Bez integrace platí nastavení karty jako dřív.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.3 — 2026-10-25
 
 ### 🐛 Opravy

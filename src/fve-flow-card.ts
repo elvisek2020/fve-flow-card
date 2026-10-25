@@ -571,9 +571,13 @@ export class FveFlowCard extends LitElement {
 
   private _openAnalysis(): void {
     if (!this.hass || !this._config || this._analysisDialog?.isConnected) return;
+    // Minimum SoC z integrace Hybrid Energy má přednost před nastavením karty.
+    const minSoc = plannerMinSoc(this.hass, this._planner());
+    const config =
+      minSoc == null ? this._config : { ...this._config, forecast: { ...this._config.forecast, min_soc_pct: minSoc } };
     this._analysisDialog = openAnalysisDialog({
       getHass: () => this.hass,
-      config: this._config,
+      config,
       getCapacityKwh: () => this._batteryCapacityKwh(),
     });
   }

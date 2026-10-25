@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import type { FloorConfig, FveFlowCardConfig, HomeAssistant } from './types';
+import { findPlanner } from './planner';
 import { defineOnce, fireEvent } from './utils';
 
 const ENTITY = { entity: { domain: 'sensor' } };
@@ -235,6 +236,12 @@ const SCHEMA = [
  * v objektu patra — proto `flatten: true`. Fáze L1–L3 patří pod Grid,
  * protože jde o rozpad gridové AC-OUT větve, ne FVE.
  */
+/**
+ * S integrací Hybrid Energy se minimální SoC nastavuje v ní (entita „Minimální
+ * SoC“ zařízení Hybrid Energy) — sekci karty pak editor nezobrazuje.
+ */
+const SCHEMA_WITH_PLANNER = SCHEMA.filter((s) => s.name !== 'forecast');
+
 const FLOOR_SCHEMA = [
   { name: 'name', required: true, selector: TEXT, custom_label: 'Název patra' },
   {
@@ -424,7 +431,7 @@ export class FveFlowCardEditor extends LitElement {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${findPlanner(this.hass) ? SCHEMA_WITH_PLANNER : SCHEMA}
         .computeLabel=${this._computeLabel}
         .computeHelper=${this._computeHelper}
         @value-changed=${this._mainChanged}

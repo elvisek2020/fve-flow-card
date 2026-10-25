@@ -278,7 +278,7 @@ solcast:
   total_day6: sensor.solcast_forecast_day_6
   total_day7: sensor.solcast_forecast_day_7
 forecast:
-  min_soc_pct: 10                               # pod tímto SoC = riziko (default 10)
+  min_soc_pct: 10                               # jen bez integrace; s ní platí její „Minimální SoC“
 floors:
   - name: 0NP
     grid_power: sensor.0np_grid_ac_out_vykon   # nepovinné, jinak součet fází
@@ -541,8 +541,8 @@ Poznámky:
   jen dokud baterie nabíjí (výkon ≥ `battery.charge_threshold_w`, default 25 W — sniž,
   pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
 - **Pruh energie baterie**: dole v boxu baterie „V baterii X kWh · z Y kWh“
-  (SoC × kapacita) s pruhem v barvě SoC a ryskou na prahu prognózy
-  (`forecast.min_soc_pct`, default 10 %). Jen když je známá kapacita
+  (SoC × kapacita) s pruhem v barvě SoC a ryskou na minimu SoC — s integrací
+  Hybrid Energy její *Minimální SoC*, bez ní `forecast.min_soc_pct` (default 10 %). Jen když je známá kapacita
   (`battery.capacity` v kWh / Wh / Ah).
 - **Graf jen při výrobě**: celá spodní sekce (hodnoty „Realita"/„Predikce" i graf) je
   vidět jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň `chart_min_power_w`
