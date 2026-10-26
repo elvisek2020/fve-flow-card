@@ -398,9 +398,11 @@ Poznámky:
     dne, u 100 % čas nabití) a **AC IN** (plánované nabíjení ze sítě v noci před
     daným dnem: kWh, čas a délka); čtvereček: zelená = nabije se na 100 %,
     oranžová = jen částečně, šedá = nenabíjí se, červená = ráno pod minimem,
-  - blok **Nabíjení ze sítě** pod baterií: stav plánovače, plán na příští noc,
-    s sekcí `ac_in` i aktuální **příkon ze sítě**, **dnešní energie do nabíječe
-    a do baterie** a průchod (přírůstek kumulativních čítačů od půlnoci) a jedno
+  - blok **Nabíjení ze sítě** pod baterií: režim (*Automatický režim*, *Stínový
+    režim*, *Nabíjí podle plánu* …), nejbližší plánované dobíjení („Další: dnes
+    22:45–0:45“, „Dobije 4 kWh“), při nabíjení cíl a odhad konce a **příkon ze
+    sítě** (jen když AC IN běží); s sekcí `ac_in` dnešní energie **nabíječ ·
+    baterie · dům** a **celkem ze sítě** (přírůstek čítačů od půlnoci) a jedno
     tlačítko **Nabít teď**, které se během nabíjení změní na **Vypnout nabíjení**
     (po vypnutí se vrací k automatickému plánu). Automatické nabíjení (stínový
     režim) se zapíná jen v integraci (**Povolit automatické nabíjení**),

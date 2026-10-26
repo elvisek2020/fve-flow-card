@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.5 — 2026-10-26
+
+### 🎨 Vzhled
+
+- Blok **Nabíjení ze sítě**:
+  - místo „Naplánováno“ ukazuje **Automatický režim**,
+  - pod tím **nejbližší plánované dobíjení** („Další: dnes 22:45–0:45“) a kolik
+    se dobije,
+  - **příkon ze sítě** jen když se nabíjí,
+  - dnešní energie ze sítě: **nabíječ · baterie · dům** a **celkem ze sítě**.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.4 — 2026-10-26
 
 ### 🎨 Vzhled

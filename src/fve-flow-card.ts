@@ -29,7 +29,7 @@ import { openConfirmDialog } from './confirm-dialog';
 import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
 import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
-import { findPlanner, plannerMinSoc, type PlannerEntities } from './planner';
+import { findPlanner, plannerDays, plannerMinSoc, type PlannerEntities } from './planner';
 import { fetchStats } from './analysis-stats';
 import {
   capacityToKwh,
@@ -642,13 +642,12 @@ export class FveFlowCard extends LitElement {
       status === 'manual' ||
       status === 'external';
     const plan = p.plan ? hass.states[p.plan] : undefined;
-    const kwh = plan ? Number(plan.state) : NaN;
-    const windows = (plan?.attributes.windows as Array<{ start: string; end: string }> | undefined) ?? [];
     const hm = (iso: string) => new Date(iso).toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' });
     const STATUS: Record<string, string> = {
       shadow: 'Stínový režim',
-      idle: 'Bez plánu',
-      planned: 'Naplánováno',
+      // Automat zapnutý: plán čeká na další noc (nebo zatím nic nepotřebuje).
+      idle: 'Automatický režim',
+      planned: 'Automatický režim',
       charging: 'Nabíjí podle plánu',
       manual: 'Ruční nabíjení',
       external: 'Zapnuto mimo plánovač',
@@ -660,25 +659,25 @@ export class FveFlowCard extends LitElement {
     const fault = status === 'fault';
     const accent = fault ? C.crit : C.grid;
     const acInW = hasNum(hass, this._config?.ac_in?.power) ? Math.max(0, toNum(hass, this._config!.ac_in!.power)) : 0;
-    const planText =
-      Number.isFinite(kwh) && kwh > 0 && windows.length
-        ? `Noc: ${formatEnergy(kwh)} · ${hm(windows[0].start)}–${hm(windows[windows.length - 1].end)}`
-        : Number.isFinite(kwh)
-          ? 'Noc: ze sítě nenabíjí'
-          : 'Plán se počítá…';
-    // Běžící nabíjení (plán i ručně): cíl, odhad konce a kolik ještě nabije —
-    // místo přepočítaného plánu na zbytek noci, který by mátl.
+    // Běžící nabíjení (plán i ručně): cíl, odhad konce a kolik ještě nabije.
     const session = charging
       ? (plan?.attributes.session as { target?: number; remaining_kwh?: number; eta?: string } | null | undefined)
       : undefined;
-    const lines: string[] = session?.target != null
-      ? [
-          `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
-          ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
-        ]
-      : [planText];
+    const lines: string[] =
+      session?.target != null
+        ? [
+            `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
+            ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
+          ]
+        : this._nextChargeLines(p);
+    // Příkon ze sítě jen když AC IN běží.
+    const showAcIn = !!this._config?.ac_in?.power && (charging || acInW >= this._flowBase().deadband);
     const acInY = r.y + 90 + lines.length * 24;
-    const tinyY = acInY + (this._config?.ac_in?.power ? 22 : -2);
+    const tinyY = acInY + (showAcIn ? 22 : -2);
+    const today = this._acInToday;
+    const totalToday = today && (today.charger != null || today.pass != null) ? (today.charger ?? 0) + (today.pass ?? 0) : null;
+    // Jednotka jen jednou na konci řádku, ať se vejde do boxu.
+    const kwh1 = (v: number) => v.toLocaleString('cs-CZ', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     const press = (entityId?: string) => (e: Event) => {
       e.stopPropagation();
       if (entityId) void hass.callService?.('button', 'press', { entity_id: entityId });
@@ -701,21 +700,21 @@ export class FveFlowCard extends LitElement {
         ${status ? STATUS[status] ?? status : '—'}
       </text>
       ${lines.map((t, i) => svg`<text class="small" x="${r.x + 80}" y="${r.y + 90 + i * 24}">${t}</text>`)}
-      ${this._config?.ac_in?.power
+      ${showAcIn
         ? svg`<text class="small" x="${r.x + 80}" y="${acInY}">
             Příkon ze sítě <tspan class="strong" style="fill: ${acInW > 0 ? C.grid : '#e6f4fa'}">${formatPower(acInW)}</tspan>
           </text>`
         : nothing}
-      ${this._acInToday && (this._acInToday.charger != null || this._acInToday.battery != null)
+      ${today && (today.charger != null || today.battery != null || today.pass != null)
         ? svg`<text class="tiny" x="${r.x + 20}" y="${tinyY}">
-            Dnes do nabíječe <tspan class="strong">${formatEnergy(this._acInToday.charger ?? 0)}</tspan>${this._acInToday.battery != null
-              ? svg`, do baterie <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(this._acInToday.battery)}</tspan>`
-              : nothing}
+            Dnes nabíječ <tspan class="strong">${kwh1(today.charger ?? 0)}</tspan>${today.battery != null
+              ? svg` · baterie <tspan class="strong" style="fill: ${C.grid}">${kwh1(today.battery)}</tspan>`
+              : nothing}${today.pass != null ? svg` · dům <tspan class="strong">${kwh1(today.pass)}</tspan>` : nothing} kWh
           </text>`
         : nothing}
-      ${this._acInToday?.pass != null
+      ${totalToday != null
         ? svg`<text class="tiny" x="${r.x + 20}" y="${tinyY + 19}">
-            Průchod ze sítě do domu <tspan class="strong">${formatEnergy(this._acInToday.pass)}</tspan>
+            Celkem dnes ze sítě <tspan class="strong" style="fill: ${C.grid}">${formatEnergy(totalToday)}</tspan>
           </text>`
         : nothing}
       ${charging
@@ -729,6 +728,33 @@ export class FveFlowCard extends LitElement {
           )
         : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
     `;
+  }
+
+  /**
+   * Nejbližší plánované nabíjení ze sítě z prognózy integrace (první den s nabíjením,
+   * které ještě neskončilo): „Další: dnes 22:45–0:45“ a „Dobije 4,0 kWh“.
+   */
+  private _nextChargeLines(p: PlannerEntities): string[] {
+    const hass = this.hass!;
+    if (!hass.states[p.forecast]) return ['Plán se počítá…'];
+    const now = Date.now();
+    const day = plannerDays(hass, p).find((d) => {
+      if (d.kind === 'past' || !d.grid_kwh || !d.grid_windows.length) return false;
+      const end = d.grid_end_at ?? d.grid_windows[d.grid_windows.length - 1].end;
+      return Date.parse(end) > now;
+    });
+    if (!day) return ['Další: 7 dní bez nabíjení'];
+    const start = Date.parse(day.grid_start_at ?? day.grid_windows[0].start);
+    const end = Date.parse(day.grid_end_at ?? day.grid_windows[day.grid_windows.length - 1].end);
+    const time = (t: number) => new Date(t).toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' });
+    const startDay = new Date(start);
+    startDay.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((startDay.getTime() - today.getTime()) / 86400000);
+    const when =
+      diff <= 0 ? 'dnes' : diff === 1 ? 'zítra' : new Date(start).toLocaleDateString('cs-CZ', { weekday: 'short' });
+    return [`Další: ${when} ${time(start)}–${time(end)}`, `Dobije ${formatEnergy(day.grid_kwh)}`];
   }
 
   /** Okno prognózy: data a ovládání z integrace Hybrid Energy. */
