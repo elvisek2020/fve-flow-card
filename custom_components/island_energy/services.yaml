@@ -12,6 +12,9 @@ charge_now:
           min: 15
           max: 1440
           unit_of_measurement: min
+    low_tariff_only:
+      selector:
+        boolean:
 stop_charging:
 skip_tonight:
 recompute:

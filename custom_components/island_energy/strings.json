@@ -104,6 +104,7 @@
           "planned": "Planned",
           "charging": "Charging",
           "manual": "Manual charging",
+          "manual_waiting": "Manual charge waiting for low tariff",
           "external": "Switched on externally",
           "skipped": "Skipped tonight",
           "fault": "No voltage on AC IN"
@@ -161,6 +162,9 @@
       "charge_full": {
         "name": "Charge to 100 %"
       },
+      "charge_full_low_tariff": {
+        "name": "Charge to 100 % in low tariff"
+      },
       "stop_charging": {
         "name": "Stop charging"
       },
@@ -186,6 +190,10 @@
         "duration": {
           "name": "Duration (min)",
           "description": "At most this long."
+        },
+        "low_tariff_only": {
+          "name": "Night low tariff only",
+          "description": "Charges only in the night low-tariff windows (charge from – until), waits otherwise; ends by the morning at the latest."
         }
       }
     },

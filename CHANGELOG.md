@@ -5,6 +5,23 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.7 — 2026-11-01
+
+### ✨ Novinky
+
+- **Na 100 %** nabízí v dialogu dvě volby:
+  - **Hned**: nabíjí okamžitě, i ve vysokém tarifu (jako dosud).
+  - **Jen v nízkém tarifu**: nabíjí jen v nočních oknech nízkého tarifu (mezi
+    *Nabíjet nejdřív od* a *nejpozději do*), jinak čeká nebo se pozastaví; skončí
+    na 100 %, nejpozději ráno. Pak automat pokračuje podle plánu.
+- Během čekání blok ukazuje „Na 100 % v nízkém tarifu · Začne dnes 21:15“ a
+  tlačítko **Zrušit nabíjení na 100 %**. Stav plánovače `manual_waiting`.
+- Nová entita `button.hybrid_energy_charge_full_low_tariff` a volba
+  `low_tariff_only` služby `island_energy.charge_now`.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.1.6 — 2026-11-01
 
 ### ✨ Novinky

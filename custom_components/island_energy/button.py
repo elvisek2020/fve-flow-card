@@ -1,4 +1,4 @@
-"""Buttons: charge now, charge to 100 %, stop charging, skip tonight."""
+"""Buttons: charge now, charge to 100 % (now / in the night low tariff), stop charging, skip tonight."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ async def async_setup_entry(
         [
             ActionButton(rt, "charge_now"),
             ActionButton(rt, "charge_full"),
+            ActionButton(rt, "charge_full_low_tariff"),
             ActionButton(rt, "stop_charging"),
             ActionButton(rt, "skip_tonight"),
         ]
@@ -37,6 +38,9 @@ class ActionButton(IslandEnergyEntity, ButtonEntity):
         elif self._key == "charge_full":
             # Manual charge to 100 % (above the ceiling); the automatic mode stays on.
             await self.runtime.async_charge_now(100.0)
+        elif self._key == "charge_full_low_tariff":
+            # To 100 % only in the night low-tariff windows (pauses otherwise).
+            await self.runtime.async_charge_now(100.0, low_tariff_only=True)
         elif self._key == "stop_charging":
             await self.runtime.async_stop_charging()
         else:

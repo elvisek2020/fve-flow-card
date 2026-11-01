@@ -606,3 +606,50 @@ async def test_charge_full_button_charges_to_100_and_keeps_automation(hass: Home
     assert rt.manual is not None and rt.manual.target == 100.0  # above the 90 % ceiling
     assert rt.status == "manual" and rt.settings[SET_AUTO_CHARGING] is True
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_charge_full_in_low_tariff_waits_for_the_night(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    tz = dt_util.get_time_zone(TZ)
+    freezer.move_to(datetime(2026, 10, 21, 14, 0, tzinfo=tz))  # afternoon
+    # NT 19:15–20:15 (evening, before the night interval) and 21:15 → 07:15
+    rt.nt = [
+        ChargeWindow(datetime(2026, 10, 21, 19, 15, tzinfo=tz), datetime(2026, 10, 21, 20, 15, tzinfo=tz)),
+        ChargeWindow(datetime(2026, 10, 21, 21, 15, tzinfo=tz), datetime(2026, 10, 22, 7, 15, tzinfo=tz)),
+    ]
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.hybrid_energy_charge_full_low_tariff"}, blocking=True
+    )
+    assert calls == [] and rt.status == "manual_waiting"
+    assert rt.manual.target == 100.0 and rt.manual.until == datetime(2026, 10, 22, 8, 0, tzinfo=tz)
+    info = rt.session_info()
+    assert info["waiting"] and info["start"] == datetime(2026, 10, 21, 21, 15, tzinfo=tz).isoformat()
+
+    freezer.move_to(datetime(2026, 10, 21, 19, 30, tzinfo=tz))  # NT, but not the night interval
+    await rt.async_control()
+    assert calls == []
+    freezer.move_to(datetime(2026, 10, 21, 21, 20, tzinfo=tz))  # night NT: starts
+    await rt.async_control()
+    assert calls == [("switch.ac_in", True)] and rt.status == "manual"
+    freezer.move_to(datetime(2026, 10, 22, 7, 20, tzinfo=tz))  # VT 07:15–08:15: pauses
+    await rt.async_control()
+    assert calls[-1] == ("switch.ac_in", False) and rt.manual is not None
+    freezer.move_to(datetime(2026, 10, 22, 8, 1, tzinfo=tz))  # night over: ends, back to the plan
+    await rt.async_control()
+    assert rt.manual is None
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_charge_now_service_low_tariff_only_starts_at_once_in_the_night(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {})  # 22:00, no HDO → the whole night counts
+    rt = entry.runtime_data
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 100, "low_tariff_only": True}, blocking=True)
+    assert calls == [("switch.ac_in", True)] and rt.manual.low_tariff_only
+    await hass.config_entries.async_unload(entry.entry_id)

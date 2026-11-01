@@ -46,6 +46,7 @@ CHARGE_NOW_SCHEMA = vol.Schema(
     {
         vol.Optional("target_soc"): vol.All(vol.Coerce(float), vol.Range(min=1, max=100)),
         vol.Optional("duration"): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
+        vol.Optional("low_tariff_only", default=False): cv.boolean,
     }
 )
 
@@ -149,7 +150,9 @@ def _register_services(hass: HomeAssistant) -> None:
     async def charge_now(call: ServiceCall) -> None:
         duration = call.data.get("duration")
         await _runtime(hass).async_charge_now(
-            call.data.get("target_soc"), timedelta(minutes=duration) if duration else None
+            call.data.get("target_soc"),
+            timedelta(minutes=duration) if duration else None,
+            low_tariff_only=call.data.get("low_tariff_only", False),
         )
 
     async def stop_charging(call: ServiceCall) -> None:

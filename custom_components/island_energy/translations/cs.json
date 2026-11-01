@@ -104,6 +104,7 @@
           "planned": "Naplánováno",
           "charging": "Nabíjí",
           "manual": "Ruční nabíjení",
+          "manual_waiting": "Ruční nabíjení čeká na nízký tarif",
           "external": "Zapnuto mimo plánovač",
           "skipped": "Dnes přeskočeno",
           "fault": "Bez napětí na AC IN"
@@ -161,6 +162,9 @@
       "charge_full": {
         "name": "Nabít na 100 %"
       },
+      "charge_full_low_tariff": {
+        "name": "Nabít na 100 % v nízkém tarifu"
+      },
       "stop_charging": {
         "name": "Vypnout nabíjení"
       },
@@ -186,6 +190,10 @@
         "duration": {
           "name": "Doba (min)",
           "description": "Nejdéle tak dlouho."
+        },
+        "low_tariff_only": {
+          "name": "Jen v nočním nízkém tarifu",
+          "description": "Nabíjí jen v nočních oknech nízkého tarifu (Nabíjet nejdřív od – nejpozději do), jinak čeká; skončí nejpozději ráno."
         }
       }
     },

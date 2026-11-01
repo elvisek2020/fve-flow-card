@@ -25,7 +25,7 @@ import {
   iconSolarPanel,
   iconSun,
 } from './icons';
-import { openConfirmDialog } from './confirm-dialog';
+import { openChoiceDialog, openConfirmDialog } from './confirm-dialog';
 import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
 import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
@@ -650,6 +650,7 @@ export class FveFlowCard extends LitElement {
       planned: 'Automatický režim',
       charging: 'Nabíjí podle plánu',
       manual: 'Ruční nabíjení',
+      manual_waiting: 'Na 100 % v nízkém tarifu',
       external: 'Zapnuto mimo plánovač',
       skipped: 'Dnes v noci ne',
       fault: 'Bez napětí na AC IN',
@@ -663,8 +664,17 @@ export class FveFlowCard extends LitElement {
     const session = charging
       ? (plan?.attributes.session as { target?: number; remaining_kwh?: number; eta?: string } | null | undefined)
       : undefined;
-    const lines: string[] =
-      session?.target != null
+    // „Na 100 % jen v nízkém tarifu“ čeká na noční okno NT.
+    const waiting = status === 'manual_waiting';
+    const waitInfo = waiting
+      ? (plan?.attributes.session as { target?: number; start?: string | null } | null | undefined)
+      : undefined;
+    const lines: string[] = waiting
+      ? [
+          waitInfo?.start ? `Začne ${this._dayTime(waitInfo.start)}` : 'Čeká na noční nízký tarif',
+          `Do ${Math.round(waitInfo?.target ?? 100)} %`,
+        ]
+      : session?.target != null
         ? [
             `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
             ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
@@ -699,18 +709,25 @@ export class FveFlowCard extends LitElement {
         <text class="ctrl-label" x="${x + w / 2}" y="${by + 18.5}" text-anchor="middle"
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
-    // „Na 100 %“ potvrzuje dialog: nabíjí hned (i ve VT) přes strop, automat zůstává.
+    // „Na 100 %“: dialog s volbou Hned (i ve VT) / Jen v nízkém tarifu (noční okna NT).
+    // Automat zůstává zapnutý a po dosažení 100 % pokračuje podle plánu.
     const chargeFull = async (e: Event) => {
       e.stopPropagation();
-      const ok = await openConfirmDialog({
+      const lowTariff = !!p.chargeFullLowTariff;
+      const choice = await openChoiceDialog({
         title: 'Nabít baterii na 100 %?',
-        message:
-          'Nabíjení ze sítě začne hned, i ve vysokém tarifu, a skončí na 100 %. ' +
-          'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.',
-        confirmLabel: 'Nabít na 100 %',
+        message: lowTariff
+          ? 'Hned: nabíjení ze sítě začne hned, i ve vysokém tarifu. ' +
+            'Jen v nízkém tarifu: nabíjí jen v nočních oknech nízkého tarifu, jinak čeká; skončí nejpozději ráno. ' +
+            'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.'
+          : 'Nabíjení ze sítě začne hned, i ve vysokém tarifu, a skončí na 100 %. ' +
+            'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.',
+        confirmLabel: lowTariff ? 'Hned' : 'Nabít na 100 %',
+        secondaryLabel: lowTariff ? 'Jen v nízkém tarifu' : undefined,
         accent: C.grid,
       });
-      if (ok && p.chargeFull) void hass.callService?.('button', 'press', { entity_id: p.chargeFull });
+      const target = choice === 'primary' ? p.chargeFull : choice === 'secondary' ? p.chargeFullLowTariff : undefined;
+      if (target) void hass.callService?.('button', 'press', { entity_id: target });
     };
     const half = (bw - 8) / 2;
     return svg`
@@ -747,11 +764,25 @@ export class FveFlowCard extends LitElement {
             C.grid,
             press(p.stopCharging),
           )
-        : p.chargeFull
+        : waiting
+          ? btn(r.x + 20, 'Zrušit nabíjení na 100 %', false, C.grid, press(p.stopCharging))
+          : p.chargeFull
           ? svg`${btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow), half)}
               ${btn(r.x + 20 + half + 8, 'Na 100 %', false, C.grid, chargeFull, half)}`
           : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
     `;
+  }
+
+  /** Čas s „dnes“ / „zítra“ / zkratkou dne: „dnes 21:15“. */
+  private _dayTime(iso: string): string {
+    const t = new Date(iso);
+    const day = new Date(t);
+    day.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((day.getTime() - today.getTime()) / 86400000);
+    const when = diff <= 0 ? 'dnes' : diff === 1 ? 'zítra' : t.toLocaleDateString('cs-CZ', { weekday: 'short' });
+    return `${when} ${t.toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' })}`;
   }
 
   /**

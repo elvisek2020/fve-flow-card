@@ -5,15 +5,19 @@ export interface ConfirmDialogOptions {
   confirmLabel: string;
   /** Barva akcentu — rám dialogu a potvrzovací tlačítko. */
   accent?: string;
+  /** Druhá volba vedle potvrzení (např. „Jen v nízkém tarifu“). */
+  secondaryLabel?: string;
 }
+
+export type DialogChoice = 'primary' | 'secondary' | null;
 
 const DIALOG_TAG = 'fve-flow-confirm-dialog';
 
 /** Malý potvrzovací modal ve stejném glassmorphism stylu jako 48h grafy. */
 class FveFlowConfirmDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
-  private _resolve?: (confirmed: boolean) => void;
-  private _confirmed = false;
+  private _resolve?: (choice: DialogChoice) => void;
+  private _choice: DialogChoice = null;
 
   public constructor() {
     super();
@@ -93,6 +97,19 @@ class FveFlowConfirmDialog extends HTMLElement {
           color: var(--primary-text-color, #fff);
           outline: 1px solid rgba(255, 255, 255, 0.3);
         }
+        .secondary {
+          color: var(--dialog-accent);
+          background: color-mix(in srgb, var(--dialog-accent) 10%, transparent);
+          border: 1px solid color-mix(in srgb, var(--dialog-accent) 55%, transparent);
+        }
+        .secondary[hidden] {
+          display: none;
+        }
+        .secondary:hover,
+        .secondary:focus-visible {
+          filter: brightness(1.15);
+          outline: none;
+        }
         .confirm {
           color: #0a0f16;
           background: var(--dialog-accent);
@@ -112,6 +129,7 @@ class FveFlowConfirmDialog extends HTMLElement {
         </div>
         <div class="actions">
           <button type="button" class="cancel">Zrušit</button>
+          <button type="button" class="secondary" hidden></button>
           <button type="button" class="confirm"></button>
         </div>
       </dialog>
@@ -120,23 +138,30 @@ class FveFlowConfirmDialog extends HTMLElement {
     this._dialog = root.querySelector('dialog')!;
     root.querySelector('.cancel')!.addEventListener('click', () => this._dialog.close());
     root.querySelector('.confirm')!.addEventListener('click', () => {
-      this._confirmed = true;
+      this._choice = 'primary';
+      this._dialog.close();
+    });
+    root.querySelector('.secondary')!.addEventListener('click', () => {
+      this._choice = 'secondary';
       this._dialog.close();
     });
     this._dialog.addEventListener('click', (event) => {
       if (event.target === this._dialog) this._dialog.close();
     });
     this._dialog.addEventListener('close', () => {
-      this._resolve?.(this._confirmed);
+      this._resolve?.(this._choice);
       this.remove();
     });
   }
 
-  public show(options: ConfirmDialogOptions): Promise<boolean> {
+  public show(options: ConfirmDialogOptions): Promise<DialogChoice> {
     const root = this.shadowRoot!;
     root.querySelector('h2')!.textContent = options.title;
     root.querySelector('p')!.textContent = options.message;
     root.querySelector('.confirm')!.textContent = options.confirmLabel;
+    const secondary = root.querySelector<HTMLButtonElement>('.secondary')!;
+    secondary.hidden = !options.secondaryLabel;
+    secondary.textContent = options.secondaryLabel ?? '';
     if (options.accent) this.style.setProperty('--dialog-accent', options.accent);
     this._dialog.showModal();
     return new Promise((resolve) => {
@@ -149,9 +174,14 @@ if (!customElements.get(DIALOG_TAG)) {
   customElements.define(DIALOG_TAG, FveFlowConfirmDialog);
 }
 
-/** Otevře potvrzovací dialog; vrátí true po potvrzení, false po zrušení. */
-export function openConfirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
+/** Otevře dialog s volbou; vrátí 'primary', 'secondary' nebo null (zrušeno). */
+export function openChoiceDialog(options: ConfirmDialogOptions): Promise<DialogChoice> {
   const dialog = document.createElement(DIALOG_TAG) as FveFlowConfirmDialog;
   document.body.append(dialog);
   return dialog.show(options);
+}
+
+/** Otevře potvrzovací dialog; vrátí true po potvrzení, false po zrušení. */
+export async function openConfirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
+  return (await openChoiceDialog(options)) === 'primary';
 }

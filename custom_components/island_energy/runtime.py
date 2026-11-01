@@ -121,6 +121,9 @@ class ManualCharge:
 
     target: float
     until: datetime
+    #: Charges only in night low-tariff windows (NT ∩ "charge from"–"charge until"),
+    #: pauses otherwise; ends at ``until`` (end of the nearest night) at the latest.
+    low_tariff_only: bool = False
 
 
 class IslandEnergyRuntime:
@@ -228,7 +231,9 @@ class IslandEnergyRuntime:
             raw = data.get(key) or {}
             until = dt_util.parse_datetime(raw.get("until") or "")
             target = raw.get("target")
-            return ManualCharge(float(target), until) if until and until > now and target is not None else None
+            if not until or until <= now or target is None:
+                return None
+            return ManualCharge(float(target), until, bool(raw.get("low_tariff_only")))
 
         # The AC IN switch may not be loaded yet after a restart; async_control drops
         # the ownership once it reads the switch off.
@@ -253,7 +258,9 @@ class IslandEnergyRuntime:
             return t.isoformat() if t else None
 
         def charge(c: ManualCharge | None) -> dict[str, Any] | None:
-            return {"target": c.target, "until": c.until.isoformat()} if c else None
+            if c is None:
+                return None
+            return {"target": c.target, "until": c.until.isoformat(), "low_tariff_only": c.low_tariff_only}
 
         self._store.async_delay_save(
             lambda: {
@@ -469,6 +476,41 @@ class IslandEnergyRuntime:
             return None
         return any(w.start <= now < w.end for w in self.nt)
 
+    def _night_bounds_around(self, now: datetime) -> tuple[datetime, datetime]:
+        """Night interval ("charge from" – "charge until") that contains ``now`` or comes next."""
+        start_t = hours_to_time(float(self.settings[SET_NIGHT_START]))
+        end_t = hours_to_time(float(self.settings[SET_NIGHT_END]))
+        local = now.astimezone(self.tz)
+        for offset in (-1, 0, 1):
+            day = local.date() + timedelta(days=offset)
+            start = datetime.combine(day, start_t, self.tz)
+            end_day = day + timedelta(days=1) if start_t > end_t else day
+            end = datetime.combine(end_day, end_t, self.tz)
+            if now < end:
+                return start, end
+        return start, end  # unreachable with a 24 h cycle
+
+    def _night_end_after(self, now: datetime) -> datetime:
+        return self._night_bounds_around(now)[1]
+
+    def in_night_low_tariff(self, now: datetime) -> bool:
+        """Inside the night interval and (with HDO) in a low-tariff window."""
+        start, end = self._night_bounds_around(now)
+        return start <= now < end and self.in_low_tariff(now) is not False
+
+    def next_night_low_tariff(self, now: datetime) -> datetime | None:
+        """Start of the next night low-tariff charging (now when already inside)."""
+        if self.in_night_low_tariff(now):
+            return now
+        start, end = self._night_bounds_around(now)
+        if self.nt is None:
+            return max(start, now)
+        return min((max(w.start, start) for w in self.nt if w.end > max(now, start) and w.start < end), default=None)
+
+    def _manual_now(self) -> bool:
+        """ "Charge now" right away (not the waiting low-tariff mode): skips the minimum off-time."""
+        return self.manual is not None and not self.manual.low_tariff_only
+
     def _next_low_tariff(self, now: datetime) -> datetime | None:
         return min((w.start for w in self.nt or () if w.start > now), default=None)
 
@@ -518,6 +560,8 @@ class IslandEnergyRuntime:
             if soc >= self.manual.target or now >= self.manual.until:
                 self.manual = None
                 desired, reason = False, "ruční nabíjení dokončeno"
+            elif self.manual.low_tariff_only and not self.in_night_low_tariff(now):
+                desired, reason = False, "ruční nabíjení – pauza mimo noční nízký tarif"
             else:
                 desired, reason = True, f"ruční nabíjení do {self.manual.target:.0f} %"
         elif self.settings[SET_AUTO_CHARGING]:
@@ -555,7 +599,7 @@ class IslandEnergyRuntime:
             elif desired is None:
                 desired, reason = False, "mimo plán"
         if desired is True and not is_on:
-            if self._last_switch and now - self._last_switch < MIN_OFF and not self.manual:
+            if self._last_switch and now - self._last_switch < MIN_OFF and not self._manual_now():
                 return
             await self._switch(sw, True, reason)
         elif desired is False and is_on and self._we_switched_on:
@@ -685,17 +729,26 @@ class IslandEnergyRuntime:
 
     # ------------------------------------------------------------------ actions
 
-    async def async_charge_now(self, target: float | None = None, duration: timedelta | None = None) -> None:
+    async def async_charge_now(
+        self, target: float | None = None, duration: timedelta | None = None, low_tariff_only: bool = False
+    ) -> None:
         now = dt_util.now()
+        until = now + (duration or timedelta(hours=12))
+        if low_tariff_only:
+            # Up to the end of the nearest night (waits for the evening when started by day).
+            until = self._night_end_after(now)
         self.manual = ManualCharge(
             target=float(target if target is not None else self.settings[SET_CEILING]),
-            until=now + (duration or timedelta(hours=12)),
+            until=until,
+            low_tariff_only=low_tariff_only,
         )
         self.suppress_until = None
         self.fault_until = None  # manual retry after a fault
         sw = self.cfg.get(CONF_AC_IN_SWITCH)
         st = self.hass.states.get(sw) if sw else None
-        if sw and st is not None and st.state != STATE_ON:
+        if low_tariff_only and not self.in_night_low_tariff(now):
+            self._log(f"Nabíjení na {self.manual.target:.0f} % čeká na noční nízký tarif.")
+        elif sw and st is not None and st.state != STATE_ON:
             await self._switch(sw, True, f"ručně, do {self.manual.target:.0f} %")
         elif st is not None and st.state == STATE_ON:
             # Already on (e.g. switched on externally): "charge now" takes it over,
@@ -737,7 +790,8 @@ class IslandEnergyRuntime:
         elif not charging:
             self._off_pending_until = None
         if self.manual:
-            self.status = "manual"
+            # "Low tariff only" waiting for the night window is not charging yet.
+            self.status = "manual_waiting" if self.manual.low_tariff_only and not charging else "manual"
         elif self.fault_until and dt_util.now() < self.fault_until:
             self.status = "fault"
         elif charging:
@@ -869,6 +923,15 @@ class IslandEnergyRuntime:
         """Running charge (planned or manual): target SoC, kWh left and estimated end."""
         active = self.manual or self.session
         sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
+        if self.manual and self.manual.low_tariff_only and (sw is None or sw.state != STATE_ON):
+            start = self.next_night_low_tariff(dt_util.now())
+            return {
+                "kind": "manual",
+                "target": round(self.manual.target),
+                "waiting": True,
+                "start": start.isoformat() if start else None,
+                "until": self.manual.until.isoformat(),
+            }
         if active is None or sw is None or sw.state != STATE_ON:
             return None
         info: dict[str, Any] = {"kind": "manual" if self.manual else "planned", "target": round(active.target)}

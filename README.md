@@ -179,9 +179,11 @@ binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automat
 nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
 *Výkon nabíjení ze sítě (záloha)*, *Rezerva do další noci*, časy *Nabíjet ze sítě
 nejdřív od / nejpozději do*, *Chlazení zapnout nad /
-vypnout pod*; tlačítka *Nabít teď* (do stropu), *Nabít na 100 %*, *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
+vypnout pod*; tlačítka *Nabít teď* (do stropu), *Nabít na 100 %* (hned), *Nabít na 100 % v nízkém
+tarifu* (jen noční okna NT, jinak čeká; skončí nejpozději ráno), *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
 
-**Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min),
+**Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min,
+`low_tariff_only` — jen noční okna nízkého tarifu do konce noci),
 `island_energy.stop_charging`, `island_energy.skip_tonight`, `island_energy.recompute`.
 
 **Nouzová pojistka** patří mimo integraci — když HA nebo integrace neběží, má
@@ -403,8 +405,10 @@ Poznámky:
     22:45–0:45“, „Dobije 4 kWh“), při nabíjení cíl a odhad konce a **příkon ze
     sítě** (jen když AC IN běží); s sekcí `ac_in` dnešní energie **nabíječ ·
     baterie · dům** a **celkem ze sítě** (přírůstek čítačů od půlnoci) a jedno
-    tlačítka **Nabít teď** (do stropu) | **Na 100 %** (s potvrzením; nabíjí hned, i ve
-    vysokém tarifu, automat zůstává zapnutý), během nabíjení jedno **Vypnout nabíjení**
+    tlačítka **Nabít teď** (do stropu) | **Na 100 %** (dialog: *Hned* — i ve vysokém
+    tarifu, nebo *Jen v nízkém tarifu* — jen noční okna NT, jinak čeká a do rána
+    skončí; automat zůstává zapnutý), během nabíjení jedno **Vypnout nabíjení**, při
+    čekání na nízký tarif **Zrušit nabíjení na 100 %**
     (po vypnutí se vrací k automatickému plánu). Automatické nabíjení (stínový
     režim) se zapíná jen v integraci (**Povolit automatické nabíjení**),
   - bez integrace se tlačítko ani blok nezobrazí,

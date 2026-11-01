@@ -14,7 +14,7 @@ from . import IslandEnergyConfigEntry
 from .const import SET_RESERVE
 from .entity import IslandEnergyEntity
 
-STATUSES = ["shadow", "idle", "planned", "charging", "manual", "external", "skipped", "fault"]
+STATUSES = ["shadow", "idle", "planned", "charging", "manual", "manual_waiting", "external", "skipped", "fault"]
 
 
 async def async_setup_entry(

@@ -15,6 +15,7 @@ export interface PlannerEntities {
   autoCharging?: string;
   chargeNow?: string;
   chargeFull?: string;
+  chargeFullLowTariff?: string;
   stopCharging?: string;
   skipTonight?: string;
 }
@@ -52,6 +53,7 @@ const KEYS: Record<string, keyof PlannerEntities> = {
   auto_charging: 'autoCharging',
   charge_now: 'chargeNow',
   charge_full: 'chargeFull',
+  charge_full_low_tariff: 'chargeFullLowTariff',
   stop_charging: 'stopCharging',
   skip_tonight: 'skipTonight',
 };
@@ -65,6 +67,7 @@ const FALLBACK: PlannerEntities = {
   autoCharging: 'switch.hybrid_energy_allow_automatic_charging',
   chargeNow: 'button.hybrid_energy_charge_now',
   chargeFull: 'button.hybrid_energy_charge_full',
+  chargeFullLowTariff: 'button.hybrid_energy_charge_full_low_tariff',
   stopCharging: 'button.hybrid_energy_stop_charging',
   skipTonight: 'button.hybrid_energy_skip_tonight',
 };
