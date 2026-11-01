@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.6 — 2026-11-01
+
+### ✨ Novinky
+
+- Blok **Nabíjení ze sítě** má vedle **Nabít teď** (do stropu) tlačítko
+  **Na 100 %**. Po potvrzení nabije baterii ze sítě hned, i ve vysokém tarifu,
+  až na 100 %; automatický režim zůstává zapnutý a pak pokračuje podle plánu.
+- Nová entita `button.hybrid_energy_charge_full` (*Nabít na 100 %*), použitelná
+  i mimo kartu.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.1.5 — 2026-10-26
 
 ### 🎨 Vzhled

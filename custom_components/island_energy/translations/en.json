@@ -158,6 +158,9 @@
       "charge_now": {
         "name": "Charge now"
       },
+      "charge_full": {
+        "name": "Charge to 100 %"
+      },
       "stop_charging": {
         "name": "Stop charging"
       },

@@ -684,14 +684,35 @@ export class FveFlowCard extends LitElement {
     };
     const bw = r.w - 40;
     const by = r.y + r.h - 44;
-    const btn = (x: number, label: string, on: boolean, color: string, onClick: (e: Event) => void) => svg`
+    const btn = (
+      x: number,
+      label: string,
+      on: boolean,
+      color: string,
+      onClick: (e: Event) => void,
+      w: number = bw,
+    ) => svg`
       <g class="ctrl-chip" @click=${onClick}>
-        <rect x="${x}" y="${by}" width="${bw}" height="28" rx="9" fill="rgba(255,255,255,0.05)"
+        <rect x="${x}" y="${by}" width="${w}" height="28" rx="9" fill="rgba(255,255,255,0.05)"
           stroke="${color}" stroke-opacity="${on ? 0.8 : 0.45}" stroke-width="1"
           style="${on ? `filter: drop-shadow(0 0 6px ${color}60)` : ''}"/>
-        <text class="ctrl-label" x="${x + bw / 2}" y="${by + 18.5}" text-anchor="middle"
+        <text class="ctrl-label" x="${x + w / 2}" y="${by + 18.5}" text-anchor="middle"
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
+    // „Na 100 %“ potvrzuje dialog: nabíjí hned (i ve VT) přes strop, automat zůstává.
+    const chargeFull = async (e: Event) => {
+      e.stopPropagation();
+      const ok = await openConfirmDialog({
+        title: 'Nabít baterii na 100 %?',
+        message:
+          'Nabíjení ze sítě začne hned, i ve vysokém tarifu, a skončí na 100 %. ' +
+          'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.',
+        confirmLabel: 'Nabít na 100 %',
+        accent: C.grid,
+      });
+      if (ok && p.chargeFull) void hass.callService?.('button', 'press', { entity_id: p.chargeFull });
+    };
+    const half = (bw - 8) / 2;
     return svg`
       ${this._panel(r, accent, charging || fault)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
@@ -726,7 +747,10 @@ export class FveFlowCard extends LitElement {
             C.grid,
             press(p.stopCharging),
           )
-        : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
+        : p.chargeFull
+          ? svg`${btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow), half)}
+              ${btn(r.x + 20 + half + 8, 'Na 100 %', false, C.grid, chargeFull, half)}`
+          : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
     `;
   }
 

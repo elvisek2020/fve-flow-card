@@ -158,6 +158,9 @@
       "charge_now": {
         "name": "Nabít teď"
       },
+      "charge_full": {
+        "name": "Nabít na 100 %"
+      },
       "stop_charging": {
         "name": "Vypnout nabíjení"
       },

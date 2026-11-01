@@ -88,6 +88,7 @@ OBJECT_IDS: Final[dict[str, str]] = {
     SET_COOLING_ON: "cooling_on_above",
     SET_COOLING_OFF: "cooling_off_below",
     "charge_now": "charge_now",
+    "charge_full": "charge_full",
     "stop_charging": "stop_charging",
     "skip_tonight": "skip_tonight",
 }

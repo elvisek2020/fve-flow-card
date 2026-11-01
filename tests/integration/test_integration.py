@@ -591,3 +591,18 @@ async def test_no_external_flash_while_the_switch_state_lags(hass: HomeAssistant
     assert hass.states.get("switch.ac_in").state == "on"  # not reported yet
     assert "external" not in statuses and rt.status != "external"
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_charge_full_button_charges_to_100_and_keeps_automation(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await hass.services.async_call("button", "press", {"entity_id": "button.hybrid_energy_charge_full"}, blocking=True)
+    assert calls == [("switch.ac_in", True)]
+    assert rt.manual is not None and rt.manual.target == 100.0  # above the 90 % ceiling
+    assert rt.status == "manual" and rt.settings[SET_AUTO_CHARGING] is True
+    await hass.config_entries.async_unload(entry.entry_id)

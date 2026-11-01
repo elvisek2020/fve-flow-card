@@ -1,4 +1,4 @@
-"""Buttons: charge now, stop charging, skip tonight."""
+"""Buttons: charge now, charge to 100 %, stop charging, skip tonight."""
 
 from __future__ import annotations
 
@@ -15,7 +15,12 @@ async def async_setup_entry(
 ) -> None:
     rt = entry.runtime_data
     async_add_entities(
-        [ActionButton(rt, "charge_now"), ActionButton(rt, "stop_charging"), ActionButton(rt, "skip_tonight")]
+        [
+            ActionButton(rt, "charge_now"),
+            ActionButton(rt, "charge_full"),
+            ActionButton(rt, "stop_charging"),
+            ActionButton(rt, "skip_tonight"),
+        ]
     )
 
 
@@ -29,6 +34,9 @@ class ActionButton(IslandEnergyEntity, ButtonEntity):
     async def async_press(self) -> None:
         if self._key == "charge_now":
             await self.runtime.async_charge_now()
+        elif self._key == "charge_full":
+            # Manual charge to 100 % (above the ceiling); the automatic mode stays on.
+            await self.runtime.async_charge_now(100.0)
         elif self._key == "stop_charging":
             await self.runtime.async_stop_charging()
         else:
