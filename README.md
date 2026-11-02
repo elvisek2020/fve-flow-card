@@ -405,9 +405,10 @@ Poznámky:
     22:45–0:45“, „Dobije 4 kWh“), při nabíjení cíl a odhad konce a **příkon ze
     sítě** (jen když AC IN běží); s sekcí `ac_in` dnešní energie **nabíječ ·
     baterie · dům** a **celkem ze sítě** (přírůstek čítačů od půlnoci) a jedno
-    tlačítka **Nabít teď** (do stropu) | **Na 100 %** (dialog: *Hned* — i ve vysokém
-    tarifu, nebo *Jen v nízkém tarifu* — jen noční okna NT, jinak čeká a do rána
-    skončí; automat zůstává zapnutý), během nabíjení jedno **Vypnout nabíjení**, při
+    tlačítko **Nabít teď** (dialog s cílem 100 %: *Hned* — i ve vysokém tarifu,
+    nebo *Jen v nízkém tarifu* — jen noční okna NT, jinak čeká a do rána
+    skončí; automat zůstává zapnutý; starší integrace bez entit „na 100 %“
+    nabíjí hned do stropu), během nabíjení jedno **Vypnout nabíjení**, při
     čekání na nízký tarif **Zrušit nabíjení na 100 %**
     (po vypnutí se vrací k automatickému plánu). Automatické nabíjení (stínový
     režim) se zapíná jen v integraci (**Povolit automatické nabíjení**),

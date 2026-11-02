@@ -5,6 +5,20 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.8 — 2026-11-02
+
+### 🎨 Vzhled
+
+- V bloku **Nabíjení ze sítě** je místo dvou tlačítek jedno **Nabít teď** přes
+  celou šířku. Otevře dialog s cílem 100 % a volbami **Hned** (i ve vysokém
+  tarifu) / **Jen v nízkém tarifu** / **Zrušit**. Automatický režim zůstává zapnutý.
+- Samostatné tlačítko **Na 100 %** zmizelo, jeho volby jsou v dialogu.
+- Entity `charge_now`, `charge_full` a `charge_full_low_tariff` zůstávají beze
+  změny, dlaždice na dashboardu dál fungují.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.7 — 2026-11-01
 
 ### ✨ Novinky

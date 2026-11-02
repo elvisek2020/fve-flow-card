@@ -709,7 +709,7 @@ export class FveFlowCard extends LitElement {
         <text class="ctrl-label" x="${x + w / 2}" y="${by + 18.5}" text-anchor="middle"
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
-    // „Na 100 %“: dialog s volbou Hned (i ve VT) / Jen v nízkém tarifu (noční okna NT).
+    // „Nabít teď“: dialog s volbou Hned (na 100 %, i ve VT) / Jen v nízkém tarifu (noční okna NT).
     // Automat zůstává zapnutý a po dosažení 100 % pokračuje podle plánu.
     const chargeFull = async (e: Event) => {
       e.stopPropagation();
@@ -729,7 +729,6 @@ export class FveFlowCard extends LitElement {
       const target = choice === 'primary' ? p.chargeFull : choice === 'secondary' ? p.chargeFullLowTariff : undefined;
       if (target) void hass.callService?.('button', 'press', { entity_id: target });
     };
-    const half = (bw - 8) / 2;
     return svg`
       ${this._panel(r, accent, charging || fault)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
@@ -766,10 +765,7 @@ export class FveFlowCard extends LitElement {
           )
         : waiting
           ? btn(r.x + 20, 'Zrušit nabíjení na 100 %', false, C.grid, press(p.stopCharging))
-          : p.chargeFull
-          ? svg`${btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow), half)}
-              ${btn(r.x + 20 + half + 8, 'Na 100 %', false, C.grid, chargeFull, half)}`
-          : btn(r.x + 20, 'Nabít teď', false, C.grid, press(p.chargeNow))}
+          : btn(r.x + 20, 'Nabít teď', false, C.grid, p.chargeFull ? chargeFull : press(p.chargeNow))}
     `;
   }
 
