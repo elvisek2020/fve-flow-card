@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Hybrid Energy",
+        "title": "FVE – energie a nabíjení (EK)",
         "description": "Vyber entity ostrovní FVE. Po přidání běží integrace ve stínovém režimu: plánuje, ale AC IN nespíná, dokud nezapneš „Povolit automatické nabíjení“.",
         "data": {
           "soc": "SoC baterie (%)",
@@ -47,7 +47,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Hybrid Energy",
+        "title": "FVE – energie a nabíjení (EK)",
         "data": {
           "soc": "SoC baterie (%)",
           "battery_power": "Výkon baterie (W, + = nabíjení)",
@@ -175,7 +175,7 @@
   },
   "exceptions": {
     "not_loaded": {
-      "message": "Integrace Hybrid Energy není načtená."
+      "message": "Integrace FVE – energie a nabíjení (EK) není načtená."
     }
   },
   "services": {

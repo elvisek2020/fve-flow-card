@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Hybrid Energy",
+        "title": "FVE – energie a nabíjení (EK)",
         "description": "Pick the island PV entities. After setup the integration runs in shadow mode: it plans but does not switch AC IN until \"Allow automatic charging\" is on.",
         "data": {
           "soc": "Battery SoC (%)",
@@ -47,7 +47,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Hybrid Energy",
+        "title": "FVE – energie a nabíjení (EK)",
         "data": {
           "soc": "Battery SoC (%)",
           "battery_power": "Battery power (W, + = charging)",
@@ -175,7 +175,7 @@
   },
   "exceptions": {
     "not_loaded": {
-      "message": "Hybrid Energy is not loaded."
+      "message": "FVE – energie a nabíjení (EK) is not loaded."
     }
   },
   "services": {

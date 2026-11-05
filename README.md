@@ -1,4 +1,4 @@
-# Hybrid Energy
+# FVE – energie a nabíjení (EK)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![Release](https://img.shields.io/github/v/release/elvisek2020/fve-flow-card)](https://github.com/elvisek2020/fve-flow-card/releases)
@@ -13,6 +13,9 @@ výdrže baterie, **plánuje a řídí nabíjení ze sítě přes AC IN** jen v 
 (HDO), řídí chlazení měniče a s sebou nese kartu **Hybrid Energy Flow Card**
 s animovaným diagramem toků energie (a mini kartu pro hlavní dashboard).
 
+> Do verze 2.1.9 se integrace jmenovala **Hybrid Energy**. Tak se dál jmenuje
+> její zařízení, takže entity (`…hybrid_energy_…`) i automatizace zůstávají beze změny.
+>
 > Technické typy karet zůstávají `custom:fve-flow-card` a `custom:fve-flow-mini-card`,
 > aby se nerozbily existující dashboardy. Od verze 2.0 je načítá integrace sama.
 
@@ -77,9 +80,9 @@ Integrace potřebuje Home Assistant 2026.10 a recorder s dlouhodobými statistik
 
 1. HACS → tři tečky vpravo nahoře → **Custom repositories**
 2. Vlož URL `https://github.com/elvisek2020/fve-flow-card`, kategorie **Integration**
-3. Nainstaluj **Hybrid Energy** (pro vlastní grafy karty z HACS i **ApexCharts Card**)
+3. Nainstaluj **FVE – energie a nabíjení (EK)** (pro vlastní grafy karty z HACS i **ApexCharts Card**)
 4. Restartuj Home Assistant a přidej integraci v Nastavení → Zařízení a služby →
-   Přidat integraci → **Hybrid Energy**.
+   Přidat integraci → **FVE – energie a nabíjení (EK)**.
 
 Integrace sama načte karty do všech dashboardů, žádný ruční resource netřeba:
 v režimu dashboardů přes UI si sama založí (a při aktualizaci přepíše verzí)
@@ -92,7 +95,7 @@ HACS nabízí aktualizace z GitHub releases.
 
 1. Stáhni `island_energy.zip` z posledního [release](../../releases)
 2. Rozbal do `/config/custom_components/island_energy/`
-3. Restartuj Home Assistant a přidej integraci **Hybrid Energy**.
+3. Restartuj Home Assistant a přidej integraci **FVE – energie a nabíjení (EK)**.
 
 ### Přechod z verze 1.x (samostatná karta)
 
@@ -107,7 +110,7 @@ HACS nabízí aktualizace z GitHub releases.
 
 ## Konfigurace
 
-### Integrace Hybrid Energy
+### Integrace FVE – energie a nabíjení (EK)
 
 Při přidání vybereš entity (vše jde později změnit v možnostech integrace):
 
@@ -394,7 +397,7 @@ Poznámky:
     „Z FVE“ a soběstačnost jsou bez ní, v Patrech je samostatná položka
     **FVE – nabíjení ze sítě** (odečtená od patra, resp. z Neměřeno) a v DC
     bilanci uzel **Ze sítě (AC IN)** → baterie. Výroba FV (MPPT) se nemění.
-- **Prognóza výdrže a nabíjení ze sítě** (s integrací Hybrid Energy):
+- **Prognóza výdrže a nabíjení ze sítě** (s integrací FVE – energie a nabíjení (EK)):
   - tlačítko **PROGNÓZA** pod měničem otevře tabulku po dnech — **Ráno**
     (nejnižší SoC, než se baterie začne nabíjet z panelů), **Max** (nejvyšší SoC
     dne, u 100 % čas nabití) a **AC IN** (plánované nabíjení ze sítě v noci před
@@ -550,7 +553,7 @@ Poznámky:
   pokud chceš vidět dobu do nabití i při velmi slabém nabíjení).
 - **Pruh energie baterie**: dole v boxu baterie „V baterii X kWh · z Y kWh“
   (SoC × kapacita) s pruhem v barvě SoC a ryskou na minimu SoC — s integrací
-  Hybrid Energy její *Minimální SoC*, bez ní `forecast.min_soc_pct` (default 10 %). Jen když je známá kapacita
+  FVE – energie a nabíjení (EK) její *Minimální SoC*, bez ní `forecast.min_soc_pct` (default 10 %). Jen když je známá kapacita
   (`battery.capacity` v kWh / Wh / Ah).
 - **Graf jen při výrobě**: celá spodní sekce (hodnoty „Realita"/„Predikce" i graf) je
   vidět jen dokud aktuální výkon FVE ("Realita") dosahuje alespoň `chart_min_power_w`

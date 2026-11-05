@@ -397,9 +397,9 @@ const HELPERS: Record<string, string> = {
   daily_load_entity:
     'Legacy: přesuň entitu do Měnič → Včerejší spotřeba domu. Stále funguje jako fallback pro prognózu.',
   energy_yesterday:
-    'Utility Meter last_period (včerejší kWh). Prognózu a plán nabíjení dnes počítá integrace Hybrid Energy; tlačítko Prognóza se ukáže, když je nastavená.',
+    'Utility Meter last_period (včerejší kWh). Prognózu a plán nabíjení dnes počítá integrace FVE – energie a nabíjení (EK); tlačítko Prognóza se ukáže, když je nastavená.',
   min_soc_pct:
-    'Ryska v pruhu energie baterie a zvýraznění v Analýze. S integrací Hybrid Energy se bere minimum nastavené v integraci. Výchozí 10 %.',
+    'Ryska v pruhu energie baterie a zvýraznění v Analýze. S integrací FVE – energie a nabíjení (EK) se bere minimum nastavené v integraci. Výchozí 10 %.',
 };
 
 @defineOnce('fve-flow-card-editor')

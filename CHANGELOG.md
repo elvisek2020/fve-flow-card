@@ -5,6 +5,21 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.10 — 2026-11-05
+
+### ⚠️ Změny, které vyžadují zásah
+
+- Integrace se nově jmenuje **FVE – energie a nabíjení (EK)**, v Marketplace
+  (HACS) i v Nastavení → Zařízení a služby.
+- Zařízení se dál jmenuje **Hybrid Energy**, takže entity, automatizace i
+  dashboardy fungují beze změny. Beze změny zůstávají i doména `island_energy`,
+  typy karet `custom:fve-flow-card` a `custom:fve-flow-mini-card` a názvy karet ve výběru.
+- Už přidaná integrace si v seznamu ponechá titulek „Hybrid Energy“. Pokud ho
+  chceš sjednotit, přejmenuj ho v Zařízení a služby (⋮ → Přejmenovat).
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache.
+
 ## v2.1.9 — 2026-11-05
 
 ### 🛠️ Pod kapotou

@@ -832,7 +832,7 @@ export class FveFlowCard extends LitElement {
   private _forecastButton(r: Rect): TemplateResult {
     const planner = this._planner();
     const ready = !!planner && Array.isArray(this.hass?.states[planner.forecast]?.attributes.days);
-    const reason = ready ? null : 'Integrace Hybrid Energy zatím prognózu nespočítala';
+    const reason = ready ? null : 'Integrace FVE – energie a nabíjení (EK) zatím prognózu nespočítala';
     const enabled = !reason;
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
