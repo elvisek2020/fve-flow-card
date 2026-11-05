@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.1.9 — 2026-11-05
+
+### 🛠️ Pod kapotou
+
+- Názvy entit v historii a grafech (bez vlastního názvu v konfiguraci) se
+  skládají z registru jako ve vestavěných kartách Home Assistantu:
+  „Zařízení Entita“ přes `hass.formatEntityName` (HA 2026.4+). Atribut
+  `friendly_name`, který HA plánuje zrušit, zůstává jen jako záloha pro starší HA.
+- Vlastní názvy z konfigurace karty mají dál přednost.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.1.8 — 2026-11-02
 
 ### 🎨 Vzhled

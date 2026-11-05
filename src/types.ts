@@ -12,6 +12,12 @@ export interface HomeAssistant {
   locale?: { language?: string };
   /** HA API — vrátí lokalizovaný stav entity (např. „Vypnuto" místo „off"). */
   formatEntityState?: (stateObj: HassEntity) => string;
+  /** HA ≥ 2026.4 — název entity z registru (zařízení, entita, oblast…), jako vestavěné karty. */
+  formatEntityName?: (
+    stateObj: HassEntity,
+    parts: { type: 'device' | 'entity' | 'area' | 'floor' }[],
+    options?: { separator?: string },
+  ) => string;
   /** HA API — volání služby (např. switch.turn_on). */
   callService?: (
     domain: string,

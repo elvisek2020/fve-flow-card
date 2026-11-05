@@ -322,9 +322,19 @@ export class FveFlowCard extends LitElement {
     };
   }
 
+  /** Vlastní název z konfigurace → „Zařízení Entita“ z registru (jako vestavěné karty) → friendly_name (starší HA). */
   private _entityName(entityId: string, fallback?: string): string {
-    const friendlyName = this.hass?.states[entityId]?.attributes.friendly_name;
-    return fallback || (typeof friendlyName === 'string' ? friendlyName : entityId);
+    if (fallback) return fallback;
+    const stateObj = this.hass?.states[entityId];
+    if (!stateObj) return entityId;
+    try {
+      const name = this.hass?.formatEntityName?.(stateObj, [{ type: 'device' }, { type: 'entity' }]);
+      if (typeof name === 'string' && name.trim()) return name;
+    } catch {
+      // starší nebo změněné API → záloha níže
+    }
+    const friendlyName = stateObj.attributes.friendly_name;
+    return typeof friendlyName === 'string' ? friendlyName : entityId;
   }
 
   private _historySeries(entityId: string | undefined, name: string, color: string): HistorySeries[] {
