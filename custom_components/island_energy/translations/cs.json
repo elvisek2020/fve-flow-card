@@ -119,6 +119,11 @@
         "name": "Nízký tarif"
       }
     },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Plán nabíjení ze sítě"
+      }
+    },
     "switch": {
       "auto_charging": {
         "name": "Povolit automatické nabíjení"

@@ -153,14 +153,41 @@ automatické chlazení**).
   dobijí zbytek); ve **vysokém tarifu** se šetrně přeruší a v dalším okně NT
   pokračuje podle přepočítaného plánu; výjimkou je SoC pod minimem (nabíjí i ve VT) a ruční
   **Nabít teď** (jede do cíle bez ohledu na tarif),
+- **nespíná kvůli drobnostem:** plánované nabíjení začne jen pro aspoň **1 kWh** ze
+  sítě a když z okna zbývá aspoň 15 min (ochrana minima tuhle mez nemá); kolem
+  rezervy drží **hysterezi** — noc bez nabíjení ho naplánuje až pod *rezervu − 2 %*,
+  noc s nabíjením ho drží, dokud chybí aspoň 0,5 kWh, takže plán po čtvrthodinách
+  neskáče mezi 0 a 1 kWh,
 - délku nabíjení počítá s **naučeným výkonem** do baterie (medián DC proud × napětí
   v hodinách, kdy AC IN běžel naplno, aspoň 2 hodiny historie); dokud ho nezná,
   použije nastavení *Výkon nabíjení ze sítě (záloha)*; co plán bere, ukazují
   atributy `charge_power_w` a `charge_power_source` senzoru plánu,
 - plán přepočítává každých 15 minut a při změně SoC, Solcastu nebo HDO.
 
-**Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min. AC IN vypíná jen
+**Ochrana:** minimální doba zapnutí 15 min / vypnutí 10 min (zapnutí jen v noci —
+po konci noci ani ve vysokém tarifu stykač kvůli ní nedrží). AC IN vypíná jen
 tehdy, když ho sama zapnula — ruční zapnutí nebo nouzovou automatizaci nepřebije.
+
+**Vypnout nabíjení** (tlačítko, služba `stop_charging`) zastaví automatické nabíjení:
+v noci do konce aktuálního bloku nízkého tarifu (nejpozději do konce noci; další NT
+okno téže noci může plán dojet), v nočním vysokém tarifu do dalšího NT okna, ve dne
+do večerního začátku noci — vždy aspoň 10 min. **Nabít teď** jde spustit kdykoli.
+Do kdy platí, ukazuje atribut `suppressed_until` senzoru *Stav plánovače*.
+
+**Kalendář** *Plán nabíjení ze sítě* (`calendar.hybrid_energy_grid_charging_schedule`)
+ukazuje, kdy je AC IN sepnutý nebo sepnutý bude, aby se mu mohly vyhnout jiné
+automatizace (např. start kotle). Události:
+
+- právě běžící nabíjení — od sepnutí do odhadu konce (aspoň 15 min), průběžně se
+  posouvá: „Nabíjení ze sítě (1,2 kWh, podle plánu)“, „(ruční, do 100 %)“,
+  „(zapnuto mimo plánovač)“,
+- čekající *Na 100 % v nízkém tarifu* od začátku nočního NT do odhadu konce,
+- plánovaná okna, která se opravdu spustí (povolené automatické nabíjení, ne po
+  *Vypnout nabíjení* / *Dnes v noci nenabíjet* / poruše, dost energie i času):
+  „Nabíjení ze sítě (1,8 kWh, rezerva)“, „(…, ochrana minima)“, „(…, do stropu)“.
+
+Kalendář se aktualizuje s každým přepočtem plánu a s každou změnou AC IN; stav
+`on` znamená, že událost právě běží.
 
 - **Šetrné odpojení** (s entitou *Ignorovat AC vstup*): integrace nejdřív zapne
   „Ignorovat AC vstup“, počká, až GX přestane brát síť (aktivní vstup ≠ `grid`,
@@ -176,7 +203,7 @@ tehdy, když ho sama zapnula — ruční zapnutí nebo nouzovou automatizaci nep
 **Chlazení:** zapne nad **1 000 W** zátěže měniče (největší z AC out, příkonu AC IN
 a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
 
-**Entity:** senzory *Plán nabíjení ze sítě* (kWh na příští noc, okna, důvod),
+**Entity:** kalendář *Plán nabíjení ze sítě*; senzory *Plán nabíjení ze sítě* (kWh na příští noc, okna, důvod),
 *Další nabíjení*, *Prognóza výdrže* (atribut `days` pro kartu), *Stav plánovače*;
 binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automatické
 nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,

@@ -565,8 +565,8 @@ async def test_no_restart_cycling_after_the_plan_said_done(hass: HomeAssistant, 
     await rt.async_control()
     assert calls == [("switch.ac_in", False)] and rt.session is None  # done (< 0.3 kWh)
 
-    # the plan wobbles back to 0.55 kWh, both recomputes agree: no restart within MIN_OFF
-    _fake_plan(rt, 0.55, [window])
+    # the plan wobbles back to 1.2 kWh, both recomputes agree: no restart within MIN_OFF
+    _fake_plan(rt, 1.2, [window])
     for _ in range(9):
         freezer.tick(timedelta(minutes=1))
         await rt.async_control()
@@ -652,4 +652,131 @@ async def test_charge_now_service_low_tariff_only_starts_at_once_in_the_night(ha
     switch_service(hass, calls)
     await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 100, "low_tariff_only": True}, blocking=True)
     assert calls == [("switch.ac_in", True)] and rt.manual.low_tariff_only
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_manual_stop_holds_until_the_low_tariff_block_ends(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    tz = dt_util.get_time_zone(TZ)
+    # NT split at midnight per day (as from HDO) and a daytime NT
+    rt.nt = [
+        ChargeWindow(datetime(2026, 10, 20, 21, 15, tzinfo=tz), datetime(2026, 10, 21, 0, 0, tzinfo=tz)),
+        ChargeWindow(datetime(2026, 10, 21, 0, 0, tzinfo=tz), datetime(2026, 10, 21, 7, 45, tzinfo=tz)),
+        ChargeWindow(datetime(2026, 10, 21, 7, 50, tzinfo=tz), datetime(2026, 10, 21, 9, 0, tzinfo=tz)),
+        ChargeWindow(datetime(2026, 10, 21, 12, 0, tzinfo=tz), datetime(2026, 10, 21, 14, 0, tzinfo=tz)),
+    ]
+    _fake_plan(rt, 0.0, [])
+    await hass.services.async_call(DOMAIN, "stop_charging", {}, blocking=True)
+    assert rt.suppress_until == datetime(2026, 10, 21, 7, 45, tzinfo=tz)  # whole NT block, not midnight
+
+    # 7. 11.: stopped near the night end with no plan window → until the night ends, not 10 min
+    freezer.move_to(datetime(2026, 10, 21, 7, 50, tzinfo=tz))
+    await rt.async_stop_charging()
+    assert rt.suppress_until == datetime(2026, 10, 21, 8, 0, tzinfo=tz)
+    freezer.move_to(datetime(2026, 10, 21, 7, 44, tzinfo=tz))  # NT ends 07:45, next NT 07:50
+    await rt.async_stop_charging()
+    assert rt.suppress_until == datetime(2026, 10, 21, 7, 54, tzinfo=tz)  # MIN_OFF at least
+    freezer.move_to(datetime(2026, 10, 21, 7, 46, tzinfo=tz))  # night VT gap: until the next NT
+    await rt.async_stop_charging()
+    assert rt.suppress_until == datetime(2026, 10, 21, 7, 56, tzinfo=tz)
+    freezer.move_to(datetime(2026, 10, 21, 12, 30, tzinfo=tz))  # by day: until the evening
+    await rt.async_stop_charging()
+    assert rt.suppress_until == datetime(2026, 10, 21, 21, 0, tzinfo=tz)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_planned_charging_does_not_start_for_a_little_or_too_late(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    now = dt_util.now()
+    late = ChargeWindow(now - timedelta(minutes=50), now + timedelta(minutes=6), 90.0)
+    _fake_plan(rt, 3.0, [late])
+    rt._prev_windows = [late]
+    await rt.async_control()
+    assert calls == []  # 6 min left of the window: AC IN would stay on 15 min anyway
+    window = ChargeWindow(now, now + timedelta(minutes=20), 90.0)
+    _fake_plan(rt, 0.17, [window])
+    rt._prev_windows = [window]
+    await rt.async_control()
+    assert calls == []  # 0.17 kWh is not worth a switch-on
+    _fake_plan(rt, 1.2, [window])
+    await rt.async_control()
+    assert calls == [("switch.ac_in", True)]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_minimum_on_time_does_not_run_past_the_night(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.runtime import ManualCharge
+
+    entry = await start_with(hass, freezer, {}, ac_in_on=True)
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    tz = dt_util.get_time_zone(TZ)
+    freezer.move_to(datetime(2026, 10, 21, 7, 55, tzinfo=tz))
+    rt._we_switched_on = True
+    rt._last_switch = dt_util.now()
+    rt.session = ManualCharge(target=80, until=datetime(2026, 10, 21, 8, 0, tzinfo=tz))
+    freezer.move_to(datetime(2026, 10, 21, 7, 58, tzinfo=tz))
+    _fake_plan(rt, 0.0, [])
+    await rt.async_control()
+    assert calls == [] and rt.session is None  # done, but the contactor keeps its 15 min in the night
+    freezer.move_to(datetime(2026, 10, 21, 8, 1, tzinfo=tz))
+    await rt.async_control()
+    assert calls == [("switch.ac_in", False)]  # not into the day (was 08:06 on 7. 11.)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_calendar_shows_planned_and_running_charging(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    eid = "calendar.hybrid_energy_grid_charging_schedule"
+    state = hass.states.get(eid)
+    assert state is not None and state.state == "off"
+    assert "message" not in state.attributes  # shadow mode switches nothing
+
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    await hass.async_block_till_done()
+    state = hass.states.get(eid)
+    window = next(w for w in rt.result.windows if w.end > dt_util.now())
+    assert state.attributes["message"].startswith("Nabíjení ze sítě (")
+    assert "kWh, " in state.attributes["message"]
+    assert dt_util.parse_datetime(state.attributes["end_time"].replace(" ", "T")).hour == window.end.hour
+
+    result = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {"entity_id": eid, "start_date_time": dt_util.now(), "duration": {"days": 3}},
+        blocking=True,
+        return_response=True,
+    )
+    assert result[eid]["events"]
+
+    calls: list[tuple[str, bool]] = []
+    switch_service(hass, calls)
+    await hass.services.async_call(DOMAIN, "charge_now", {"target_soc": 80}, blocking=True)
+    await hass.async_block_till_done()
+    state = hass.states.get(eid)
+    assert state.state == "on"
+    assert state.attributes["message"] == "Nabíjení ze sítě (ruční, do 80 %)"
+    # the manual charge holds the plan back: no planned window overlaps it
+    events = rt.charge_events()
+    assert all(e.start >= events[0].end for e in events[1:])
     await hass.config_entries.async_unload(entry.entry_id)

@@ -37,6 +37,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.TIME,
     Platform.BUTTON,
+    Platform.CALENDAR,
 ]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

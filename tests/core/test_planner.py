@@ -165,3 +165,33 @@ def test_minimum_protection_stays_within_its_own_night():
         previous_end = datetime.combine(night.target_day - timedelta(days=1), time(8, 0), TZ)
         assert all(w.start >= previous_end for w in night.windows), night
     assert min(p.lo for p in res.points if p.t < at(d0 + timedelta(days=6), 21)) >= 24
+
+
+def test_reserve_hysteresis_keeps_the_plan_from_flipping():
+    def need(soc, cfg, held=frozenset()):
+        pv = []
+        for i in range(7):
+            pv += pv_day(D + timedelta(days=i), 12 if i == 1 else 25)
+        res = plan(
+            now=at(D, 21),
+            tz=TZ,
+            soc_now=soc,
+            capacity_kwh=20,
+            pv=pv,
+            profile_w=FLAT_600,
+            days=days_from(D),
+            cfg=cfg,
+            held=held,
+        )
+        return tomorrow_night(res).needed_kwh
+
+    # reserve 28.8 % (just under 30): a new plan waits for reserve − 2 %, a held one keeps charging
+    small = PlannerConfig(min_charge_kwh=0.1, reserve_hysteresis_pct=2.0)
+    assert need(61, small) == 0
+    assert need(61, small, frozenset({T})) > 0
+    # 0.64 kWh missing: below the 1 kWh start, above half of it while held
+    cfg = PlannerConfig(min_charge_kwh=1.0, reserve_hysteresis_pct=2.0)
+    assert need(59, cfg) == 0
+    assert need(59, cfg, frozenset({T})) > 0
+    # a clear deficit (reserve ~20 %) plans charging also without the hold
+    assert need(52, cfg) > 0

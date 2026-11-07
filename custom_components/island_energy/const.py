@@ -77,6 +77,7 @@ OBJECT_IDS: Final[dict[str, str]] = {
     "status": "planner_status",
     "charging": "grid_charging",
     "low_tariff": "low_tariff",
+    "charging_schedule": "grid_charging_schedule",
     SET_AUTO_CHARGING: "allow_automatic_charging",
     SET_AUTO_COOLING: "allow_automatic_cooling",
     SET_CEILING: "grid_charge_ceiling",

@@ -44,6 +44,10 @@ class PlannerConfig:
     reserve_pct: float = 30.0
     min_soc_pct: float = 10.0
     min_charge_kwh: float = 0.5
+    #: Hysteresis around the reserve (%): a night without planned charging starts
+    #: one only below reserve − this; a night with charging keeps it down to half
+    #: of ``min_charge_kwh`` (the plan does not flip 0 / 0.5 / 1 kWh every ¼ h).
+    reserve_hysteresis_pct: float = 0.0
     #: Night charging interval (local time; over midnight when start > end).
     night_start: time = time(21, 0)
     night_end: time = time(8, 0)
@@ -136,11 +140,13 @@ def plan(
     history: Sequence[SocPoint] = (),
     nt: Sequence[ChargeWindow] | None = None,
     cfg: PlannerConfig | None = None,
+    held: frozenset[date] = frozenset(),
 ) -> PlanResult:
     """Plan grid charging night by night over the forward ``days`` and simulate the result.
 
     ``nt`` = low-tariff windows (None = charging allowed any time). ``history`` are
     measured points before ``now`` (for past days and today's morning low).
+    ``held`` = target days whose previous plan charged (hysteresis, see PlannerConfig).
     """
     cfg = cfg or PlannerConfig()
     cap = max(0.001, capacity_kwh)
@@ -177,6 +183,10 @@ def plan(
         ceiling = cfg.ceiling_pct
         room = max(0.0, ceiling - soc_end)
         reserve_need = room if boost else max(0.0, cfg.reserve_pct - reserve_without)
+        is_held = day.start.astimezone(tz).date() in held
+        min_kwh = cfg.min_charge_kwh / 2 if is_held else cfg.min_charge_kwh
+        if not boost and not is_held and reserve_without >= cfg.reserve_pct - cfg.reserve_hysteresis_pct:
+            reserve_need = 0.0
         short = reserve_need > room + 0.5
         need_pct = min(reserve_need, room)
         # This night guards its own stretch only: from the previous night's end (the
@@ -196,7 +206,7 @@ def plan(
         def span_min(trial: Sequence[SocPoint]) -> float:
             return min((p.lo for p in trial if span_start <= p.t <= next_ns), default=100.0)
 
-        if need_pct / 100 * cap >= cfg.min_charge_kwh:
+        if need_pct / 100 * cap >= min_kwh:
             # The simulation clamps the SoC at 0 %, so the deficit is refined against
             # the simulated reserve itself, not computed once.
             on_reserve = not boost and reserve_need >= min_need

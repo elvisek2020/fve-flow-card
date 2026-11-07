@@ -5,6 +5,36 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.2.0 — 2026-11-07
+
+### ✨ Novinky
+
+- Nový kalendář **Plán nabíjení ze sítě**
+  (`calendar.hybrid_energy_grid_charging_schedule`). Ukazuje běžící nabíjení
+  s odhadem konce, čekající *Na 100 % v nízkém tarifu* a plánovaná okna, která se
+  opravdu spustí, např. „Nabíjení ze sítě (1,8 kWh, rezerva)“. Jiné automatizace
+  (třeba start kotle) se mu tak můžou vyhnout. Aktualizuje se s každým přepočtem
+  plánu a změnou AC IN.
+
+### 🐛 Opravy
+
+- **Vypnout nabíjení** platilo jen 10 minut, když zrovna neběželo okno plánu.
+  Teď platí v noci do konce aktuálního bloku nízkého tarifu (nejpozději do konce
+  noci), v nočním vysokém tarifu do dalšího okna NT a ve dne do večera.
+  **Nabít teď** jde spustit kdykoli.
+- Plánované nabíjení už nesepne kvůli pár desetinám kWh: začne až od **1 kWh**
+  a jen když z okna zbývá aspoň 15 minut. Ochrana minima tuhle mez nemá.
+- Minimální doba zapnutí stykače (15 min) už nedrží nabíjení po konci noci.
+
+### 🛠️ Pod kapotou
+
+- **Hystereze kolem rezervy:** noc bez nabíjení se naplánuje až pod rezervu − 2 %,
+  naplánované nabíjení se drží, dokud chybí aspoň 0,5 kWh. Plán tak po
+  čtvrthodinách neskáče mezi 0 a 1 kWh.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.1.10 — 2026-11-05
 
 ### ⚠️ Změny, které vyžadují zásah

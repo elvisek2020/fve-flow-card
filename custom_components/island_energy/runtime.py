@@ -91,6 +91,7 @@ from .core.forecast import (
     measured_points,
     product_rows,
 )
+from .core.hdo import merge
 from .core.planner import PlannerConfig, PlanResult, hours_to_time, plan
 from .data import (
     build_days,
@@ -111,6 +112,13 @@ SAVE_DELAY = 10
 PROTECT_MARGIN = 2.0
 #: A planned session ends once the recomputed plan needs less than this from the grid (kWh).
 SESSION_DONE_KWH = 0.3
+#: Planned charging starts only for at least this much from the grid (kWh) and with
+#: at least MIN_ON left in the window: AC IN stays on MIN_ON anyway, and every
+#: switch-on may disturb the gas boiler (flame loss F1). The minimum SoC is exempt.
+MIN_START_KWH = 1.0
+#: Reserve hysteresis (%): a night without planned charging plans one only below
+#: reserve − this, so the plan does not flip 0 / 0.5 / 1 kWh every recompute.
+RESERVE_HYSTERESIS = 2.0
 #: A learned charging power outside this range is not trusted (W).
 LEARNED_POWER_RANGE = (300.0, 10000.0)
 
@@ -124,6 +132,16 @@ class ManualCharge:
     #: Charges only in night low-tariff windows (NT ∩ "charge from"–"charge until"),
     #: pauses otherwise; ends at ``until`` (end of the nearest night) at the latest.
     low_tariff_only: bool = False
+
+
+@dataclass(frozen=True)
+class ChargeEvent:
+    """AC IN on (now or planned) for the calendar entity."""
+
+    start: datetime
+    end: datetime
+    summary: str
+    description: str
 
 
 class IslandEnergyRuntime:
@@ -319,6 +337,8 @@ class IslandEnergyRuntime:
             ceiling_pct=float(self.settings[SET_CEILING]),
             reserve_pct=float(self.settings[SET_RESERVE]),
             min_soc_pct=float(self.settings[SET_MIN_SOC]),
+            min_charge_kwh=MIN_START_KWH,
+            reserve_hysteresis_pct=RESERVE_HYSTERESIS,
             night_start=hours_to_time(float(self.settings[SET_NIGHT_START])),
             night_end=hours_to_time(float(self.settings[SET_NIGHT_END])),
         )
@@ -395,6 +415,8 @@ class IslandEnergyRuntime:
             self._history.get(self.cfg.get(CONF_BATTERY_POWER) or ""),
             self._history.get(self.cfg.get(CONF_AC_IN_POWER) or ""),
         )
+        # Nights the previous plan charged keep charging down to a smaller need (hysteresis).
+        held = frozenset(n.target_day for n in self.result.nights if n.needed_kwh > 0) if self.result else frozenset()
         result = await self.hass.async_add_executor_job(
             lambda: plan(
                 now=now,
@@ -407,6 +429,7 @@ class IslandEnergyRuntime:
                 history=history,
                 nt=self.nt,
                 cfg=self._planner_cfg(),
+                held=held,
             )
         )
         # Previous plan's windows: a planned session starts only when both agree on
@@ -524,6 +547,9 @@ class IslandEnergyRuntime:
             return None
         if self._prev_windows is not None and not any(w.start <= now < w.end for w in self._prev_windows):
             return None  # only one recompute says "now" (plans jitter by ¼ h): wait for the next
+        protect = night.protect_min or soc < float(self.settings[SET_MIN_SOC]) + PROTECT_MARGIN
+        if not protect and (night.needed_kwh < MIN_START_KWH or window.end - now < MIN_ON):
+            return None  # a few tenths of kWh or a window about to end: not worth a switch-on
         target = min(window.ceiling, soc + night.needed_kwh / self.capacity * 100)
         # Logged with the switch-on: which plan window started it (plans move as they are recomputed).
         self._session_note = f"okno {_hm(window.start)}–{_hm(window.end)}"
@@ -603,8 +629,11 @@ class IslandEnergyRuntime:
                 return
             await self._switch(sw, True, reason)
         elif desired is False and is_on and self._we_switched_on:
-            # The minimum on-time protects the contactor, but not into the high tariff.
-            if self._last_switch and now - self._last_switch < MIN_ON and soc < FULL_SOC and not high_vt:
+            # The minimum on-time protects the contactor, but not into the high tariff
+            # nor past the night (by day the panels charge, the grid would only displace them).
+            night_start, night_end = self._night_bounds_around(now)
+            in_night = night_start <= now < night_end
+            if self._last_switch and now - self._last_switch < MIN_ON and soc < FULL_SOC and not high_vt and in_night:
                 return
             await self._switch(sw, False, reason)
         self._update_status()
@@ -761,8 +790,8 @@ class IslandEnergyRuntime:
         now = dt_util.now()
         self.manual = None
         self.session = None
-        window = next((w for w in (self.result.windows if self.result else []) if w.start <= now < w.end), None)
-        self.suppress_until = window.end if window else now + MIN_OFF
+        self.suppress_until = self._stop_until(now)
+        self._log(f"Nabíjení ze sítě ručně vypnuto, automaticky nenabíjím do {_hm(self.suppress_until)}.")
         sw = self.cfg.get(CONF_AC_IN_SWITCH)
         st = self.hass.states.get(sw) if sw else None
         if sw and st is not None and st.state == STATE_ON:
@@ -770,6 +799,31 @@ class IslandEnergyRuntime:
             await self._switch(sw, False, "ručně vypnuto")
         self._update_status()
         self._notify_listeners()
+
+    def _stop_until(self, now: datetime) -> datetime:
+        """How long a manual stop holds off automatic charging.
+
+        In the night until the current low-tariff block ends (night end at the latest;
+        a later NT window of the same night may continue the plan), in the night's high
+        tariff until the next NT window, by day until the evening's night interval.
+        Never shorter than the running planned window or MIN_OFF. "Charge now" works any time.
+        """
+        start, end = self._night_bounds_around(now)
+        if start <= now < end:
+            nt = merge(self.nt) if self.nt is not None else None
+            current = next((w for w in nt or () if w.start <= now < w.end), None)
+            if nt is None:
+                until = end
+            elif current is not None:
+                until = min(current.end, end)
+            else:
+                until = min((w.start for w in nt if now < w.start < end), default=end)
+        else:
+            until = start
+        window = next((w for w in (self.result.windows if self.result else []) if w.start <= now < w.end), None)
+        if window is not None:
+            until = max(until, window.end)
+        return max(until, now + MIN_OFF)
 
     async def async_skip_tonight(self) -> None:
         night = self.result.next_night if self.result else None
@@ -938,19 +992,93 @@ class IslandEnergyRuntime:
         soc = state_float(self.hass, self.cfg.get(CONF_SOC))
         if soc is None or self.capacity <= 0:
             return info
-        left = max(0.0, (active.target - soc) / 100 * self.capacity)
+        left, eta = self._estimate(active, soc, dt_util.now())
+        info.update(remaining_kwh=round(left, 1), eta=eta.isoformat())
+        return info
+
+    def _estimate(self, charge: ManualCharge, soc: float, start: datetime) -> tuple[float, datetime]:
+        """kWh left to ``charge.target`` and the estimated end when charging from ``start``."""
+        left = max(0.0, (charge.target - soc) / 100 * self.capacity)
         # Charging power into the battery: measured now (DC current × voltage),
         # else learned from history, else the setting.
         amps = state_float(self.hass, self.cfg.get(CONF_DC_CURRENT))
         volts = state_float(self.hass, self.cfg.get(CONF_DC_VOLTAGE))
         now_w = amps * volts if amps is not None and volts is not None else 0.0
         power = now_w if now_w > 300 else self.charge_power_w
-        eta = dt_util.now() + timedelta(hours=left * 1000 / power) if power > 0 else active.until
-        info.update(remaining_kwh=round(left, 1), eta=min(eta, active.until).isoformat())
-        return info
+        eta = start + timedelta(hours=left * 1000 / power) if power > 0 else charge.until
+        return left, min(eta, charge.until)
+
+    def charge_events(self) -> list[ChargeEvent]:
+        """AC IN on now and planned (calendar entity), so other automations can keep clear.
+
+        The running charge ends at its estimate (at least MIN_ON after the switch-on),
+        planned windows only when they will really start: automatic charging allowed,
+        not stopped / skipped / after a fault, enough energy and time left.
+        """
+        now = dt_util.now()
+        events: list[ChargeEvent] = []
+        soc = state_float(self.hass, self.cfg.get(CONF_SOC))
+        sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
+        on = sw is not None and sw.state == STATE_ON
+        if on and self._off_pending_until and now < self._off_pending_until:
+            on = False  # our switch-off is on its way
+        busy_until: datetime | None = None
+        if on and sw is not None:
+            begin = self._last_switch if self._we_switched_on and self._last_switch else sw.last_changed
+            active = self.manual or (self.session if self._we_switched_on else None)
+            if active is not None and soc is not None and self.capacity > 0:
+                left, end = self._estimate(active, soc, now)
+                if self.manual:
+                    detail = f"ruční, do {active.target:.0f} %"
+                elif soc < float(self.settings[SET_MIN_SOC]) + PROTECT_MARGIN:
+                    detail = f"{_kwh(left)} kWh, ochrana minima"
+                else:
+                    detail = f"{_kwh(left)} kWh, podle plánu"
+                desc = f"Běží, cíl {active.target:.0f} %, odhad konce {_hm(end)}."
+            else:
+                end, detail = now + MIN_ON, "zapnuto mimo plánovač"
+                desc = "AC IN je zapnutý, konec není známý (průběžně se posouvá)."
+            end = max(end, begin + MIN_ON, now + timedelta(minutes=1))
+            events.append(ChargeEvent(begin, end, f"Nabíjení ze sítě ({detail})", desc))
+            busy_until = end
+        elif self.manual and self.manual.low_tariff_only and soc is not None and self.capacity > 0:
+            start = self.next_night_low_tariff(now)
+            if start is not None and start < self.manual.until:
+                _left, end = self._estimate(self.manual, soc, start)
+                if end > start:
+                    events.append(
+                        ChargeEvent(
+                            start,
+                            end,
+                            f"Nabíjení ze sítě (ruční, do {self.manual.target:.0f} %, nízký tarif)",
+                            "Čeká na noční nízký tarif, konec je odhad.",
+                        )
+                    )
+        if not self.settings[SET_AUTO_CHARGING] or not self.result:
+            return events
+        holds = [self.suppress_until, self.skip_night, self.fault_until, busy_until]
+        if self.manual:
+            holds.append(self.manual.until)  # manual charging has priority over the plan
+        for w in self.result.windows:
+            start = max([w.start, *(t for t in holds if t is not None)])
+            night = min((n for n in self.result.nights if n.deadline >= w.end), key=lambda n: n.deadline, default=None)
+            if night is None or w.end - max(start, now) < MIN_ON:
+                continue
+            if not night.protect_min and night.needed_kwh < MIN_START_KWH:
+                continue
+            kwh = sum(p.grid_kwh for p in self.result.points if start <= p.t < w.end)
+            why = "ochrana minima" if night.protect_min else "do stropu" if night.boosted else "rezerva"
+            events.append(
+                ChargeEvent(start, w.end, f"Nabíjení ze sítě ({_kwh(kwh)} kWh, {why})", f"Plán: {self.reason()}")
+            )
+        return sorted(events, key=lambda e: e.start)
 
     def history_points(self) -> list[SocPoint]:
         return measured_points(self._history.get(self.cfg.get(CONF_SOC) or "", []), None)
+
+
+def _kwh(v: float) -> str:
+    return f"{v:.1f}".replace(".", ",")
 
 
 def _hm(t: datetime) -> str:

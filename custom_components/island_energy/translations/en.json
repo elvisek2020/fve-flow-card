@@ -119,6 +119,11 @@
         "name": "Low tariff"
       }
     },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Grid charging schedule"
+      }
+    },
     "switch": {
       "auto_charging": {
         "name": "Allow automatic charging"
