@@ -79,6 +79,28 @@ def test_simulate_grid_window_stops_at_ceiling():
     assert sum(p.grid_kwh for p in pts) == pytest.approx(6.0)
 
 
+@pytest.mark.parametrize("day", [date(2026, 10, 25), date(2027, 3, 28)])
+def test_simulate_counts_real_time_over_the_dst_change(day):
+    # 00:00–06:00 local is 7 h in October (02:00–03:00 twice) and 5 h in March
+    hours = (at(day, 6).timestamp() - at(day, 0).timestamp()) / 3600
+    pts = simulate(now=at(day, 0), soc_now=90, capacity_kwh=20, pv=[], profile_w=FLAT_600, until=at(day, 6), tz=TZ)
+    assert 90 - pts[-1].lo == pytest.approx(hours * 0.6 / 20 * 100)
+    win = [ChargeWindow(at(day, 0), at(day, 6), ceiling=100)]
+    pts = simulate(
+        now=at(day, 0),
+        soc_now=0,
+        capacity_kwh=40,
+        pv=[],
+        profile_w=FLAT_600,
+        until=at(day, 6),
+        tz=TZ,
+        windows=win,
+        charge_power_w=2000,
+    )
+    assert all(p.grid_kwh >= 0 for p in pts)
+    assert sum(p.grid_kwh for p in pts) == pytest.approx(hours * 2.0)
+
+
 def test_simulate_first_step_aligns_to_quarter_hour():
     pts = simulate(now=at(D, 21, 7), soc_now=50, capacity_kwh=20, pv=[], profile_w=FLAT_600, until=at(D, 22), tz=TZ)
     assert pts[1].t == at(D, 21, 15)

@@ -5,6 +5,24 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.2.1 — 2026-11-07
+
+### 🐛 Opravy
+
+- Kalendář **Plán nabíjení ze sítě**: každá plánovaná událost má popis svého okna
+  a své noci, např. „Okno 22:00–23:45: 5,9 kWh ze sítě, SoC 22 → 54 %. Noc na
+  10. 11.: …“. Dřív měly všechny události důvod plánu nejbližší noci a popis
+  odporoval souhrnu.
+- Prognóza a plán počítají v noci změny času se skutečnou délkou kroku. V říjnu
+  vycházel jeden krok záporný (propad SoC a záporné kWh), v březnu o hodinu delší.
+
+### 🎨 Vzhled
+
+- Aktuální náhled karty v README.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.2.0 — 2026-11-07
 
 ### ✨ Novinky

@@ -315,12 +315,14 @@ def simulate(
     while t < until:
         epoch = t.timestamp()
         nxt = min(until, datetime.fromtimestamp((epoch // step_s + 1) * step_s, t.tzinfo))
-        mid = t + (nxt - t) / 2
+        # Real time, not wall clock: aware datetimes with the same tzinfo subtract and
+        # add on the wall clock, which breaks the DST changeover (a negative step in October).
+        mid = datetime.fromtimestamp((epoch + nxt.timestamp()) / 2, t.tzinfo)
         while k < len(pv_sorted) and pv_sorted[k].end <= mid:
             k += 1
         pv_w = pv_sorted[k].w if k < len(pv_sorted) and pv_sorted[k].start <= mid else 0.0
         load_w = profile_w[mid.astimezone(tz).hour]
-        hours = (nxt - t).total_seconds() / 3600
+        hours = (nxt.timestamp() - epoch) / 3600
         active = next((i for i, w in enumerate(win) if w.start <= mid < w.end and i not in done), None)
         if active is not None and soc >= win[active].ceiling:
             done.add(active)

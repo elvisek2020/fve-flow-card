@@ -92,7 +92,7 @@ from .core.forecast import (
     product_rows,
 )
 from .core.hdo import merge
-from .core.planner import PlannerConfig, PlanResult, hours_to_time, plan
+from .core.planner import NightPlan, PlannerConfig, PlanResult, hours_to_time, plan
 from .data import (
     build_days,
     capacity_kwh,
@@ -948,6 +948,10 @@ class IslandEnergyRuntime:
         night = self.result.next_night if self.result else None
         if night is None:
             return "Plán zatím není spočítaný."
+        return self._night_text(night)
+
+    def _night_text(self, night: NightPlan) -> str:
+        """Explanation of one night's plan (Czech)."""
         when = night.target_day.strftime("%-d. %-m.")
         reserve = float(self.settings[SET_RESERVE])
         low = f"{night.reserve_min_without:.0f} %"
@@ -1066,11 +1070,17 @@ class IslandEnergyRuntime:
                 continue
             if not night.protect_min and night.needed_kwh < MIN_START_KWH:
                 continue
-            kwh = sum(p.grid_kwh for p in self.result.points if start <= p.t < w.end)
+            inside = [p for p in self.result.points if start <= p.t < w.end]
+            kwh = sum(p.grid_kwh for p in inside)
             why = "ochrana minima" if night.protect_min else "do stropu" if night.boosted else "rezerva"
-            events.append(
-                ChargeEvent(start, w.end, f"Nabíjení ze sítě ({_kwh(kwh)} kWh, {why})", f"Plán: {self.reason()}")
-            )
+            # This window and its own night (not the nearest night's reason).
+            desc = f"Okno {_hm(start)}–{_hm(w.end)}: {_kwh(kwh)} kWh ze sítě"
+            # A simulated point holds the SoC at the start of its step.
+            end_soc = next((p.lo for p in self.result.points if p.t >= w.end), None)
+            if inside and end_soc is not None:
+                desc += f", SoC {inside[0].lo:.0f} → {end_soc:.0f} %"
+            desc += f". Noc na {self._night_text(night)}"
+            events.append(ChargeEvent(start, w.end, f"Nabíjení ze sítě ({_kwh(kwh)} kWh, {why})", desc))
         return sorted(events, key=lambda e: e.start)
 
     def history_points(self) -> list[SocPoint]:

@@ -768,6 +768,12 @@ async def test_calendar_shows_planned_and_running_charging(hass: HomeAssistant, 
         return_response=True,
     )
     assert result[eid]["events"]
+    # each planned window explains its own night, not the nearest night's plan
+    for e in rt.charge_events():
+        night = min((n for n in rt.result.nights if n.deadline >= e.end), key=lambda n: n.deadline)
+        assert e.description.startswith("Okno ")
+        assert f"Noc na {night.target_day.day}. {night.target_day.month}.:" in e.description
+        assert "SoC " in e.description
 
     calls: list[tuple[str, bool]] = []
     switch_service(hass, calls)
