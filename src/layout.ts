@@ -57,6 +57,8 @@ const inverterH = (opts: LayoutOptions): number => 260 + 24 * (opts.inverterExtr
 
 /** Výška bloku „Nabíjení ze sítě“. */
 const CHARGE_BLOCK_H = 252;
+/** O kolik je měnič vyšší v rovnoměrně rozloženém středním sloupci (s blokem nabíjení). */
+const INVERTER_EVEN_EXTRA_H = 30;
 
 // Rozměry v SVG jednotkách — při typickém škálování panel view (~0.78)
 // odpovídají cca 70 CSS px výšky a 50 CSS px mezery na obrazovce.
@@ -99,12 +101,7 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
   const LEFT_EDGE = 350;
   const MID_W = 280;
   const MID_X = Math.round((LEFT_EDGE + FLOOR_X - MID_W) / 2);
-  // Doplňkové řádky měnič prodlužují nahoru (pod Solcastem je volno), spodek
-  // i tlačítka pod ním zůstávají na místě.
-  const invH = inverterH(opts);
-  const inverter: Rect = { x: MID_X, y: 620 - invH, w: MID_W, h: invH };
-  // Predikce sedí nahoře vedle FVE panelů; střed dole zůstává volný
-  // (tam sedí volitelné tlačítko ZPĚT).
+  // Predikce sedí nahoře vedle FVE panelů, pod ní měnič a tlačítka.
   const solcast: Rect = { x: MID_X, y: 40, w: MID_W, h: 190 };
   const grid: Rect = { x: FLOOR_X, y: 40, w: FLOOR_W, h: GRID_H };
 
@@ -118,27 +115,49 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
     });
   }
   const floorsBottom = floors[floors.length - 1].y + FLOOR_H;
-  // Tlačítka pod měničem: ZPĚT hned pod ním, Analýza dole — spodní hranou
-  // lícuje s posledním patrem (při málo patrech aspoň pod ZPĚT).
-  const btnTop = inverter.y + inverter.h + BUTTONS_GAP_DESKTOP;
+  const chargeBlock: Rect | undefined = opts.chargeBlock
+    ? { x: battery.x, y: battery.y + battery.h + 30, w: battery.w, h: CHARGE_BLOCK_H }
+    : undefined;
+  // Prognóza + Analýza tvoří skupinu (Prognóza nahoře).
+  const stack = [opts.forecastButton, opts.analysisButton].filter(Boolean).length;
+  const stackH = stack * ANALYSIS_BTN_H + Math.max(0, stack - 1) * BTN_STACK_GAP;
+  // S blokem nabíjení se střední sloupec (měnič, ZPĚT, skupina tlačítek)
+  // rozloží rovnoměrně mezi spodek Solcastu a spodek bloku nabíjení: stejné
+  // mezery, skupina lícuje spodní hranou s blokem, měnič je o kus vyšší.
+  // Bez bloku měnič končí na y 620 (doplňkové řádky ho prodlužují nahoru),
+  // ZPĚT hned pod ním a skupina lícuje s posledním patrem.
+  const evenColumn = !!chargeBlock && stack > 0;
+  const invH = inverterH(opts) + (evenColumn ? INVERTER_EVEN_EXTRA_H : 0);
+  let gap = BUTTONS_GAP_DESKTOP;
+  let invY = 620 - invH;
+  let stackBottom = floorsBottom;
+  if (chargeBlock && evenColumn) {
+    const top = solcast.y + solcast.h;
+    stackBottom = chargeBlock.y + chargeBlock.h;
+    const items = opts.backButton ? 3 : 2;
+    const content = invH + (opts.backButton ? BACK_BTN_H : 0) + stackH;
+    gap = Math.max(BTN_STACK_GAP, Math.floor((stackBottom - top - content) / items));
+    invY = top + gap;
+  }
+  const inverter: Rect = { x: MID_X, y: invY, w: MID_W, h: invH };
+  const btnTop = inverter.y + inverter.h + gap;
   const backButton: Rect | undefined = opts.backButton
     ? { x: inverter.x, y: btnTop, w: inverter.w, h: BACK_BTN_H }
     : undefined;
-  // Prognóza + Analýza tvoří skupinu (Prognóza nahoře), která spodní hranou
-  // lícuje s posledním patrem — při málo patrech aspoň pod ZPĚT.
-  const stackMinY = backButton ? backButton.y + backButton.h + BTN_STACK_GAP : btnTop;
-  const stack = [opts.forecastButton, opts.analysisButton].filter(Boolean).length;
-  const stackH = stack * ANALYSIS_BTN_H + Math.max(0, stack - 1) * BTN_STACK_GAP;
-  let stackY = Math.max(stackMinY, floorsBottom - stackH);
+  // Skupina spodní hranou lícuje se stackBottom, vždy aspoň pod ZPĚT.
+  const stackMinY = backButton ? backButton.y + backButton.h + (evenColumn ? gap : BTN_STACK_GAP) : btnTop;
+  let stackY = Math.max(stackMinY, stackBottom - stackH);
+  // ZPĚT přesně uprostřed mezi měničem a skupinou (stejná mezera nad i pod),
+  // ale nikdy blíž k měniči než výchozí mezera.
+  if (backButton && stack > 0) {
+    backButton.y = Math.max(btnTop, (inverter.y + inverter.h + stackY - BACK_BTN_H) / 2);
+  }
   const forecastButton: Rect | undefined = opts.forecastButton
     ? { x: inverter.x, y: stackY, w: inverter.w, h: ANALYSIS_BTN_H }
     : undefined;
   if (forecastButton) stackY += ANALYSIS_BTN_H + BTN_STACK_GAP;
   const analysisButton: Rect | undefined = opts.analysisButton
     ? { x: inverter.x, y: stackY, w: inverter.w, h: ANALYSIS_BTN_H }
-    : undefined;
-  const chargeBlock: Rect | undefined = opts.chargeBlock
-    ? { x: battery.x, y: battery.y + battery.h + 30, w: battery.w, h: CHARGE_BLOCK_H }
     : undefined;
   const buttonsBottom = Math.max(
     chargeBlock ? chargeBlock.y + chargeBlock.h : 0,
@@ -149,25 +168,35 @@ export function computeLayout(floorCount: number, opts: LayoutOptions = {}): Lay
 
   const pvCx = pv.x + pv.w / 2;
   const mpptMidY = mppt.y + mppt.h / 2;
+  // Levý bok měniče má tři oddělené vstupy shora dolů: MPPT (u nadpisu),
+  // baterie (uprostřed), AC IN z bloku nabíjení (dole, zrcadlově k MPPT).
   const invDcY = inverter.y + 50; // port DC-in z MPPT
-  const invBatY = inverter.y + 120; // port baterie
+  const invBatY = inverter.y + inverter.h / 2; // port baterie
+  const invAcInY = inverter.y + inverter.h - 50; // port AC IN (nabíjení ze sítě)
   const invOutY = inverter.y + inverter.h / 2; // port AC-out (ostrovní sběrnice)
-  const batPortY = battery.y + 150;
+  // Výstup baterie v horní třetině boxu — spojka tak nevede přes celou
+  // výšku mezery a nekříží svislici nabíjení ze sítě.
+  const batPortY = battery.y + 75;
   const gridPortY = grid.y + grid.h / 2;
+  // Dvě svislé dráhy v mezeře mezi levým sloupcem a měničem (třetiny mezery):
+  // levá pro MPPT a baterii (svislé úseky se výškově nepřekrývají), pravá
+  // jen pro nabíjení ze sítě. Žádné dvě svislice tak neleží přes sebe.
+  const laneGap = inverter.x - LEFT_EDGE;
+  const leftLaneX = Math.round(LEFT_EDGE + laneGap / 3);
+  const rightLaneX = Math.round(LEFT_EDGE + (2 * laneGap) / 3);
 
   const paths = {
     pvMppt: `M ${pvCx} ${pv.y + pv.h} L ${pvCx} ${mppt.y}`,
     pvSolcast: `M ${pv.x + pv.w} ${pv.y + pv.h / 2} H ${solcast.x}`,
-    mpptInv: `M ${mppt.x + mppt.w} ${mpptMidY} H ${inverter.x - 80} V ${invDcY} H ${inverter.x}`,
-    batInv: `M ${battery.x + battery.w} ${batPortY} H ${inverter.x - 40} V ${invBatY} H ${inverter.x}`,
-    // Nabíjení ze sítě → AC IN: z pravého boku bloku nabíjení podél
-    // spojky baterie nahoru do levého boku měniče pod vstupem baterie.
+    mpptInv: `M ${mppt.x + mppt.w} ${mpptMidY} H ${leftLaneX} V ${invDcY} H ${inverter.x}`,
+    batInv: `M ${battery.x + battery.w} ${batPortY} H ${leftLaneX} V ${invBatY} H ${inverter.x}`,
+    // Nabíjení ze sítě → AC IN: z pravého boku bloku nabíjení pravou
+    // dráhou nahoru do levého boku měniče pod vstupem baterie.
     // Bez bloku (integrace není) z levého boku sítě mezi sloupci dolů
     // a shora do měniče (pod boxem Solcastu, mimo ostrovní trunk vpravo).
     gridAcIn: (() => {
       if (chargeBlock) {
-        const acInY = inverter.y + inverter.h - 40;
-        return `M ${chargeBlock.x + chargeBlock.w} ${chargeBlock.y + 60} H ${inverter.x - 20} V ${acInY} H ${inverter.x}`;
+        return `M ${chargeBlock.x + chargeBlock.w} ${chargeBlock.y + 60} H ${rightLaneX} V ${invAcInY} H ${inverter.x}`;
       }
       const bendX = Math.round((inverter.x + inverter.w + FLOOR_X) / 2) - 20;
       const midY = Math.round((solcast.y + solcast.h + inverter.y) / 2);

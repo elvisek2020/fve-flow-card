@@ -5,6 +5,23 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.2.2 — 2026-11-07
+
+### 🎨 Vzhled
+
+- Linky z MPPT, baterie a nabíjení ze sítě vedou do měniče každá vlastní cestou
+  a mají každá svůj vstup: MPPT nahoře, baterie uprostřed, nabíjení ze sítě dole.
+  Dřív šla linka baterie a nabíjení ze sítě po stejném svislém úseku a do měniče
+  vstupovaly těsně u sebe. Linka baterie teď vychází z horní části bloku baterie.
+- Prostřední sloupec je rozložený rovnoměrně mezi Solcastem a spodkem bloku
+  **Nabíjení ze sítě**: měnič, ZPĚT a dvojice Prognóza + Analýza mají stejné
+  mezery, Analýza lícuje spodní hranou s blokem nabíjení a měnič je o kus vyšší.
+- Tlačítko ZPĚT sedí uprostřed mezi měničem a tlačítky pod ním, i bez bloku
+  nabíjení, když je pod ním dost místa.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.2.1 — 2026-11-07
 
 ### 🐛 Opravy
