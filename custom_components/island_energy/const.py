@@ -54,6 +54,7 @@ SET_COOLING_ON: Final = "cooling_on"
 SET_COOLING_OFF: Final = "cooling_off"
 SET_AUTO_CHARGING: Final = "auto_charging"
 SET_AUTO_COOLING: Final = "auto_cooling"
+SET_CHARGE_FROM_SUNSET: Final = "charge_from_sunset"
 
 DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_CEILING: 90.0,
@@ -66,6 +67,7 @@ DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_COOLING_OFF: 900.0,
     SET_AUTO_CHARGING: False,
     SET_AUTO_COOLING: False,
+    SET_CHARGE_FROM_SUNSET: True,
 }
 
 #: Stable English object ids (``<domain>.hybrid_energy_<id>``) — the card finds the
@@ -80,6 +82,7 @@ OBJECT_IDS: Final[dict[str, str]] = {
     "charging_schedule": "grid_charging_schedule",
     SET_AUTO_CHARGING: "allow_automatic_charging",
     SET_AUTO_COOLING: "allow_automatic_cooling",
+    SET_CHARGE_FROM_SUNSET: "charge_from_sunset",
     SET_CEILING: "grid_charge_ceiling",
     SET_MIN_SOC: "minimum_soc",
     SET_CHARGE_POWER: "grid_charge_power",

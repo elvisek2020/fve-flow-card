@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 
 import pytest
 from homeassistant import config_entries
@@ -437,16 +438,16 @@ async def test_plan_uses_learned_charge_power(hass: HomeAssistant, freezer) -> N
     entry = await start_with(hass, freezer, {})
     rt = entry.runtime_data
     assert rt.charge_power_source == "setting"
-    assert rt._planner_cfg().charge_power_w == 2600.0
+    assert rt._planner_cfg(dt_util.now().date()).charge_power_w == 2600.0
     rt.learned_charge_w = 1999.0
     assert rt.charge_power_source == "learned"
-    assert rt._planner_cfg().charge_power_w == 1999.0
+    assert rt._planner_cfg(dt_util.now().date()).charge_power_w == 1999.0
     await rt.async_recompute()
     await hass.async_block_till_done()
     attrs = hass.states.get("sensor.hybrid_energy_grid_charge_plan").attributes
     assert attrs["charge_power_w"] == 1999 and attrs["charge_power_source"] == "learned"
     rt.learned_charge_w = 50.0  # implausible: back to the setting
-    assert rt._planner_cfg().charge_power_w == 2600.0
+    assert rt._planner_cfg(dt_util.now().date()).charge_power_w == 2600.0
     await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -617,8 +618,9 @@ async def test_charge_full_in_low_tariff_waits_for_the_night(hass: HomeAssistant
     switch_service(hass, calls)
     tz = dt_util.get_time_zone(TZ)
     freezer.move_to(datetime(2026, 10, 21, 14, 0, tzinfo=tz))  # afternoon
-    # NT 19:15–20:15 (evening, before the night interval) and 21:15 → 07:15
+    # NT 15:00–16:00 (before sunset), 19:15–20:15 (after it) and 21:15 → 07:15
     rt.nt = [
+        ChargeWindow(datetime(2026, 10, 21, 15, 0, tzinfo=tz), datetime(2026, 10, 21, 16, 0, tzinfo=tz)),
         ChargeWindow(datetime(2026, 10, 21, 19, 15, tzinfo=tz), datetime(2026, 10, 21, 20, 15, tzinfo=tz)),
         ChargeWindow(datetime(2026, 10, 21, 21, 15, tzinfo=tz), datetime(2026, 10, 22, 7, 15, tzinfo=tz)),
     ]
@@ -628,12 +630,15 @@ async def test_charge_full_in_low_tariff_waits_for_the_night(hass: HomeAssistant
     assert calls == [] and rt.status == "manual_waiting"
     assert rt.manual.target == 100.0 and rt.manual.until == datetime(2026, 10, 22, 8, 0, tzinfo=tz)
     info = rt.session_info()
-    assert info["waiting"] and info["start"] == datetime(2026, 10, 21, 21, 15, tzinfo=tz).isoformat()
+    assert info["waiting"] and info["start"] == datetime(2026, 10, 21, 19, 15, tzinfo=tz).isoformat()
 
-    freezer.move_to(datetime(2026, 10, 21, 19, 30, tzinfo=tz))  # NT, but not the night interval
+    freezer.move_to(datetime(2026, 10, 21, 15, 30, tzinfo=tz))  # NT, but the sun is still up
     await rt.async_control()
     assert calls == []
-    freezer.move_to(datetime(2026, 10, 21, 21, 20, tzinfo=tz))  # night NT: starts
+    freezer.move_to(datetime(2026, 10, 21, 18, 30, tzinfo=tz))  # after sunset, but VT
+    await rt.async_control()
+    assert calls == []
+    freezer.move_to(datetime(2026, 10, 21, 19, 20, tzinfo=tz))  # after sunset and NT: starts
     await rt.async_control()
     assert calls == [("switch.ac_in", True)] and rt.status == "manual"
     freezer.move_to(datetime(2026, 10, 22, 7, 20, tzinfo=tz))  # VT 07:15–08:15: pauses
@@ -686,9 +691,9 @@ async def test_manual_stop_holds_until_the_low_tariff_block_ends(hass: HomeAssis
     freezer.move_to(datetime(2026, 10, 21, 7, 46, tzinfo=tz))  # night VT gap: until the next NT
     await rt.async_stop_charging()
     assert rt.suppress_until == datetime(2026, 10, 21, 7, 56, tzinfo=tz)
-    freezer.move_to(datetime(2026, 10, 21, 12, 30, tzinfo=tz))  # by day: until the evening
+    freezer.move_to(datetime(2026, 10, 21, 12, 30, tzinfo=tz))  # by day: until sunset
     await rt.async_stop_charging()
-    assert rt.suppress_until == datetime(2026, 10, 21, 21, 0, tzinfo=tz)
+    assert rt.suppress_until == rt._night_start(date(2026, 10, 21))
     await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -785,4 +790,91 @@ async def test_calendar_shows_planned_and_running_charging(hass: HomeAssistant, 
     # the manual charge holds the plan back: no planned window overlaps it
     events = rt.charge_events()
     assert all(e.start >= events[0].end for e in events[1:])
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_night_starts_at_sunset_of_each_day(hass: HomeAssistant, freezer) -> None:
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    tz = dt_util.get_time_zone(TZ)
+    sunset = rt._night_start(date(2026, 11, 9))
+    assert abs(sunset - datetime(2026, 11, 9, 16, 21, tzinfo=tz)) < timedelta(minutes=3)
+    # A date further ahead has its own sunset (not just sun.sun's next_setting).
+    later = rt._night_start(date(2026, 11, 20))
+    assert later.date() == date(2026, 11, 20) and later.time() < sunset.time()
+
+    next_morning = datetime(2026, 11, 10, 8, 0, tzinfo=tz)
+    freezer.move_to(datetime(2026, 11, 9, 12, 0, tzinfo=tz))  # by day: the coming night
+    assert rt._night_bounds_around(dt_util.now()) == (sunset, next_morning)
+    rt.nt = None  # no HDO: only the night interval decides
+    assert rt.in_night_low_tariff(dt_util.now()) is False
+    assert rt.next_night_low_tariff(dt_util.now()) == sunset
+    freezer.move_to(sunset + timedelta(minutes=1))
+    assert rt.in_night_low_tariff(dt_util.now()) is True
+    freezer.move_to(datetime(2026, 11, 10, 7, 0, tzinfo=tz))  # still the same night in the morning
+    assert rt._night_bounds_around(dt_util.now()) == (sunset, next_morning)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_sunset_switch_chooses_the_night_start_and_keeps_the_reserve(hass: HomeAssistant, freezer) -> None:
+    from custom_components.island_energy.const import SET_NIGHT_START
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    tz = dt_util.get_time_zone(TZ)
+    day = date(2026, 11, 9)
+    assert hass.states.get("switch.hybrid_energy_charge_from_sunset").state == "on"
+    rt.set_setting(SET_NIGHT_START, 22.0)
+    # On: sunset; the "charge from" time does not move the reserve either.
+    assert rt._night_start(day).time() < time(17, 0)
+    assert rt._planner_cfg(day).night_start == time(21, 0)
+
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.hybrid_energy_charge_from_sunset"}, blocking=True
+    )
+    assert hass.states.get("switch.hybrid_energy_charge_from_sunset").state == "off"
+    assert rt._night_start(day) == datetime(2026, 11, 9, 22, 0, tzinfo=tz)
+    cfg = rt._planner_cfg(day)
+    assert cfg.night_start == time(22, 0) and cfg.night_starts[day] == datetime(2026, 11, 9, 22, 0, tzinfo=tz)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_sunset_switch_is_restored_after_a_restart(hass: HomeAssistant, freezer) -> None:
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import mock_restore_cache
+
+    mock_restore_cache(hass, [State("switch.hybrid_energy_charge_from_sunset", "off")])
+    entry = await start_with(hass, freezer, {})
+    assert hass.states.get("switch.hybrid_energy_charge_from_sunset").state == "off"
+    assert entry.runtime_data._night_start(date(2026, 11, 9)).time() == time(21, 0)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_plan_and_calendar_use_the_evening_after_sunset(hass: HomeAssistant, freezer) -> None:
+    """8. 11.: NT from 19:15 is usable although it is before the old fixed 21:00."""
+    from custom_components.island_energy.const import SET_AUTO_CHARGING
+    from custom_components.island_energy.core.forecast import ChargeWindow
+
+    entry = await start_with(hass, freezer, {})
+    rt = entry.runtime_data
+    rt.set_setting(SET_AUTO_CHARGING, True)
+    tz = dt_util.get_time_zone(TZ)
+    freezer.move_to(datetime(2026, 10, 20, 14, 0, tzinfo=tz))
+
+    def evening(hour: int) -> list[ChargeWindow]:
+        return [
+            ChargeWindow(
+                datetime(2026, 10, 20 + i, hour, 15, tzinfo=tz), datetime(2026, 10, 20 + i, hour + 1, 45, tzinfo=tz)
+            )
+            for i in range(9)
+        ]
+
+    with patch("custom_components.island_energy.runtime.hdo_windows", return_value=evening(19)):
+        await rt.async_recompute()
+    night = rt.result.next_night
+    assert night.needed_kwh >= 1.0
+    assert night.windows[0].start >= datetime(2026, 10, 20, 19, 15, tzinfo=tz)
+    assert night.windows[-1].end <= datetime(2026, 10, 20, 20, 45, tzinfo=tz)
+    (first, *_) = rt.charge_events()
+    assert first.start == night.windows[0].start and first.end == night.windows[-1].end
     await hass.config_entries.async_unload(entry.entry_id)

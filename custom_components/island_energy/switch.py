@@ -1,4 +1,4 @@
-"""Switches: allow automatic charging, allow automatic cooling (restored, default off)."""
+"""Switches: allow automatic charging / cooling, charge from sunset (restored after restart)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,12 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import IslandEnergyConfigEntry
-from .const import SET_AUTO_CHARGING, SET_AUTO_COOLING
+from .const import SET_AUTO_CHARGING, SET_AUTO_COOLING, SET_CHARGE_FROM_SUNSET
 from .entity import IslandEnergyEntity
 
 
@@ -19,7 +20,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: IslandEnergyConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     rt = entry.runtime_data
-    async_add_entities([SettingSwitch(rt, SET_AUTO_CHARGING), SettingSwitch(rt, SET_AUTO_COOLING)])
+    async_add_entities(SettingSwitch(rt, key) for key in (SET_AUTO_CHARGING, SET_AUTO_COOLING, SET_CHARGE_FROM_SUNSET))
 
 
 class SettingSwitch(IslandEnergyEntity, SwitchEntity, RestoreEntity):
@@ -28,6 +29,8 @@ class SettingSwitch(IslandEnergyEntity, SwitchEntity, RestoreEntity):
     def __init__(self, runtime, key: str) -> None:
         super().__init__(runtime, key)
         self._key = key
+        if key == SET_CHARGE_FROM_SUNSET:
+            self._attr_entity_category = EntityCategory.CONFIG
 
     @property
     def is_on(self) -> bool:

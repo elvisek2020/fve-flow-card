@@ -130,6 +130,9 @@
       },
       "auto_cooling": {
         "name": "Allow automatic cooling"
+      },
+      "charge_from_sunset": {
+        "name": "Charge from sunset"
       }
     },
     "number": {

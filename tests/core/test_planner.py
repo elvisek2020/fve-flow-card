@@ -3,7 +3,7 @@ from datetime import date, time, timedelta
 import pytest
 
 from custom_components.island_energy.core.forecast import ChargeWindow
-from custom_components.island_energy.core.planner import PlannerConfig, plan, schedule_latest
+from custom_components.island_energy.core.planner import PlannerConfig, night_bounds, plan, schedule_latest
 
 from .helpers import FLAT_600, TZ, at, days_from, pv_day
 
@@ -90,6 +90,56 @@ def test_custom_night_interval():
     res = run(soc_now=50, tomorrow_kwh=2, cfg=cfg)
     for w in tomorrow_night(res).windows:
         assert at(D, 23) <= w.start and w.end <= at(T, 6)
+
+
+SUNSETS = {D + timedelta(days=i): at(D + timedelta(days=i), 16, 21) for i in range(-1, 8)}
+
+
+def evening_nt(days: int = 8) -> list[ChargeWindow]:
+    """NT 19:15 → 07:15 every night."""
+    return [ChargeWindow(at(D + timedelta(days=i), 19, 15), at(D + timedelta(days=i + 1), 7, 15)) for i in range(days)]
+
+
+def test_night_bounds_open_at_sunset_and_keep_the_reserve_until_the_evening():
+    day = days_from(D)[1]
+    cfg = PlannerConfig(night_starts=SUNSETS)
+    assert night_bounds(day, TZ, cfg) == (at(D, 16, 21), at(T, 8), at(T, 21))
+    # A sunset later than the fixed time: the next night cannot charge earlier.
+    late = {D: at(D, 21, 30), T: at(T, 21, 30)}
+    assert night_bounds(day, TZ, PlannerConfig(night_starts=late)) == (at(D, 21, 30), at(T, 8), at(T, 21, 30))
+    # A date without sunset falls back to the fixed time.
+    assert night_bounds(day, TZ, PlannerConfig()) == (at(D, 21), at(T, 8), at(T, 21))
+
+
+def test_sunset_start_does_not_change_a_plan_that_fits_late():
+    kwargs = {"soc_now": 50, "tomorrow_kwh": 2, "nt": evening_nt(), "now": at(D, 15)}
+    fixed = run(**kwargs)
+    sunset = run(**kwargs, cfg=PlannerConfig(night_starts=SUNSETS))
+    assert tomorrow_night(fixed).needed_kwh > 0
+    assert [n.windows for n in sunset.nights] == [n.windows for n in fixed.nights]
+    assert [n.needed_kwh for n in sunset.nights] == [n.needed_kwh for n in fixed.nights]
+    # The evening after sunset still counts against the reserve.
+    assert [n.reserve_min_without for n in sunset.nights] == [n.reserve_min_without for n in fixed.nights]
+
+
+def test_sunset_start_uses_the_evening_only_when_the_later_nt_is_short():
+    nt = [ChargeWindow(at(D, 19, 15), at(D, 21)), ChargeWindow(at(D, 22), at(D, 22, 30))]
+    kwargs = {"soc_now": 50, "tomorrow_kwh": 2, "nt": nt, "now": at(D, 15)}
+    fixed = tomorrow_night(run(**kwargs))
+    assert all(w.start >= at(D, 22) for w in fixed.windows)
+    night = tomorrow_night(run(**kwargs, cfg=PlannerConfig(night_starts=SUNSETS)))
+    assert night.windows[-1].start == at(D, 22)  # the latest NT is filled first
+    assert at(D, 19, 15) <= night.windows[0].start < at(D, 21)
+    assert night.needed_kwh > fixed.needed_kwh
+
+
+def test_low_tariff_before_sunset_stays_unused():
+    nt = [ChargeWindow(at(D, 15), at(D, 18)), ChargeWindow(at(D, 22), at(D, 22, 30))]
+    cfg = PlannerConfig(min_soc_pct=0, night_starts=SUNSETS)  # the minimum may use any NT
+    res = run(soc_now=50, tomorrow_kwh=0, nt=nt, now=at(D, 12), cfg=cfg, days=[0, 0])
+    night = tomorrow_night(res)
+    assert night.windows and night.windows[0].start >= at(D, 16, 15)
+    assert sum((w.end - w.start for w in night.windows), timedelta()) > timedelta(minutes=30)
 
 
 def test_minimum_protection_may_start_before_the_night():

@@ -7,3 +7,9 @@ import pytest
 def auto_enable_custom_integrations(recorder_mock, enable_custom_integrations):
     """Recorder first (it must exist before ``hass``), then allow custom integrations."""
     return
+
+
+@pytest.fixture(autouse=True)
+def south_moravia(hass):
+    """The tests run in Europe/Prague: sunset has to match (the default is San Diego)."""
+    hass.config.latitude, hass.config.longitude, hass.config.elevation = 48.93, 17.09, 180

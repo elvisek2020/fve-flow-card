@@ -14,11 +14,11 @@ import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_ON
+from homeassistant.const import STATE_ON, SUN_EVENT_SUNSET
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -26,6 +26,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.sun import get_astral_event_next
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -68,6 +69,7 @@ from .const import (
     SET_AUTO_CHARGING,
     SET_AUTO_COOLING,
     SET_CEILING,
+    SET_CHARGE_FROM_SUNSET,
     SET_CHARGE_POWER,
     SET_COOLING_OFF,
     SET_COOLING_ON,
@@ -119,6 +121,8 @@ MIN_START_KWH = 1.0
 #: Reserve hysteresis (%): a night without planned charging plans one only below
 #: reserve − this, so the plan does not flip 0 / 0.5 / 1 kWh every recompute.
 RESERVE_HYSTERESIS = 2.0
+#: Charging from sunset: the reserve still has to last until this evening time.
+RESERVE_UNTIL = time(21, 0)
 #: A learned charging power outside this range is not trusted (W).
 LEARNED_POWER_RANGE = (300.0, 10000.0)
 
@@ -129,7 +133,7 @@ class ManualCharge:
 
     target: float
     until: datetime
-    #: Charges only in night low-tariff windows (NT ∩ "charge from"–"charge until"),
+    #: Charges only in night low-tariff windows (NT ∩ night interval),
     #: pauses otherwise; ends at ``until`` (end of the nearest night) at the latest.
     low_tariff_only: bool = False
 
@@ -310,7 +314,15 @@ class IslandEnergyRuntime:
         self.settings[key] = value
         if key in (SET_COOLING_ON, SET_COOLING_OFF):
             self._cooling.cfg = self._cooling_cfg()
-        if key in (SET_CEILING, SET_MIN_SOC, SET_CHARGE_POWER, SET_RESERVE, SET_NIGHT_START, SET_NIGHT_END):
+        if key in (
+            SET_CEILING,
+            SET_MIN_SOC,
+            SET_CHARGE_POWER,
+            SET_RESERVE,
+            SET_NIGHT_START,
+            SET_NIGHT_END,
+            SET_CHARGE_FROM_SUNSET,
+        ):
             self._schedule_recompute(5)
         self._update_status()
         self._notify_listeners()
@@ -331,7 +343,10 @@ class IslandEnergyRuntime:
     def _cooling_cfg(self) -> CoolingConfig:
         return CoolingConfig(on_w=float(self.settings[SET_COOLING_ON]), off_w=float(self.settings[SET_COOLING_OFF]))
 
-    def _planner_cfg(self) -> PlannerConfig:
+    def _planner_cfg(self, today: date) -> PlannerConfig:
+        # Sunsets are resolved here, in the event loop: the plan runs in the executor.
+        horizon = (today + timedelta(days=i) for i in range(-1, 8))
+        fixed_start = hours_to_time(float(self.settings[SET_NIGHT_START]))
         return PlannerConfig(
             charge_power_w=self.charge_power_w,
             ceiling_pct=float(self.settings[SET_CEILING]),
@@ -339,8 +354,9 @@ class IslandEnergyRuntime:
             min_soc_pct=float(self.settings[SET_MIN_SOC]),
             min_charge_kwh=MIN_START_KWH,
             reserve_hysteresis_pct=RESERVE_HYSTERESIS,
-            night_start=hours_to_time(float(self.settings[SET_NIGHT_START])),
+            night_start=RESERVE_UNTIL if self.settings[SET_CHARGE_FROM_SUNSET] else fixed_start,
             night_end=hours_to_time(float(self.settings[SET_NIGHT_END])),
+            night_starts={d: self._night_start(d) for d in horizon},
         )
 
     # ------------------------------------------------------------------ data + plan
@@ -417,6 +433,7 @@ class IslandEnergyRuntime:
         )
         # Nights the previous plan charged keep charging down to a smaller need (hysteresis).
         held = frozenset(n.target_day for n in self.result.nights if n.needed_kwh > 0) if self.result else frozenset()
+        cfg = self._planner_cfg(today.date())
         result = await self.hass.async_add_executor_job(
             lambda: plan(
                 now=now,
@@ -428,7 +445,7 @@ class IslandEnergyRuntime:
                 days=days,
                 history=history,
                 nt=self.nt,
-                cfg=self._planner_cfg(),
+                cfg=cfg,
                 held=held,
             )
         )
@@ -499,15 +516,27 @@ class IslandEnergyRuntime:
             return None
         return any(w.start <= now < w.end for w in self.nt)
 
+    def _night_start(self, day: date) -> datetime:
+        """Start of the night interval on the evening of ``day``.
+
+        Sunset with "charge from sunset" on, otherwise the "charge from" time (also
+        when the sun does not set that day, in polar regions).
+        """
+        fixed = datetime.combine(day, hours_to_time(float(self.settings[SET_NIGHT_START])), self.tz)
+        if not self.settings[SET_CHARGE_FROM_SUNSET]:
+            return fixed
+        midnight = dt_util.as_utc(datetime.combine(day, time.min, self.tz))
+        sunset = get_astral_event_next(self.hass, SUN_EVENT_SUNSET, midnight).astimezone(self.tz)
+        return sunset if sunset.date() == day else fixed
+
     def _night_bounds_around(self, now: datetime) -> tuple[datetime, datetime]:
-        """Night interval ("charge from" – "charge until") that contains ``now`` or comes next."""
-        start_t = hours_to_time(float(self.settings[SET_NIGHT_START]))
+        """Night interval (see ``_night_start`` – "charge until") that contains ``now`` or comes next."""
         end_t = hours_to_time(float(self.settings[SET_NIGHT_END]))
         local = now.astimezone(self.tz)
         for offset in (-1, 0, 1):
             day = local.date() + timedelta(days=offset)
-            start = datetime.combine(day, start_t, self.tz)
-            end_day = day + timedelta(days=1) if start_t > end_t else day
+            start = self._night_start(day)
+            end_day = day + timedelta(days=1) if start.time() > end_t else day
             end = datetime.combine(end_day, end_t, self.tz)
             if now < end:
                 return start, end

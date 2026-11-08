@@ -5,6 +5,22 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.3.0 — 2026-11-08
+
+### ✨ Novinky
+
+- Nabíjení ze sítě smí začít od **západu slunce** místo pevných 21:00, pořád jen
+  v nízkém tarifu. Řídí to nový přepínač **Nabíjet od západu slunce**, výchozí
+  zapnutý; po vypnutí platí čas *Nabíjet ze sítě nejdřív od* jako dřív. Platí pro
+  plán i pro *Na 100 % v nízkém tarifu*, západ se počítá pro každý den podle
+  polohy z nastavení Home Assistantu. Konec se nemění (*Nabíjet ze sítě nejpozději
+  do*, 08:00).
+- Plán dál nabíjí co nejpozději. Večerní nízký tarif využije, jen když pozdější
+  čas nestačí. Kalendář **Plán nabíjení ze sítě** z nového začátku vychází.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant.
+
 ## v2.2.2 — 2026-11-07
 
 ### 🎨 Vzhled

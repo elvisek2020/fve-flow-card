@@ -139,13 +139,16 @@ automatické chlazení**).
   včetně ztrát měniče; hodiny s nabíjením ze sítě přes AC IN se berou z výstupu
   měniče, takže nabíjení ze sítě není ani výroba, ani odběr),
 - pro každou noc spočítá, kolik dobít, aby simulovaný SoC od konce noci až do
-  začátku další noci neklesl pod **rezervu** (výchozí 30 %); ze sítě nejvýš na
+  dalšího večera (21:00, případně *Nabíjet ze sítě nejdřív od*) neklesl pod
+  **rezervu** (výchozí 30 %); ze sítě nejvýš na
   **strop** (výchozí 90 %, jen limit — na 100 % baterii dotáhnou slunečné dny) a
   tak, aby SoC před nabíjením neklesl pod **minimum** (ochrana minima smí
   nabíjet i dřív, v jakémkoli NT),
-- nabíjí jen **v noci** — mezi *Nabíjet ze sítě nejdřív od* (21:00) a *nejpozději
-  do* (08:00), v oknech **nízkého tarifu** (ve všední dny tedy 21:15–07:15, o
-  víkendu do 08:15) a **co nejpozději**; denní NT okna se nepoužijí, takže se ze
+- nabíjí jen **v noci** — od **západu slunce** (přepínač *Nabíjet od západu
+  slunce*, výchozí zapnutý; západ pro každý den podle polohy z nastavení HA, po
+  vypnutí platí čas *Nabíjet ze sítě nejdřív od*, 21:00) do *Nabíjet ze sítě
+  nejpozději do* (08:00), v oknech **nízkého tarifu** a **co nejpozději**:
+  večerní NT využije, jen když pozdější čas nestačí; denní NT okna se nepoužijí, takže se ze
   sítě nenabíjí souběžně s výrobou; když jedné noci nestačí NT čas, dobije víc
   už noc předtím (až po strop); začne, až se na „teď“ shodnou dva přepočty plánu po sobě
   (jeden výkyv nespustí celou noc), a skončí, jakmile přepočítaný plán ze sítě už
@@ -171,7 +174,7 @@ tehdy, když ho sama zapnula — ruční zapnutí nebo nouzovou automatizaci nep
 **Vypnout nabíjení** (tlačítko, služba `stop_charging`) zastaví automatické nabíjení:
 v noci do konce aktuálního bloku nízkého tarifu (nejpozději do konce noci; další NT
 okno téže noci může plán dojet), v nočním vysokém tarifu do dalšího NT okna, ve dne
-do večerního začátku noci — vždy aspoň 10 min. **Nabít teď** jde spustit kdykoli.
+do začátku noci — vždy aspoň 10 min. **Nabít teď** jde spustit kdykoli.
 Do kdy platí, ukazuje atribut `suppressed_until` senzoru *Stav plánovače*.
 
 **Kalendář** *Plán nabíjení ze sítě* (`calendar.hybrid_energy_grid_charging_schedule`)
@@ -206,7 +209,7 @@ a DC výkonu) po 1 min, vypne pod **900 W** po 5 min, běží aspoň 10 min.
 **Entity:** kalendář *Plán nabíjení ze sítě*; senzory *Plán nabíjení ze sítě* (kWh na příští noc, okna, důvod),
 *Další nabíjení*, *Prognóza výdrže* (atribut `days` pro kartu), *Stav plánovače*;
 binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automatické
-nabíjení / chlazení*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
+nabíjení / chlazení*, *Nabíjet od západu slunce*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
 *Výkon nabíjení ze sítě (záloha)*, *Rezerva do další noci*, časy *Nabíjet ze sítě
 nejdřív od / nejpozději do*, *Chlazení zapnout nad /
 vypnout pod*; tlačítka *Nabít teď* (do stropu), *Nabít na 100 %* (hned), *Nabít na 100 % v nízkém

@@ -3,9 +3,9 @@
 Goal: a **reserve until the next night**. Each night the grid tops up only as
 much as the battery needs so that the simulated SoC (Solcast estimate minus the
 load profile) does not drop below the reserve from the end of the night window
-until the next night window starts. The grid charges only at night (between
-"charge from" and "charge until", intersected with the low-tariff (NT) windows),
-as late as possible, never above the AC IN ceiling, and keeps the SoC above the
+until the next evening. The grid charges only at night (from sunset or the
+"charge from" time until "charge until", intersected with the low-tariff (NT)
+windows), as late as possible, never above the AC IN ceiling, and keeps the SoC above the
 minimum before that (minimum protection may use any NT time). PV fills the rest
 during the day, so the battery is not topped up from the grid while PV could.
 
@@ -17,7 +17,7 @@ ceiling).
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -48,9 +48,13 @@ class PlannerConfig:
     #: one only below reserve − this; a night with charging keeps it down to half
     #: of ``min_charge_kwh`` (the plan does not flip 0 / 0.5 / 1 kWh every ¼ h).
     reserve_hysteresis_pct: float = 0.0
-    #: Night charging interval (local time; over midnight when start > end).
+    #: Night interval start on dates missing from ``night_starts`` (local time).
+    #: The reserve always has to last until this evening time.
     night_start: time = time(21, 0)
+    #: End of the night interval (local time; next day when the start is later).
     night_end: time = time(8, 0)
+    #: Start of the night interval per calendar date (e.g. sunset).
+    night_starts: Mapping[date, datetime] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -117,15 +121,26 @@ def schedule_latest(
 
 
 def night_bounds(day: ForecastDay, tz: tzinfo, cfg: PlannerConfig) -> tuple[datetime, datetime, datetime]:
-    """Night window before ``day`` and the start of the next one: (start, end, next start)."""
+    """Night window before ``day`` and the end of its reserve: (start, end, reserve end).
+
+    The window opens at sunset, but the reserve still has to last until the fixed
+    evening time: an earlier start only adds allowed charging time and must not
+    shorten the stretch the plan keeps the battery above the reserve for.
+    """
     d = day.start.astimezone(tz).date()
 
     def at(x: date, t: time) -> datetime:
         return datetime.combine(x, t, tz)
 
-    if cfg.night_start > cfg.night_end:  # over midnight (21:00 → 08:00)
-        return at(d - timedelta(days=1), cfg.night_start), at(d, cfg.night_end), at(d, cfg.night_start)
-    return at(d, cfg.night_start), at(d, cfg.night_end), at(d + timedelta(days=1), cfg.night_start)
+    def opens(x: date) -> datetime:
+        return cfg.night_starts.get(x) or at(x, cfg.night_start)
+
+    def reserve_end(x: date) -> datetime:
+        return max(opens(x), at(x, cfg.night_start))
+
+    if opens(d).astimezone(tz).time() > cfg.night_end:  # over midnight (sunset → 08:00)
+        return opens(d - timedelta(days=1)), at(d, cfg.night_end), reserve_end(d)
+    return opens(d), at(d, cfg.night_end), reserve_end(d + timedelta(days=1))
 
 
 def plan(
@@ -170,13 +185,13 @@ def plan(
     nights_days = [n for n in nights_days if n[2] > now and n[1] < until]
 
     def plan_night(
-        day: ForecastDay, ns: datetime, ne: datetime, next_ns: datetime, windows: list[ChargeWindow], boost: bool
+        day: ForecastDay, ns: datetime, ne: datetime, reserve_end: datetime, windows: list[ChargeWindow], boost: bool
     ) -> tuple[NightPlan, list[ChargeWindow], bool]:
         start_bound = max(now, ns)
         allowed = clip(nt if nt is not None else [ChargeWindow(start_bound, ne)], start_bound, ne)
         span_start = ne
         points = run(windows)
-        span = [p for p in points if span_start <= p.t <= next_ns]
+        span = [p for p in points if span_start <= p.t <= reserve_end]
         reserve_without = min((p.lo for p in span), default=100.0)
         soc_end = _soc_at(points, span_start)
         soc_end = soc_end if soc_end is not None else soc_now
@@ -204,7 +219,7 @@ def plan(
         time_short = False
 
         def span_min(trial: Sequence[SocPoint]) -> float:
-            return min((p.lo for p in trial if span_start <= p.t <= next_ns), default=100.0)
+            return min((p.lo for p in trial if span_start <= p.t <= reserve_end), default=100.0)
 
         if need_pct / 100 * cap >= min_kwh:
             # The simulation clamps the SoC at 0 %, so the deficit is refined against
@@ -276,8 +291,8 @@ def plan(
     while i < len(nights_days):
         steps += 1
         earlier = merge_keep_ceiling([w for ws in per_night[:i] for w in ws])
-        day, ns, ne, next_ns = nights_days[i]
-        night, new, time_short = plan_night(day, ns, ne, next_ns, earlier, i in boost)
+        day, ns, ne, reserve_end = nights_days[i]
+        night, new, time_short = plan_night(day, ns, ne, reserve_end, earlier, i in boost)
         del per_night[i:]
         del plans[i:]
         per_night.append(new)
@@ -291,9 +306,9 @@ def plan(
     windows = merge_keep_ceiling([w for ws in per_night for w in ws])
     points = run(windows)
     nights: list[NightPlan] = []
-    for night, new, (_, _, ne, next_ns) in zip(plans, per_night, nights_days, strict=True):
+    for night, new, (_, _, ne, reserve_end) in zip(plans, per_night, nights_days, strict=True):
         charged = [p for p in points if p.grid_kwh > 0 and any(w.start <= p.t < w.end for w in new)]
-        span = [p.lo for p in points if ne <= p.t <= next_ns]
+        span = [p.lo for p in points if ne <= p.t <= reserve_end]
         nights.append(
             replace(
                 night,

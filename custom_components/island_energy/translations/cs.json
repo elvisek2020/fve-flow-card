@@ -130,6 +130,9 @@
       },
       "auto_cooling": {
         "name": "Povolit automatické chlazení"
+      },
+      "charge_from_sunset": {
+        "name": "Nabíjet od západu slunce"
       }
     },
     "number": {
