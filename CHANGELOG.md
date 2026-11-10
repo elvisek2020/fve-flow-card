@@ -5,6 +5,19 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.3.1 — 2026-11-10
+
+### 🐛 Opravy
+
+- Tlačítka v potvrzovacím dialogu (např. **Jen v nízkém tarifu** v okně
+  *Nabít baterii na 100 %?*) mají zase celý spodní okraj. Na iPadu a při
+  zvětšení zobrazení 125 % se dřív skoro ztrácel.
+- Stejně opravený přepínač období v okně **Analýza** včetně rámečku kolem,
+  tlačítko **Zkusit znovu** a tlačítka ▲ ▼ ✕ u pater v editoru karty.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.3.0 — 2026-11-08
 
 ### ✨ Novinky

@@ -54,6 +54,8 @@ class FveFlowConfirmDialog extends HTMLElement {
           gap: 10px;
           margin: 0 0 10px;
           font-size: 16px;
+          /* Celé pixely: výška okna i poloha tlačítek bez zlomků pixelu. */
+          line-height: 22px;
           font-weight: 650;
           letter-spacing: 0.02em;
         }
@@ -79,9 +81,17 @@ class FveFlowConfirmDialog extends HTMLElement {
           padding: 0 22px 20px;
         }
         button {
-          padding: 9px 18px;
+          /* Pevná výška v celých pixelech: s výškou z písma (13,5 px → 35,6 px) padl
+             spodní okraj na iPadu a při škálování 125 % mezi pixely a skoro zmizel. */
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          height: 36px;
+          padding: 0 18px;
           font: inherit;
           font-size: 13.5px;
+          line-height: 1;
           font-weight: 650;
           letter-spacing: 0.02em;
           cursor: pointer;

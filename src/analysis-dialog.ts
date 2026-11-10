@@ -1161,6 +1161,8 @@ export class FveFlowAnalysisDialog extends LitElement {
       color: var(--secondary-text-color, #a8bbc6);
       font: inherit;
       font-size: 13px;
+      /* Celé pixely, ať orámování skupiny nepadne spodní hranou mezi pixely. */
+      line-height: 18px;
       font-weight: 600;
       cursor: pointer;
       background: transparent;
@@ -1590,6 +1592,7 @@ export class FveFlowAnalysisDialog extends LitElement {
       padding: 5px 10px;
       color: inherit;
       font: inherit;
+      line-height: 18px;
       cursor: pointer;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.2);

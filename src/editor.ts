@@ -665,7 +665,7 @@ export class FveFlowCardEditor extends LitElement {
       padding: 2px 8px;
       cursor: pointer;
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 16px;
     }
     .floor-header .move:disabled {
       opacity: 0.35;
