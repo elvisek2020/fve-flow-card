@@ -5,6 +5,28 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.4.0 — 2026-11-10
+
+### ✨ Novinky
+
+- Okno **Prognóza výdrže baterie** ukazuje u minulých tří dnů a u dneška
+  **skutečné nabíjení ze sítě** za kalendářní den 0:00–24:00, dnes od půlnoci:
+  - **AC IN od / do**: SoC a čas prvního začátku a posledního konce nabíjení
+    ze sítě v tom dni. Nabíjení přes půlnoc končí ve 24:00 a další den začíná
+    v 0:00.
+  - **Ze sítě**: naměřené kWh přes AC IN včetně průchodu do domu a doba
+    nabíjení. V bublině jsou jednotlivé úseky a rozpad nabíječ / průchod.
+- Hodnoty jsou ze stejných čítačů MultiPlusu jako *Celkem dnes ze sítě*,
+  uložené ve statistikách Home Assistantu, takže přečkají restart. Nulování
+  čítačů po restartu měniče výsledek nezkreslí a nesmyslné skoky čítače se
+  nahradí výpočtem z příkonu AC IN.
+- U dneška: když se právě nabíjí, ukazuje sloupec *do* aktuální SoC a „teď“.
+  Když ráno ještě zbývá naplánované nabíjení, je pod kWh „+ X kWh plán“.
+- Popisek pod tabulkou rozlišuje plán a skutečnost.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.3.2 — 2026-11-10
 
 ### 🐛 Opravy

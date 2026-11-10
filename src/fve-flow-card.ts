@@ -822,7 +822,12 @@ export class FveFlowCard extends LitElement {
   private _openBatteryForecast(): void {
     const planner = this._planner();
     if (!planner) return;
-    openForecastDialog({ getHass: () => this.hass, planner });
+    openForecastDialog({
+      getHass: () => this.hass,
+      planner,
+      acIn: this._config?.ac_in,
+      soc: this._config?.battery?.soc,
+    });
   }
 
   /**

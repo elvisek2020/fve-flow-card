@@ -46,7 +46,10 @@ Karta:
   zapulzuje její barvou (nejvýš zhruba jednou za 5 s, při vypnuté animaci ne)
 - Aktivní fáze (> 10 W) mají výraznější okraj chipu barvou fáze / FVE
 - Prognóza výdrže a plán nabíjení ze sítě (tlačítko PROGNÓZA) a blok
-  **Nabíjení ze sítě** pod baterií s ovládáním — data z integrace
+  **Nabíjení ze sítě** pod baterií s ovládáním — data z integrace. U minulých
+  dnů a dneška ukazuje tabulka skutečnost za kalendářní den: kolik kWh přišlo
+  ze sítě přes AC IN (čítače MultiPlusu ze statistik, `ac_in.energy_*`) a kdy
+  se nabíjelo
 - Okno **Analýza** (tlačítko pod měničem): tok energie do pater, FVE vs síť,
   výroba vs predikce Solcast s heatmapou po hodinách, DC bilance MPPT ·
   baterie · střídač, baterie vs. spotřeba a zatížení fází pro dimenzování

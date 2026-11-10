@@ -1,26 +1,27 @@
-import type { HomeAssistant } from './types';
+import type { AcInConfig, HomeAssistant } from './types';
 import { plannerDays, type LoadSource, type PlannerDay, type PlannerEntities } from './planner';
+import { fetchGridActual, GRID_ACTIVE_W, localDate, type GridActualDay } from './grid-actual';
 import { formatEnergy } from './utils';
 
 export interface ForecastDialogOptions {
   /** Aktuální hass (dialog se obnovuje, dokud je otevřený). */
   getHass: () => HomeAssistant | undefined;
   planner: PlannerEntities;
+  /** AC IN z konfigurace karty: skutečné nabíjení ze sítě u minulých dnů a dneška. */
+  acIn?: AcInConfig;
+  /** SoC baterie (%) pro skutečné AC IN od / do. */
+  soc?: string;
 }
 
 const DIALOG_TAG = 'fve-flow-forecast-dialog';
 const REFRESH_MS = 5000;
+/** Skutečnost ze statistik stačí obnovit jednou za minutu (5min řádky). */
+const ACTUAL_REFRESH_MS = 60000;
 
 const nf0 = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 });
 const fmtTime = new Intl.DateTimeFormat('cs-CZ', { hour: 'numeric', minute: '2-digit' });
 const fmtDay = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
 const fmtWeekday = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short' });
-
-/** Místní datum YYYY-MM-DD (stejný tvar jako `PlannerDay.date`). */
-function localDate(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 const LOAD_TEXT: Record<LoadSource, string> = {
   dc:
@@ -84,18 +85,55 @@ function gridEdgeCell(day: PlannerDay, edge: 'start' | 'end'): string {
   return soc == null ? `<small>${time}</small>` : `${escapeHtml(formatSoc(soc))}<small>${time}</small>`;
 }
 
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+}
+
 /** Ze sítě: kWh a pod tím, jak dlouho se nabíjí (okna v bublině). */
 function gridAmountCell(day: PlannerDay): string {
   if (!hasGrid(day)) return MUTED_DASH;
   let minutes = 0;
   for (const w of day.grid_windows) minutes += (Date.parse(w.end) - Date.parse(w.start)) / 60000;
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  const dur = h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
   const title = day.grid_windows
     .map((w) => `${fmtTime.format(Date.parse(w.start))}–${fmtTime.format(Date.parse(w.end))}`)
     .join(', ');
-  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(day.grid_kwh))}<small class="dur">${dur}</small></span>`;
+  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(day.grid_kwh))}<small class="dur">${formatDuration(minutes)}</small></span>`;
+}
+
+/** Čas skutečného úseku; konec o půlnoci (nabíjení pokračuje do dalšího dne) jako 24:00. */
+function actualTime(t: number, edge: 'start' | 'end'): string {
+  const d = new Date(t);
+  return edge === 'end' && d.getHours() === 0 && d.getMinutes() === 0 ? '24:00' : fmtTime.format(t);
+}
+
+/** Skutečné AC IN od / do: SoC a čas prvního začátku / posledního konce nabíjení ze sítě ve dni. */
+function actualEdgeCell(a: GridActualDay | undefined, edge: 'start' | 'end'): string {
+  if (!a?.windows.length) return MUTED_DASH;
+  const t = edge === 'start' ? a.windows[0].start : a.windows[a.windows.length - 1].end;
+  const soc = edge === 'start' ? a.startSoc : a.endSoc;
+  const time = escapeHtml(actualTime(t, edge));
+  return soc == null ? `<small>${time}</small>` : `${escapeHtml(formatSoc(soc))}<small>${time}</small>`;
+}
+
+/** Skutečně ze sítě: naměřené kWh a doba nabíjení, úseky a rozpad v bublině. */
+function actualAmountCell(a: GridActualDay | undefined, small?: string): string {
+  if (!a || (!a.windows.length && a.kwh < 0.05)) return `<span class="muted">${escapeHtml(formatEnergy(0))}</span>`;
+  let minutes = 0;
+  for (const w of a.windows) minutes += (w.end - w.start) / 60000;
+  const title = [
+    a.windows.map((w) => `${actualTime(w.start, 'start')}–${actualTime(w.end, 'end')}`).join(', '),
+    a.charger != null && a.pass != null
+      ? `nabíječ ${formatEnergy(a.charger)} · průchod do domu ${formatEnergy(a.pass)}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const sub = small ?? (minutes ? formatDuration(minutes) : '');
+  return `<span title="${escapeHtml(title)}">${escapeHtml(formatEnergy(a.kwh))}${
+    sub ? `<small class="dur">${escapeHtml(sub)}</small>` : ''
+  }</span>`;
 }
 
 class FveFlowForecastDialog extends HTMLElement {
@@ -105,6 +143,10 @@ class FveFlowForecastDialog extends HTMLElement {
   private _options?: ForecastDialogOptions;
   private _timer?: number;
   private _stamp = '';
+  /** Skutečné nabíjení ze sítě po dnech (null = AC IN není nastavené nebo ještě nenačteno). */
+  private _actual: Map<string, GridActualDay> | null = null;
+  private _actualAt = 0;
+  private _actualBusy = false;
 
   public constructor() {
     super();
@@ -327,9 +369,9 @@ class FveFlowForecastDialog extends HTMLElement {
                 <th class="col-load">Spotřeba</th>
                 <th title="Nejnižší SoC, než se baterie začne nabíjet">Ráno</th>
                 <th title="Nejvyšší SoC dne, u 100 % čas nabití">Max</th>
-                <th title="SoC a čas, kdy noční nabíjení ze sítě (AC IN) začne"><span class="m-hide">AC IN </span>od</th>
-                <th title="SoC a čas, kdy nabíjení ze sítě skončí"><span class="m-hide">AC IN </span>do</th>
-                <th class="col-grid" title="Kolik se nabije ze sítě a jak dlouho (okna v bublině)">Ze sítě</th>
+                <th title="SoC a čas, kdy nabíjení ze sítě (AC IN) začne — plán, u minulých dnů a dneška skutečnost"><span class="m-hide">AC IN </span>od</th>
+                <th title="SoC a čas, kdy nabíjení ze sítě skončí — plán, u minulých dnů a dneška skutečnost"><span class="m-hide">AC IN </span>do</th>
+                <th class="col-grid" title="Kolik kWh ze sítě a jak dlouho (úseky v bublině) — plán, u minulých dnů a dneška naměřeno">Ze sítě</th>
                 <th></th>
               </tr>
             </thead>
@@ -357,7 +399,58 @@ class FveFlowForecastDialog extends HTMLElement {
     this._options = options;
     this._render(true);
     this._dialog.showModal();
-    this._timer = window.setInterval(() => this._render(false), REFRESH_MS);
+    void this._loadActual();
+    this._timer = window.setInterval(() => {
+      if (Date.now() - this._actualAt >= ACTUAL_REFRESH_MS) void this._loadActual();
+      this._render(false);
+    }, REFRESH_MS);
+  }
+
+  /** Naměřené kWh ze sítě za minulé dny a dnešek ze statistik recorderu. */
+  private async _loadActual(): Promise<void> {
+    const o = this._options;
+    const hass = o?.getHass();
+    const ac = o?.acIn;
+    if (!hass || !ac || this._actualBusy) return;
+    if (!ac.energy_to_charger && !ac.energy_passthrough && !ac.power) return;
+    this._actualBusy = true;
+    this._actualAt = Date.now();
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - HISTORY_DAYS);
+    try {
+      this._actual = await fetchGridActual(hass, ac, o?.soc, start.getTime(), Date.now());
+      this._render(true);
+    } catch {
+      // Statistiky nejsou k dispozici: zůstane předchozí stav (nebo jen plán).
+    } finally {
+      this._actualBusy = false;
+    }
+  }
+
+  /** Buňky AC IN od / do / Ze sítě: u minulých dnů a dneška skutečnost, jinak plán. */
+  private _gridCells(hass: HomeAssistant, day: PlannerDay): [string, string, string] {
+    const plan: [string, string, string] = [gridEdgeCell(day, 'start'), gridEdgeCell(day, 'end'), gridAmountCell(day)];
+    const actual = this._actual;
+    if (!actual || (day.kind !== 'past' && day.kind !== 'today')) return plan;
+    const a = actual.get(day.date);
+    if (day.kind === 'past') return [actualEdgeCell(a, 'start'), actualEdgeCell(a, 'end'), actualAmountCell(a)];
+    // Dnes: naměřeno od půlnoci; zbytek nočního plánu (ráno) dál jako plán.
+    const last = day.grid_windows[day.grid_windows.length - 1];
+    const planLeft = hasGrid(day) && !!last && Date.parse(last.end) > Date.now();
+    if (!a?.windows.length) return planLeft ? plan : [MUTED_DASH, MUTED_DASH, actualAmountCell(a)];
+    const num = (id?: string) => {
+      const v = id ? parseFloat(hass.states[id]?.state ?? '') : NaN;
+      return Number.isFinite(v) ? v : null;
+    };
+    const acW = num(this._options?.acIn?.power);
+    const soc = num(this._options?.soc);
+    const end = planLeft
+      ? plan[1]
+      : acW != null && acW > GRID_ACTIVE_W
+        ? `${soc == null ? '' : escapeHtml(formatSoc(soc))}<small>teď</small>`
+        : actualEdgeCell(a, 'end');
+    return [actualEdgeCell(a, 'start'), end, actualAmountCell(a, planLeft ? `+ ${formatEnergy(day.grid_kwh)} plán` : undefined)];
   }
 
   private _render(force: boolean): void {
@@ -402,15 +495,16 @@ class FveFlowForecastDialog extends HTMLElement {
           : `${escapeHtml(formatSoc(day.full_at != null ? 100 : day.peak))}<small>${escapeHtml(
               formatAt(day.full_at ?? day.peak_at),
             )}</small>`;
+      const [gridStart, gridEnd, gridAmount] = this._gridCells(hass, day);
       tr.innerHTML = `
         <td>${escapeHtml(dayLabel(day))}</td>
         <td class="${day.pv_kwh == null ? 'muted' : ''}">${escapeHtml(kwh(day.pv_kwh))}</td>
         <td class="col-load ${day.load_kwh == null ? 'muted' : ''}">${escapeHtml(kwh(day.load_kwh))}</td>
         <td>${trough}</td>
         <td>${max}</td>
-        <td>${gridEdgeCell(day, 'start')}</td>
-        <td>${gridEdgeCell(day, 'end')}</td>
-        <td class="col-grid">${gridAmountCell(day)}</td>
+        <td>${gridStart}</td>
+        <td>${gridEnd}</td>
+        <td class="col-grid">${gridAmount}</td>
         <td>${state.cls ? `<span class="dot ${state.cls}" title="${state.title}"></span>` : ''}</td>
       `;
       this._tbody.append(tr);
@@ -422,7 +516,12 @@ class FveFlowForecastDialog extends HTMLElement {
         'Prognózu a plán nabíjení počítá integrace FVE – energie a nabíjení (EK) po 15 minutách: výroba podle Solcastu minus spotřeba.',
         'Ráno = nejnižší SoC, než začnou nabíjet panely (po případném nočním nabíjení ze sítě).',
         'Max = nejvyšší SoC dne (u 100 % čas nabití).',
-        'AC IN od / do = SoC a čas, kdy noční nabíjení ze sítě před daným dnem začne a skončí; Ze sítě = kolik kWh a jak dlouho. Dobíjí se jen rezerva do další noci, zbytek dobijí panely.',
+        'Plán: AC IN od / do = SoC a čas, kdy noční nabíjení ze sítě před daným dnem začne a skončí; Ze sítě = kolik kWh a jak dlouho. Dobíjí se jen rezerva do další noci, zbytek dobijí panely.',
+        ...(this._actual
+          ? [
+              'Minulé dny a Dnes = skutečnost za kalendářní den 0:00–24:00 (dnes od půlnoci do teď): AC IN od / do = první začátek a poslední konec nabíjení ze sítě, Ze sítě = naměřená energie přes AC IN včetně průchodu do domu (rozpad a úseky v bublině).',
+            ]
+          : []),
         LOAD_TEXT[source] ?? LOAD_TEXT.dc,
       ].map((text) => {
         const line = document.createElement('p');
