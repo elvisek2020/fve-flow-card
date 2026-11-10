@@ -5,6 +5,17 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.3.2 — 2026-11-10
+
+### 🐛 Opravy
+
+- Tlačítko **Jen v nízkém tarifu** v okně *Nabít baterii na 100 %?* má celý
+  spodní okraj i při najetí myší. Zvýraznění tlačítek v tomhle okně teď mění
+  jen barvy, dřív okraj při najetí myší mizel.
+
+> [!TIP]
+> Po aktualizaci obnov stránku bez cache.
+
 ## v2.3.1 — 2026-11-10
 
 ### 🐛 Opravy

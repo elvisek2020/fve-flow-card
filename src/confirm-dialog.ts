@@ -115,9 +115,13 @@ class FveFlowConfirmDialog extends HTMLElement {
         .secondary[hidden] {
           display: none;
         }
+        /* Zvýraznění jen barvami, ne přes filter: filter kreslí tlačítko do vlastní
+           vrstvy a když dialog stojí na půl pixelu, ořízne spodní řádek okraje. */
         .secondary:hover,
         .secondary:focus-visible {
-          filter: brightness(1.15);
+          color: color-mix(in srgb, var(--dialog-accent) 80%, #fff);
+          background: color-mix(in srgb, var(--dialog-accent) 18%, transparent);
+          border-color: color-mix(in srgb, var(--dialog-accent) 85%, transparent);
           outline: none;
         }
         .confirm {
@@ -128,7 +132,8 @@ class FveFlowConfirmDialog extends HTMLElement {
         }
         .confirm:hover,
         .confirm:focus-visible {
-          filter: brightness(1.12);
+          background: color-mix(in srgb, var(--dialog-accent) 85%, #fff);
+          border-color: color-mix(in srgb, var(--dialog-accent) 85%, #fff);
           outline: none;
         }
       </style>
