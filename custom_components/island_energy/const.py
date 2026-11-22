@@ -33,6 +33,10 @@ CONF_FAN_SWITCH: Final = "fan_switch"
 CONF_DAILY_LOAD: Final = "daily_load"  # fallback energy (kWh/day)
 CONF_HDO_SENSOR: Final = "hdo_sensor"
 CONF_NOTIFY: Final = "notify_service"  # e.g. "notify.mobile_app_phone"
+CONF_CELL_V_MAX: Final = "cell_voltage_max"  # highest cell voltage (V or mV)
+CONF_CELL_V_MIN: Final = "cell_voltage_min"  # lowest cell voltage (V or mV)
+#: BMS asks for a full charge (Pylontech FullChargeRequest): on / 1 = requested.
+CONF_FULL_REQUEST: Final = "full_charge_request"
 CONF_SOLCAST: Final = (
     "solcast_today",
     "solcast_tomorrow",
@@ -55,6 +59,10 @@ SET_COOLING_OFF: Final = "cooling_off"
 SET_AUTO_CHARGING: Final = "auto_charging"
 SET_AUTO_COOLING: Final = "auto_cooling"
 SET_CHARGE_FROM_SUNSET: Final = "charge_from_sunset"
+#: Manual charge to 100 %: keep AC IN on this long after SoC 100 (min, 0 = off).
+SET_BALANCE_MINUTES: Final = "balance_minutes"
+#: …and end the hold early once the cell spread max − min drops to this (mV, 0 = off).
+SET_BALANCE_DELTA: Final = "balance_delta"
 
 DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_CEILING: 90.0,
@@ -68,6 +76,8 @@ DEFAULT_SETTINGS: Final[dict[str, float | bool]] = {
     SET_AUTO_CHARGING: False,
     SET_AUTO_COOLING: False,
     SET_CHARGE_FROM_SUNSET: True,
+    SET_BALANCE_MINUTES: 60.0,
+    SET_BALANCE_DELTA: 0.0,
 }
 
 #: Stable English object ids (``<domain>.hybrid_energy_<id>``) — the card finds the
@@ -91,6 +101,8 @@ OBJECT_IDS: Final[dict[str, str]] = {
     SET_NIGHT_END: "night_charge_until",
     SET_COOLING_ON: "cooling_on_above",
     SET_COOLING_OFF: "cooling_off_below",
+    SET_BALANCE_MINUTES: "balancing_hold",
+    SET_BALANCE_DELTA: "balancing_end_below",
     "charge_now": "charge_now",
     "charge_full": "charge_full",
     "charge_full_low_tariff": "charge_full_low_tariff",

@@ -5,6 +5,36 @@ text vydání na GitHubu — a ten Home Assistant / HACS ukazuje v okně aktuali
 
 Nejnovější verze je nahoře.
 
+## v2.5.0 — 2026-11-22
+
+### ✨ Novinky
+
+- **Balancování článků po nabití na 100 %:** ruční nabíjení s cílem 100 %
+  (tlačítka *Nabít na 100 %*, dialog *Nabít teď*, služba `charge_now`) po dosažení
+  SoC 100 % nevypne AC IN hned. Nechá ho zapnutý ještě 60 min, ať BMS vyrovná
+  články.
+  - Délku nastavíš v *Balancování po nabití na 100 %*, 0 prodlevu vypne.
+  - S novými volitelnými entitami *Maximální / minimální napětí článku* jde
+    balancování ukončit dřív pod zadaným rozdílem článků (*Ukončit balancování pod
+    rozdílem článků*, mV).
+  - Stav plánovače je mezitím **Balancování článků**. Karta ukazuje zbývající čas
+    a rozdíl článků.
+  - Na konci přijde záznam do logbooku a notifikace s rozdílem článků v mV.
+  - Prodleva končí i koncem nízkého tarifu (u *Jen v nízkém tarifu*), ráno,
+    tlačítkem *Vypnout nabíjení* nebo poruchou bez napětí. Kalendář plánu nabíjení
+    ji počítá do konce nabíjení.
+- **Ruční nabíjení na zvolený cíl:** dialog *Nabít teď* v kartě nabízí cíl **50 /
+  80 / 100 %**. Cíle pod aktuálním SoC jsou zašedlé. Pro dashboard stačí služba
+  `island_energy.charge_now` s `target_soc` (příklad dlaždice je v README).
+- **Požadavek BMS na plné nabití:** volitelná entita *Požadavek BMS na plné
+  nabití* (`on` / `1`, např. Pylontech FullChargeRequest). S povoleným
+  automatickým nabíjením naplánuje nabití na 100 % v nejbližším nočním nízkém
+  tarifu včetně balancování. Na jeden požadavek odpoví jednou.
+
+> [!TIP]
+> Po aktualizaci restartuj Home Assistant a obnov stránku bez cache. Entity
+> článků a požadavku BMS doplníš v možnostech integrace.
+
 ## v2.4.0 — 2026-11-10
 
 ### ✨ Novinky

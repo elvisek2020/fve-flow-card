@@ -25,11 +25,11 @@ import {
   iconSolarPanel,
   iconSun,
 } from './icons';
-import { openChoiceDialog, openConfirmDialog } from './confirm-dialog';
+import { openConfirmDialog, openValueDialog } from './confirm-dialog';
 import { openAnalysisDialog, type FveFlowAnalysisDialog } from './analysis-dialog';
 import { C, FLOOR_DOTS, NEUTRAL } from './palette';
 import { openForecastDialog } from './forecast-dialog';
-import { findPlanner, plannerDays, plannerMinSoc, type PlannerEntities } from './planner';
+import { findPlanner, PLANNER_DOMAIN, plannerDays, plannerMinSoc, type PlannerEntities } from './planner';
 import { fetchStats } from './analysis-stats';
 import {
   capacityToKwh,
@@ -50,6 +50,9 @@ import { openHistoryDialog, type HistorySeries } from './history-dialog';
 import { fetchHistory, renderSparkline, type HistoryPoint } from './sparkline';
 import './editor';
 import './fve-flow-mini-card';
+
+/** Cíle ručního nabíjení ze sítě v dialogu Nabít teď (SoC %). */
+const CHARGE_TARGETS = [50, 80, 100];
 
 const CARD_VERSION = '__CARD_VERSION__';
 
@@ -650,6 +653,7 @@ export class FveFlowCard extends LitElement {
       (p.charging ? hass.states[p.charging]?.state === 'on' : false) ||
       status === 'charging' ||
       status === 'manual' ||
+      status === 'balancing' ||
       status === 'external';
     const plan = p.plan ? hass.states[p.plan] : undefined;
     const hm = (iso: string) => new Date(iso).toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' });
@@ -661,6 +665,7 @@ export class FveFlowCard extends LitElement {
       charging: 'Nabíjí podle plánu',
       manual: 'Ruční nabíjení',
       manual_waiting: 'Na 100 % v nízkém tarifu',
+      balancing: 'Balancování článků',
       external: 'Zapnuto mimo plánovač',
       skipped: 'Dnes v noci ne',
       fault: 'Bez napětí na AC IN',
@@ -672,24 +677,47 @@ export class FveFlowCard extends LitElement {
     const acInW = hasNum(hass, this._config?.ac_in?.power) ? Math.max(0, toNum(hass, this._config!.ac_in!.power)) : 0;
     // Běžící nabíjení (plán i ručně): cíl, odhad konce a kolik ještě nabije.
     const session = charging
-      ? (plan?.attributes.session as { target?: number; remaining_kwh?: number; eta?: string } | null | undefined)
+      ? (plan?.attributes.session as
+          | {
+              target?: number;
+              remaining_kwh?: number;
+              eta?: string;
+              balancing?: boolean;
+              balance_until?: string;
+              cell_delta_mv?: number | null;
+              by_bms?: boolean;
+            }
+          | null
+          | undefined)
       : undefined;
-    // „Na 100 % jen v nízkém tarifu“ čeká na noční okno NT.
+    // Ruční nabíjení „jen v nízkém tarifu“ čeká na noční okno NT.
     const waiting = status === 'manual_waiting';
     const waitInfo = waiting
-      ? (plan?.attributes.session as { target?: number; start?: string | null } | null | undefined)
+      ? (plan?.attributes.session as
+          | { target?: number; start?: string | null; balance_minutes?: number; by_bms?: boolean }
+          | null
+          | undefined)
       : undefined;
+    const waitTarget = Math.round(waitInfo?.target ?? 100);
+    // Plné nabití na žádost BMS (FullChargeRequest), ne ruční.
+    const byBms = (waiting ? waitInfo?.by_bms : session?.by_bms) && status !== 'balancing';
     const lines: string[] = waiting
       ? [
           waitInfo?.start ? `Začne ${this._dayTime(waitInfo.start)}` : 'Čeká na noční nízký tarif',
-          `Do ${Math.round(waitInfo?.target ?? 100)} %`,
+          `Do ${waitTarget} %${waitInfo?.balance_minutes ? ` + ${waitInfo.balance_minutes} min balancování` : ''}`,
         ]
-      : session?.target != null
+      : session?.balancing && session.balance_until
         ? [
-            `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
-            ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
+            // Po nabití na 100 % drží AC IN zapnutý, ať BMS vyrovná články.
+            `Zbývá ${Math.max(0, Math.ceil((Date.parse(session.balance_until) - Date.now()) / 60000))} min, do ${hm(session.balance_until)}`,
+            session.cell_delta_mv != null ? `Rozdíl článků ${Math.round(session.cell_delta_mv)} mV` : 'Baterie nabitá na 100 %',
           ]
-        : this._nextChargeLines(p);
+        : session?.target != null
+          ? [
+              `Do ${Math.round(session.target)} %${session.eta ? `, cca do ${hm(session.eta)}` : ''}`,
+              ...(session.remaining_kwh != null ? [`Nabije ještě ${formatEnergy(session.remaining_kwh)}`] : []),
+            ]
+          : this._nextChargeLines(p);
     // Příkon ze sítě jen když AC IN běží.
     const showAcIn = !!this._config?.ac_in?.power && (charging || acInW >= this._flowBase().deadband);
     const acInY = r.y + 90 + lines.length * 24;
@@ -719,32 +747,46 @@ export class FveFlowCard extends LitElement {
         <text class="ctrl-label" x="${x + w / 2}" y="${by + 18.5}" text-anchor="middle"
           style="fill: ${on ? '#e6f4fa' : 'rgba(226,240,248,0.75)'}">${label}</text>
       </g>`;
-    // „Nabít teď“: dialog s volbou Hned (na 100 %, i ve VT) / Jen v nízkém tarifu (noční okna NT).
-    // Automat zůstává zapnutý a po dosažení 100 % pokračuje podle plánu.
-    const chargeFull = async (e: Event) => {
+    // „Nabít teď“: dialog s cílem 50 / 80 / 100 % a volbou Hned (i ve VT) / Jen v nízkém
+    // tarifu (noční okna NT). Automat zůstává zapnutý a po dosažení cíle pokračuje podle plánu.
+    const chargeTo = async (e: Event) => {
       e.stopPropagation();
-      const lowTariff = !!p.chargeFullLowTariff;
-      const choice = await openChoiceDialog({
-        title: 'Nabít baterii na 100 %?',
-        message: lowTariff
-          ? 'Hned: nabíjení ze sítě začne hned, i ve vysokém tarifu. ' +
-            'Jen v nízkém tarifu: nabíjí jen v nočních oknech nízkého tarifu, jinak čeká; skončí nejpozději ráno. ' +
-            'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.'
-          : 'Nabíjení ze sítě začne hned, i ve vysokém tarifu, a skončí na 100 %. ' +
-            'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.',
-        confirmLabel: lowTariff ? 'Hned' : 'Nabít na 100 %',
-        secondaryLabel: lowTariff ? 'Jen v nízkém tarifu' : undefined,
+      const socId = this._config?.battery?.soc;
+      const soc = hasNum(hass, socId) ? toNum(hass, socId) : null;
+      const hold = Number(p.status ? hass.states[p.status]?.attributes.balance_minutes : NaN);
+      const base =
+        'Hned: nabíjení ze sítě začne hned, i ve vysokém tarifu. ' +
+        'Jen v nízkém tarifu: nabíjí jen v nočních oknech nízkého tarifu, jinak čeká; skončí nejpozději ráno. ' +
+        'Automatický režim zůstává zapnutý a pak pokračuje podle plánu.';
+      const { choice, value } = await openValueDialog({
+        title: 'Nabít baterii ze sítě',
+        message: base,
+        // Cíl pod aktuálním SoC nemá smysl; 100 % jde vždy (dobití a balancování článků).
+        values: CHARGE_TARGETS.map((v) => {
+          const below = v < 100 && soc != null && soc >= v;
+          return { value: v, label: `${v} %`, disabled: below, title: below ? `Baterie už má ${Math.round(soc!)} %` : undefined };
+        }),
+        value: 100,
+        describe: (v) =>
+          v >= 100 && hold > 0
+            ? `${base} Po nabití na 100 % zůstane AC IN ještě ${hold} min zapnutý, ať BMS vyrovná články.`
+            : base,
+        confirmLabel: 'Hned',
+        secondaryLabel: 'Jen v nízkém tarifu',
         accent: C.grid,
       });
-      const target = choice === 'primary' ? p.chargeFull : choice === 'secondary' ? p.chargeFullLowTariff : undefined;
-      if (target) void hass.callService?.('button', 'press', { entity_id: target });
+      if (!choice || value == null) return;
+      void hass.callService?.(PLANNER_DOMAIN, 'charge_now', {
+        target_soc: value,
+        low_tariff_only: choice === 'secondary',
+      });
     };
     return svg`
       ${this._panel(r, accent, charging || fault)}
       <text class="node-title" x="${r.x + 20}" y="${r.y + 28}">Nabíjení ze sítě</text>
       ${iconPylon(r.x + 20, r.y + 44, 44, fault ? C.crit : charging ? C.grid : 'rgba(148,170,190,0.55)')}
       <text class="medium" x="${r.x + 80}" y="${r.y + 66}" style="fill: ${fault ? C.crit : charging ? C.grid : '#e6f4fa'}">
-        ${status ? STATUS[status] ?? status : '—'}
+        ${byBms ? 'Plné nabití (BMS)' : waiting ? `Na ${waitTarget} % v nízkém tarifu` : status ? STATUS[status] ?? status : '—'}
       </text>
       ${lines.map((t, i) => svg`<text class="small" x="${r.x + 80}" y="${r.y + 90 + i * 24}">${t}</text>`)}
       ${showAcIn
@@ -768,14 +810,20 @@ export class FveFlowCard extends LitElement {
         ? btn(
             r.x + 20,
             // Plán po přerušení pokračuje dalším oknem, ruční nabíjení končí.
-            status === 'charging' ? 'Přerušit nabíjení podle plánu' : status === 'manual' ? 'Vypnout ruční nabíjení' : 'Vypnout nabíjení',
+            status === 'charging'
+              ? 'Přerušit nabíjení podle plánu'
+              : status === 'manual'
+                ? 'Vypnout ruční nabíjení'
+                : status === 'balancing'
+                  ? 'Ukončit balancování'
+                  : 'Vypnout nabíjení',
             true,
             C.grid,
             press(p.stopCharging),
           )
         : waiting
-          ? btn(r.x + 20, 'Zrušit nabíjení na 100 %', false, C.grid, press(p.stopCharging))
-          : btn(r.x + 20, 'Nabít teď', false, C.grid, p.chargeFull ? chargeFull : press(p.chargeNow))}
+          ? btn(r.x + 20, `Zrušit nabíjení na ${waitTarget} %`, false, C.grid, press(p.stopCharging))
+          : btn(r.x + 20, 'Nabít teď', false, C.grid, chargeTo)}
     `;
   }
 

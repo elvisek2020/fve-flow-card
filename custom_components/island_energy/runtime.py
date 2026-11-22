@@ -37,11 +37,14 @@ from .const import (
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
     CONF_CAPACITY,
+    CONF_CELL_V_MAX,
+    CONF_CELL_V_MIN,
     CONF_DAILY_LOAD,
     CONF_DC_CURRENT,
     CONF_DC_POWER,
     CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
+    CONF_FULL_REQUEST,
     CONF_HDO_SENSOR,
     CONF_IGNORE_AC_IN,
     CONF_INVERTER_POWER,
@@ -68,6 +71,8 @@ from .const import (
     RELEASE_TIMEOUT,
     SET_AUTO_CHARGING,
     SET_AUTO_COOLING,
+    SET_BALANCE_DELTA,
+    SET_BALANCE_MINUTES,
     SET_CEILING,
     SET_CHARGE_FROM_SUNSET,
     SET_CHARGE_POWER,
@@ -136,6 +141,14 @@ class ManualCharge:
     #: Charges only in night low-tariff windows (NT ∩ night interval),
     #: pauses otherwise; ends at ``until`` (end of the nearest night) at the latest.
     low_tariff_only: bool = False
+    #: Charge to 100 %: AC IN stays on from ``balance_from`` to ``balance_until``
+    #: after the SoC reached 100 % so the BMS can balance the cells.
+    balance_from: datetime | None = None
+    balance_until: datetime | None = None
+    #: Cell spread max − min when the hold started (mV), for the final log.
+    balance_start_mv: float | None = None
+    #: Started by the BMS full charge request, not by a person.
+    by_bms: bool = False
 
 
 @dataclass(frozen=True)
@@ -200,6 +213,9 @@ class IslandEnergyRuntime:
         #: it is not "switched on externally".
         self._off_pending_until: datetime | None = None
         self._prev_windows: list[ChargeWindow] | None = None
+        #: The BMS full charge request now on was already answered (a charge was
+        #: planned): no new one until the BMS clears the request.
+        self.full_request_handled = False
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -255,7 +271,16 @@ class IslandEnergyRuntime:
             target = raw.get("target")
             if not until or until <= now or target is None:
                 return None
-            return ManualCharge(float(target), until, bool(raw.get("low_tariff_only")))
+            start_mv = raw.get("balance_start_mv")
+            return ManualCharge(
+                float(target),
+                until,
+                bool(raw.get("low_tariff_only")),
+                balance_from=dt_util.parse_datetime(raw.get("balance_from") or ""),
+                balance_until=dt_util.parse_datetime(raw.get("balance_until") or ""),
+                balance_start_mv=float(start_mv) if start_mv is not None else None,
+                by_bms=bool(raw.get("by_bms")),
+            )
 
         # The AC IN switch may not be loaded yet after a restart; async_control drops
         # the ownership once it reads the switch off.
@@ -265,6 +290,7 @@ class IslandEnergyRuntime:
         self.suppress_until = when("suppress_until")
         self.skip_night = when("skip_night")
         self.fault_until = when("fault_until")
+        self.full_request_handled = bool(data.get("full_request_handled"))
         last = dt_util.parse_datetime(data.get("last_switch") or "")
         self._last_switch = last
         if self._we_switched_on or self.manual or self.session:
@@ -282,7 +308,15 @@ class IslandEnergyRuntime:
         def charge(c: ManualCharge | None) -> dict[str, Any] | None:
             if c is None:
                 return None
-            return {"target": c.target, "until": c.until.isoformat(), "low_tariff_only": c.low_tariff_only}
+            return {
+                "target": c.target,
+                "until": c.until.isoformat(),
+                "low_tariff_only": c.low_tariff_only,
+                "balance_from": iso(c.balance_from),
+                "balance_until": iso(c.balance_until),
+                "balance_start_mv": c.balance_start_mv,
+                "by_bms": c.by_bms,
+            }
 
         self._store.async_delay_save(
             lambda: {
@@ -292,6 +326,7 @@ class IslandEnergyRuntime:
                 "suppress_until": iso(self.suppress_until),
                 "skip_night": iso(self.skip_night),
                 "fault_until": iso(self.fault_until),
+                "full_request_handled": self.full_request_handled,
                 "last_switch": iso(self._last_switch),
             },
             SAVE_DELAY,
@@ -600,6 +635,7 @@ class IslandEnergyRuntime:
                 await self._release_stale_ignore()
         self._ignore_checked = True
         status_before = self.status
+        self._check_full_request(now)
         # Switched on by us, but no grid on the input (tripped breaker / RCD): not charging.
         if is_on and self._we_switched_on and self.grid_present() is False:
             self._no_grid_since = self._no_grid_since or now
@@ -612,13 +648,24 @@ class IslandEnergyRuntime:
         reason = ""
         high_vt = self.in_low_tariff(now) is False
         if self.manual:
-            if soc >= self.manual.target or now >= self.manual.until:
+            m = self.manual
+            out_of_nt = m.low_tariff_only and not self.in_night_low_tariff(now)
+            # Once the hold started, a SoC dip to 99 % does not restart charging.
+            reached = soc >= m.target or m.balance_until is not None
+            if reached and self._balance_applies(m) and now < m.until and not out_of_nt:
+                desired, reason = self._balance_step(m, now)
+                if not desired:
+                    self._balance_done(m, now, reason)
+                    self.manual = None
+            elif reached or now >= m.until:
+                why = "konec nízkého tarifu" if out_of_nt else "konec nabíjení" if now >= m.until else "dokončeno"
+                self._balance_done(m, now, why)
                 self.manual = None
                 desired, reason = False, "ruční nabíjení dokončeno"
-            elif self.manual.low_tariff_only and not self.in_night_low_tariff(now):
+            elif out_of_nt:
                 desired, reason = False, "ruční nabíjení – pauza mimo noční nízký tarif"
             else:
-                desired, reason = True, f"ruční nabíjení do {self.manual.target:.0f} %"
+                desired, reason = True, f"ruční nabíjení do {m.target:.0f} %"
         elif self.settings[SET_AUTO_CHARGING]:
             min_soc = float(self.settings[SET_MIN_SOC])
             high_tariff = self.in_low_tariff(now) is False
@@ -817,6 +864,8 @@ class IslandEnergyRuntime:
 
     async def async_stop_charging(self) -> None:
         now = dt_util.now()
+        if self.manual:
+            self._balance_done(self.manual, now, "ručně přerušeno")
         self.manual = None
         self.session = None
         self.suppress_until = self._stop_until(now)
@@ -874,7 +923,10 @@ class IslandEnergyRuntime:
             self._off_pending_until = None
         if self.manual:
             # "Low tariff only" waiting for the night window is not charging yet.
-            self.status = "manual_waiting" if self.manual.low_tariff_only and not charging else "manual"
+            if self.manual.low_tariff_only and not charging:
+                self.status = "manual_waiting"
+            else:
+                self.status = "balancing" if self.manual.balance_until and charging else "manual"
         elif self.fault_until and dt_util.now() < self.fault_until:
             self.status = "fault"
         elif charging:
@@ -888,6 +940,96 @@ class IslandEnergyRuntime:
         else:
             self.status = "idle"
         self._save()
+
+    def full_charge_requested(self) -> bool | None:
+        """BMS full charge request (on / 1 / true); None without the entity or unknown."""
+        eid = self.cfg.get(CONF_FULL_REQUEST)
+        st = self.hass.states.get(eid) if eid else None
+        if st is None or st.state in ("unknown", "unavailable", ""):
+            return None
+        if st.state.lower() in ("on", "true"):
+            return True
+        try:
+            return float(st.state) > 0
+        except ValueError:
+            return False
+
+    def _check_full_request(self, now: datetime) -> None:
+        """BMS asks for a full charge: plan 100 % in the nearest night low tariff (once per request).
+
+        Only with automatic charging allowed and nothing holding it off (stop, skip,
+        fault); a running manual charge goes first. The answer is a manual
+        "100 % in the low tariff", so the balancing hold follows.
+        """
+        requested = self.full_charge_requested()
+        if not requested:
+            if requested is False and self.full_request_handled:
+                self.full_request_handled = False
+                self._save()
+            return
+        if self.full_request_handled or not self.settings[SET_AUTO_CHARGING] or self.manual or self._blocked(now):
+            return
+        self.manual = ManualCharge(target=100.0, until=self._night_end_after(now), low_tariff_only=True, by_bms=True)
+        self.full_request_handled = True
+        self._log(
+            "BMS žádá plné nabití baterie, nabíjím na 100 % v nejbližším nočním nízkém tarifu.",
+            notify=True,
+        )
+
+    def cell_delta_mv(self) -> float | None:
+        """Cell voltage spread max − min (mV); None without both cell entities."""
+        hi = self._cell_mv(CONF_CELL_V_MAX)
+        lo = self._cell_mv(CONF_CELL_V_MIN)
+        return round(hi - lo, 1) if hi is not None and lo is not None else None
+
+    def _cell_mv(self, key: str) -> float | None:
+        eid = self.cfg.get(key)
+        value = state_float(self.hass, eid)
+        if value is None or not eid:
+            return None
+        st = self.hass.states.get(eid)
+        unit = (st.attributes.get("unit_of_measurement") if st else None) or ""
+        # V (3.452) or mV (3452); without a unit a cell voltage below 10 is in volts.
+        return value if unit == "mV" or (unit != "V" and value >= 10) else value * 1000
+
+    def _balance_applies(self, charge: ManualCharge) -> bool:
+        """Manual charge to 100 % with a balancing hold set."""
+        return charge.target >= FULL_SOC and float(self.settings[SET_BALANCE_MINUTES]) > 0
+
+    def _balance_step(self, charge: ManualCharge, now: datetime) -> tuple[bool, str]:
+        """Hold AC IN on after 100 %: (True, reason) while holding, (False, why) when done."""
+        delta = self.cell_delta_mv()
+        if charge.balance_until is None:
+            minutes = float(self.settings[SET_BALANCE_MINUTES])
+            charge.balance_from = now
+            charge.balance_until = min(now + timedelta(minutes=minutes), charge.until)
+            charge.balance_start_mv = delta
+            cells = f", rozdíl článků {delta:.0f} mV" if delta is not None else ""
+            self._log(
+                f"SoC 100 %, AC IN nechávám zapnutý do {_hm(charge.balance_until)} "
+                f"na balancování článků ({minutes:.0f} min{cells})."
+            )
+        limit = float(self.settings[SET_BALANCE_DELTA])
+        if limit > 0 and delta is not None and delta <= limit:
+            return False, f"rozdíl článků pod {limit:.0f} mV"
+        if now >= charge.balance_until:
+            return False, "čas vypršel"
+        return True, f"balancování článků do {_hm(charge.balance_until)}"
+
+    def _balance_done(self, charge: ManualCharge, now: datetime, why: str) -> None:
+        """Log (and notify) how the balancing hold ended, with the cell spread."""
+        if charge.balance_from is None:
+            return
+        minutes = max(0.0, (now - charge.balance_from).total_seconds() / 60)
+        delta = self.cell_delta_mv()
+        if delta is None:
+            cells = ""
+        elif charge.balance_start_mv is not None:
+            cells = f", rozdíl článků {charge.balance_start_mv:.0f} → {delta:.0f} mV"
+        else:
+            cells = f", rozdíl článků {delta:.0f} mV"
+        self._log(f"Balancování článků skončilo po {minutes:.0f} min ({why}{cells}).", notify=True)
+        charge.balance_from = None
 
     def _log(self, message: str, notify: bool = False) -> None:
         _LOGGER.info(message)
@@ -1010,6 +1152,12 @@ class IslandEnergyRuntime:
         """Running charge (planned or manual): target SoC, kWh left and estimated end."""
         active = self.manual or self.session
         sw = self.hass.states.get(self.cfg.get(CONF_AC_IN_SWITCH) or "")
+        # Manual charge to 100 %: how long AC IN stays on after 100 % (balancing).
+        hold = (
+            {"balance_minutes": float(self.settings[SET_BALANCE_MINUTES])}
+            if self.manual and self._balance_applies(self.manual)
+            else {}
+        )
         if self.manual and self.manual.low_tariff_only and (sw is None or sw.state != STATE_ON):
             start = self.next_night_low_tariff(dt_util.now())
             return {
@@ -1018,16 +1166,38 @@ class IslandEnergyRuntime:
                 "waiting": True,
                 "start": start.isoformat() if start else None,
                 "until": self.manual.until.isoformat(),
+                "by_bms": self.manual.by_bms,
+                **hold,
             }
         if active is None or sw is None or sw.state != STATE_ON:
             return None
-        info: dict[str, Any] = {"kind": "manual" if self.manual else "planned", "target": round(active.target)}
+        info: dict[str, Any] = {"kind": "manual" if self.manual else "planned", "target": round(active.target), **hold}
+        if self.manual and self.manual.by_bms:
+            info["by_bms"] = True
+        if self.manual and self.manual.balance_until:
+            return {
+                **info,
+                "balancing": True,
+                "balance_until": self.manual.balance_until.isoformat(),
+                "remaining_kwh": 0.0,
+                "eta": self.manual.balance_until.isoformat(),
+                "cell_delta_mv": self.cell_delta_mv(),
+            }
         soc = state_float(self.hass, self.cfg.get(CONF_SOC))
         if soc is None or self.capacity <= 0:
             return info
         left, eta = self._estimate(active, soc, dt_util.now())
         info.update(remaining_kwh=round(left, 1), eta=eta.isoformat())
         return info
+
+    def _charge_end(self, charge: ManualCharge, soc: float, start: datetime) -> tuple[float, datetime]:
+        """Like ``_estimate``, but AC IN stays on through the balancing hold after 100 %."""
+        if charge is self.manual and charge.balance_until is not None:
+            return 0.0, charge.balance_until
+        left, end = self._estimate(charge, soc, start)
+        if charge is self.manual and self._balance_applies(charge):
+            end = min(end + timedelta(minutes=float(self.settings[SET_BALANCE_MINUTES])), charge.until)
+        return left, end
 
     def _estimate(self, charge: ManualCharge, soc: float, start: datetime) -> tuple[float, datetime]:
         """kWh left to ``charge.target`` and the estimated end when charging from ``start``."""
@@ -1060,14 +1230,18 @@ class IslandEnergyRuntime:
             begin = self._last_switch if self._we_switched_on and self._last_switch else sw.last_changed
             active = self.manual or (self.session if self._we_switched_on else None)
             if active is not None and soc is not None and self.capacity > 0:
-                left, end = self._estimate(active, soc, now)
-                if self.manual:
+                left, end = self._charge_end(active, soc, now)
+                if self.manual and self.manual.balance_until:
+                    detail = "ruční, balancování článků"
+                elif self.manual:
                     detail = f"ruční, do {active.target:.0f} %"
                 elif soc < float(self.settings[SET_MIN_SOC]) + PROTECT_MARGIN:
                     detail = f"{_kwh(left)} kWh, ochrana minima"
                 else:
                     detail = f"{_kwh(left)} kWh, podle plánu"
                 desc = f"Běží, cíl {active.target:.0f} %, odhad konce {_hm(end)}."
+                if self.manual and self._balance_applies(self.manual):
+                    desc += " Po 100 % zůstane AC IN zapnutý na balancování článků."
             else:
                 end, detail = now + MIN_ON, "zapnuto mimo plánovač"
                 desc = "AC IN je zapnutý, konec není známý (průběžně se posouvá)."
@@ -1077,7 +1251,7 @@ class IslandEnergyRuntime:
         elif self.manual and self.manual.low_tariff_only and soc is not None and self.capacity > 0:
             start = self.next_night_low_tariff(now)
             if start is not None and start < self.manual.until:
-                _left, end = self._estimate(self.manual, soc, start)
+                _left, end = self._charge_end(self.manual, soc, start)
                 if end > start:
                     events.append(
                         ChargeEvent(

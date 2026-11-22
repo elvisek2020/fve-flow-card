@@ -128,6 +128,8 @@ Při přidání vybereš entity (vše jde později změnit v možnostech integra
 | Spínač AC IN, spínač chlazení | `switch.…_ac_in`, `switch.…` | co integrace spíná |
 | Ignorovat AC vstup (volitelné) | `switch.multiplus_…_ovladani_ignore_ac_in_1` | šetrné odpojení: stykač se rozepíná bez proudu |
 | Napětí sítě na AC IN (volitelné) | `sensor.multiplus_…_vstupni_napeti_l1` | hlídání „sepnuto, ale bez napětí“ (jinak podle aktivního vstupu GX) |
+| Požadavek BMS na plné nabití (volitelné) | `binary_sensor.…_full_charge_request` | `on` / `1` = baterie žádá plné nabití (Pylontech FullChargeRequest, např. MQTT senzor z GX) |
+| Maximální / minimální napětí článku (volitelné) | `sensor.pylontech_battery_…_maximalni_napeti_clanku`, `…_minimalni_napeti_clanku` | rozdíl článků v mV při balancování na 100 % (V i mV) |
 | HDO | `binary_sensor.egd_hdo_…_hdo_status` | povel tvého tarifu (atribut `HDO_HOURLY`); bez něj se nabíjí kdykoli |
 
 **Stínový režim (výchozí):** integrace počítá a ukazuje plán, ale AC IN sama
@@ -180,14 +182,37 @@ okno téže noci může plán dojet), v nočním vysokém tarifu do dalšího NT
 do začátku noci — vždy aspoň 10 min. **Nabít teď** jde spustit kdykoli.
 Do kdy platí, ukazuje atribut `suppressed_until` senzoru *Stav plánovače*.
 
+**Balancování na 100 %:** ruční nabíjení s cílem 100 % (tlačítka *Nabít na 100 %*,
+dialog *Nabít teď* v kartě, služba `charge_now` s `target_soc: 100`) po dosažení
+SoC 100 % nevypne AC IN hned, ale nechá ho zapnutý ještě *Balancování po nabití na
+100 %* (výchozí 60 min, 0 = vypnuto), ať BMS vyrovná články. Napětí dál řídí BMS
+(CVL přes DVCC), baterie se nepřebije. Stav plánovače je mezitím **Balancování
+článků** (`balancing`). Prodleva skončí i dřív: koncem nízkého tarifu u *Jen
+v nízkém tarifu*, koncem nabíjení (nejpozději ráno / po 12 h), tlačítkem *Vypnout
+nabíjení* nebo poruchou bez napětí. S entitami napětí článků jde nastavit
+*Ukončit balancování pod rozdílem článků* (mV, 0 = vypnuto). Konec prodlevy
+zapíše do logbooku a pošle notifikaci s rozdílem článků, např. „Balancování článků
+skončilo po 60 min (čas vypršel, rozdíl článků 28 → 21 mV)“. Plánované nabíjení
+(do stropu) prodlevu nemá.
+
+**Požadavek BMS na plné nabití:** s entitou *Požadavek BMS na plné nabití* a
+povoleným automatickým nabíjením integrace na nástup požadavku (`on` / `1`)
+naplánuje nabití na 100 % v nejbližším nočním nízkém tarifu (jako *Nabít na 100 %
+v nízkém tarifu*, včetně balancování), zapíše to do logbooku a pošle notifikaci.
+Na jeden požadavek odpoví jednou: po dokončení nebo *Vypnout nabíjení* nové nabití
+nenaplánuje, dokud BMS požadavek nezruší. Běžící ruční nabíjení má přednost,
+*Vypnout nabíjení*, *Dnes v noci nenabíjet* a porucha ho odkládají. Karta ukazuje
+**Plné nabití (BMS)**, stav plánovače má atributy `full_charge_request`
+a `full_charge_request_handled`.
+
 **Kalendář** *Plán nabíjení ze sítě* (`calendar.hybrid_energy_grid_charging_schedule`)
 ukazuje, kdy je AC IN sepnutý nebo sepnutý bude, aby se mu mohly vyhnout jiné
 automatizace (např. start kotle). Události:
 
-- právě běžící nabíjení — od sepnutí do odhadu konce (aspoň 15 min), průběžně se
-  posouvá: „Nabíjení ze sítě (1,2 kWh, podle plánu)“, „(ruční, do 100 %)“,
-  „(zapnuto mimo plánovač)“,
-- čekající *Na 100 % v nízkém tarifu* od začátku nočního NT do odhadu konce,
+- právě běžící nabíjení — od sepnutí do odhadu konce (aspoň 15 min, u 100 % včetně
+  balancování), průběžně se posouvá: „Nabíjení ze sítě (1,2 kWh, podle plánu)“,
+  „(ruční, do 100 %)“, „(ruční, balancování článků)“, „(zapnuto mimo plánovač)“,
+- čekající ruční nabíjení *Jen v nízkém tarifu* od začátku nočního NT do odhadu konce,
 - plánovaná okna, která se opravdu spustí (povolené automatické nabíjení, ne po
   *Vypnout nabíjení* / *Dnes v noci nenabíjet* / poruše, dost energie i času):
   „Nabíjení ze sítě (1,8 kWh, rezerva)“, „(…, ochrana minima)“, „(…, do stropu)“.
@@ -215,12 +240,26 @@ binární *Nabíjení ze sítě*, *Nízký tarif*; přepínače *Povolit automat
 nabíjení / chlazení*, *Nabíjet od západu slunce*; nastavení *Strop nabíjení ze sítě*, *Minimální SoC*,
 *Výkon nabíjení ze sítě (záloha)*, *Rezerva do další noci*, časy *Nabíjet ze sítě
 nejdřív od / nejpozději do*, *Chlazení zapnout nad /
-vypnout pod*; tlačítka *Nabít teď* (do stropu), *Nabít na 100 %* (hned), *Nabít na 100 % v nízkém
+vypnout pod*, *Balancování po nabití na 100 %*, *Ukončit balancování pod rozdílem
+článků*; tlačítka *Nabít teď* (do stropu), *Nabít na 100 %* (hned), *Nabít na 100 % v nízkém
 tarifu* (jen noční okna NT, jinak čeká; skončí nejpozději ráno), *Vypnout nabíjení*, *Dnes v noci nenabíjet*.
 
 **Služby:** `island_energy.charge_now` (volitelně `target_soc`, `duration` v min,
 `low_tariff_only` — jen noční okna nízkého tarifu do konce noci),
 `island_energy.stop_charging`, `island_energy.skip_tonight`, `island_energy.recompute`.
+Tlačítko na dashboardu s vlastním cílem, např. na 80 % jen v nízkém tarifu:
+
+```yaml
+type: tile
+entity: sensor.hybrid_energy_planner_status
+name: Na 80 % v NT
+tap_action:
+  action: perform-action
+  perform_action: island_energy.charge_now
+  data:
+    target_soc: 80
+    low_tariff_only: true
+```
 
 **Nouzová pojistka** patří mimo integraci — když HA nebo integrace neběží, má
 zafungovat sama. Doporučená automatizace:
@@ -441,11 +480,13 @@ Poznámky:
     22:45–0:45“, „Dobije 4 kWh“), při nabíjení cíl a odhad konce a **příkon ze
     sítě** (jen když AC IN běží); s sekcí `ac_in` dnešní energie **nabíječ ·
     baterie · dům** a **celkem ze sítě** (přírůstek čítačů od půlnoci) a jedno
-    tlačítko **Nabít teď** (dialog s cílem 100 %: *Hned* — i ve vysokém tarifu,
-    nebo *Jen v nízkém tarifu* — jen noční okna NT, jinak čeká a do rána
-    skončí; automat zůstává zapnutý; starší integrace bez entit „na 100 %“
-    nabíjí hned do stropu), během nabíjení jedno **Vypnout nabíjení**, při
-    čekání na nízký tarif **Zrušit nabíjení na 100 %**
+    tlačítko **Nabít teď** (dialog s cílem **50 / 80 / 100 %** — cíle pod
+    aktuálním SoC jsou zašedlé — a volbou *Hned* — i ve vysokém tarifu, nebo
+    *Jen v nízkém tarifu* — jen noční okna NT, jinak čeká a do rána skončí;
+    automat zůstává zapnutý; u 100 % následuje balancování článků), během
+    nabíjení jedno **Vypnout nabíjení**, při balancování **Ukončit balancování**
+    se zbývajícím časem a rozdílem článků, při čekání na nízký tarif
+    **Zrušit nabíjení na 80 %** (podle cíle)
     (po vypnutí se vrací k automatickému plánu). Automatické nabíjení (stínový
     režim) se zapíná jen v integraci (**Povolit automatické nabíjení**),
   - bez integrace se tlačítko ani blok nezobrazí,

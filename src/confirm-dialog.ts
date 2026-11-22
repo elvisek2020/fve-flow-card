@@ -7,17 +7,31 @@ export interface ConfirmDialogOptions {
   accent?: string;
   /** Druhá volba vedle potvrzení (např. „Jen v nízkém tarifu“). */
   secondaryLabel?: string;
+  /** Výběr hodnoty nad tlačítky (např. cíl nabití 50 / 80 / 100 %). */
+  values?: Array<{ value: number; label: string; disabled?: boolean; title?: string }>;
+  /** Předvybraná hodnota z `values`. */
+  value?: number;
+  /** Text dialogu podle vybrané hodnoty (jinak `message`). */
+  describe?: (value: number) => string;
 }
 
 export type DialogChoice = 'primary' | 'secondary' | null;
+
+export interface DialogResult {
+  choice: DialogChoice;
+  /** Vybraná hodnota z `values` (undefined bez výběru). */
+  value?: number;
+}
 
 const DIALOG_TAG = 'fve-flow-confirm-dialog';
 
 /** Malý potvrzovací modal ve stejném glassmorphism stylu jako 48h grafy. */
 class FveFlowConfirmDialog extends HTMLElement {
   private readonly _dialog: HTMLDialogElement;
-  private _resolve?: (choice: DialogChoice) => void;
+  private _resolve?: (result: DialogResult) => void;
   private _choice: DialogChoice = null;
+  private _value?: number;
+  private _options?: ConfirmDialogOptions;
 
   public constructor() {
     super();
@@ -73,6 +87,37 @@ class FveFlowConfirmDialog extends HTMLElement {
           color: var(--secondary-text-color, rgba(220, 235, 245, 0.68));
           font-size: 14px;
           line-height: 1.5;
+        }
+        /* Výběr hodnoty jako segmenty, celé pixely jako u tlačítek. */
+        .values {
+          display: flex;
+          gap: 8px;
+          margin: 0 0 14px;
+        }
+        .values[hidden] {
+          display: none;
+        }
+        .values button {
+          flex: 1 1 0;
+          min-width: 0;
+          color: var(--secondary-text-color, #a8bbc6);
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+        .values button:hover:not(:disabled),
+        .values button:focus-visible {
+          color: var(--primary-text-color, #fff);
+          border-color: color-mix(in srgb, var(--dialog-accent) 70%, transparent);
+          outline: none;
+        }
+        .values button[aria-checked='true'] {
+          color: #0a0f16;
+          background: var(--dialog-accent);
+          border-color: var(--dialog-accent);
+        }
+        .values button:disabled {
+          cursor: default;
+          opacity: 0.35;
         }
         .actions {
           display: flex;
@@ -140,6 +185,7 @@ class FveFlowConfirmDialog extends HTMLElement {
       <dialog aria-labelledby="confirm-title">
         <div class="body">
           <h2 id="confirm-title"></h2>
+          <div class="values" role="radiogroup" hidden></div>
           <p></p>
         </div>
         <div class="actions">
@@ -164,24 +210,57 @@ class FveFlowConfirmDialog extends HTMLElement {
       if (event.target === this._dialog) this._dialog.close();
     });
     this._dialog.addEventListener('close', () => {
-      this._resolve?.(this._choice);
+      this._resolve?.({ choice: this._choice, value: this._value });
       this.remove();
     });
   }
 
-  public show(options: ConfirmDialogOptions): Promise<DialogChoice> {
+  public show(options: ConfirmDialogOptions): Promise<DialogResult> {
     const root = this.shadowRoot!;
+    this._options = options;
     root.querySelector('h2')!.textContent = options.title;
-    root.querySelector('p')!.textContent = options.message;
     root.querySelector('.confirm')!.textContent = options.confirmLabel;
     const secondary = root.querySelector<HTMLButtonElement>('.secondary')!;
     secondary.hidden = !options.secondaryLabel;
     secondary.textContent = options.secondaryLabel ?? '';
     if (options.accent) this.style.setProperty('--dialog-accent', options.accent);
+    const values = root.querySelector<HTMLDivElement>('.values')!;
+    const list = options.values ?? [];
+    values.hidden = !list.length;
+    values.replaceChildren(
+      ...list.map((v) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.dataset.value = String(v.value);
+        b.textContent = v.label;
+        b.disabled = !!v.disabled;
+        if (v.title) b.title = v.title;
+        b.addEventListener('click', () => this._select(v.value));
+        return b;
+      }),
+    );
+    const enabled = list.filter((v) => !v.disabled);
+    const initial = enabled.find((v) => v.value === options.value) ?? enabled[enabled.length - 1];
+    this._value = initial?.value;
+    this._select(this._value);
     this._dialog.showModal();
     return new Promise((resolve) => {
       this._resolve = resolve;
     });
+  }
+
+  /** Vybere hodnotu: zvýrazní segment, přepíše text a bez hodnoty zakáže potvrzení. */
+  private _select(value: number | undefined): void {
+    const root = this.shadowRoot!;
+    const o = this._options;
+    this._value = value;
+    for (const b of root.querySelectorAll<HTMLButtonElement>('.values button')) {
+      b.setAttribute('aria-checked', String(b.dataset.value === String(value)));
+    }
+    root.querySelector('p')!.textContent = value != null && o?.describe ? o.describe(value) : o?.message ?? '';
+    const missing = !!o?.values?.length && value == null;
+    for (const b of root.querySelectorAll<HTMLButtonElement>('.confirm, .secondary')) b.disabled = missing;
   }
 }
 
@@ -189,11 +268,16 @@ if (!customElements.get(DIALOG_TAG)) {
   customElements.define(DIALOG_TAG, FveFlowConfirmDialog);
 }
 
-/** Otevře dialog s volbou; vrátí 'primary', 'secondary' nebo null (zrušeno). */
-export function openChoiceDialog(options: ConfirmDialogOptions): Promise<DialogChoice> {
+/** Otevře dialog s volbou a případným výběrem hodnoty (`values`). */
+export function openValueDialog(options: ConfirmDialogOptions): Promise<DialogResult> {
   const dialog = document.createElement(DIALOG_TAG) as FveFlowConfirmDialog;
   document.body.append(dialog);
   return dialog.show(options);
+}
+
+/** Otevře dialog s volbou; vrátí 'primary', 'secondary' nebo null (zrušeno). */
+export async function openChoiceDialog(options: ConfirmDialogOptions): Promise<DialogChoice> {
+  return (await openValueDialog(options)).choice;
 }
 
 /** Otevře potvrzovací dialog; vrátí true po potvrzení, false po zrušení. */

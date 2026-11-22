@@ -17,11 +17,14 @@ from .const import (
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
     CONF_CAPACITY,
+    CONF_CELL_V_MAX,
+    CONF_CELL_V_MIN,
     CONF_DAILY_LOAD,
     CONF_DC_CURRENT,
     CONF_DC_POWER,
     CONF_DC_VOLTAGE,
     CONF_FAN_SWITCH,
+    CONF_FULL_REQUEST,
     CONF_HDO_SENSOR,
     CONF_IGNORE_AC_IN,
     CONF_INVERTER_POWER,
@@ -68,12 +71,17 @@ def _schema(values: dict[str, Any]) -> vol.Schema:
         CONF_ACTIVE_INPUT,
         CONF_INVERTER_STATE,
         CONF_AC_IN_VOLTAGE,
+        CONF_CELL_V_MAX,
+        CONF_CELL_V_MIN,
     ):
         fields[key(name)] = SENSOR
     fields[key(CONF_AC_IN_SWITCH)] = SWITCH
     fields[key(CONF_IGNORE_AC_IN)] = SWITCH
     fields[key(CONF_FAN_SWITCH)] = SWITCH
     fields[key(CONF_HDO_SENSOR)] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
+    )
+    fields[key(CONF_FULL_REQUEST)] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
     )
     fields[key(CONF_DAILY_LOAD)] = SENSOR

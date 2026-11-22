@@ -26,17 +26,23 @@
           "active_input": "GX active input source",
           "inverter_state": "Inverter state",
           "ac_in_voltage": "Grid voltage on AC IN (V)",
+          "cell_voltage_max": "Highest cell voltage (V)",
+          "cell_voltage_min": "Lowest cell voltage (V)",
           "ac_in_switch": "AC IN switch (grid charging)",
           "ignore_ac_in_switch": "Victron \"Ignore AC input\" switch (graceful disconnect)",
           "fan_switch": "Cooling switch",
           "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
+          "full_charge_request": "BMS full charge request (optional)",
           "daily_load": "Fallback daily consumption (kWh)",
           "notify_service": "Notify service (e.g. notify.mobile_app_phone)"
         },
         "data_description": {
           "hdo_sensor": "Preferred: the binary sensor with the HDO_HOURLY attribute (tariff command of your rate, e.g. DP01). The \"next HDO time\" sensor also works. Without HDO charging may happen any time.",
           "notify_service": "Only for alerts when AC IN does not charge after switching on.",
-          "capacity": "Ah is converted with the nominal voltage, not the live one."
+          "capacity": "Ah is converted with the nominal voltage, not the live one.",
+          "cell_voltage_max": "Cell spread max − min for the balancing hold at 100 % (log, notification, optional early end).",
+          "cell_voltage_min": "Cell spread max − min for the balancing hold at 100 % (log, notification, optional early end).",
+          "full_charge_request": "On / 1 = the battery asks for a full charge (e.g. Pylontech FullChargeRequest). With automatic charging allowed it plans a charge to 100 % in the nearest night low tariff, including the balancing hold."
         }
       }
     },
@@ -70,17 +76,23 @@
           "active_input": "GX active input source",
           "inverter_state": "Inverter state",
           "ac_in_voltage": "Grid voltage on AC IN (V)",
+          "cell_voltage_max": "Highest cell voltage (V)",
+          "cell_voltage_min": "Lowest cell voltage (V)",
           "ac_in_switch": "AC IN switch (grid charging)",
           "ignore_ac_in_switch": "Victron \"Ignore AC input\" switch (graceful disconnect)",
           "fan_switch": "Cooling switch",
           "hdo_sensor": "HDO – \"HDO Status\" binary sensor (EG.D)",
+          "full_charge_request": "BMS full charge request (optional)",
           "daily_load": "Fallback daily consumption (kWh)",
           "notify_service": "Notify service (e.g. notify.mobile_app_phone)"
         },
         "data_description": {
           "hdo_sensor": "Preferred: the binary sensor with the HDO_HOURLY attribute (tariff command of your rate, e.g. DP01). The \"next HDO time\" sensor also works. Without HDO charging may happen any time.",
           "notify_service": "Only for alerts when AC IN does not charge after switching on.",
-          "capacity": "Ah is converted with the nominal voltage, not the live one."
+          "capacity": "Ah is converted with the nominal voltage, not the live one.",
+          "cell_voltage_max": "Cell spread max − min for the balancing hold at 100 % (log, notification, optional early end).",
+          "cell_voltage_min": "Cell spread max − min for the balancing hold at 100 % (log, notification, optional early end).",
+          "full_charge_request": "On / 1 = the battery asks for a full charge (e.g. Pylontech FullChargeRequest). With automatic charging allowed it plans a charge to 100 % in the nearest night low tariff, including the balancing hold."
         }
       }
     }
@@ -105,6 +117,7 @@
           "charging": "Charging",
           "manual": "Manual charging",
           "manual_waiting": "Manual charge waiting for low tariff",
+          "balancing": "Balancing cells",
           "external": "Switched on externally",
           "skipped": "Skipped tonight",
           "fault": "No voltage on AC IN"
@@ -153,6 +166,12 @@
       },
       "cooling_off": {
         "name": "Cooling off below"
+      },
+      "balance_minutes": {
+        "name": "Balancing hold after 100 %"
+      },
+      "balance_delta": {
+        "name": "End balancing below cell spread"
       }
     },
     "time": {

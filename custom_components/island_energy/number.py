@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.components.number import NumberEntityDescription, NumberMode, RestoreNumber
-from homeassistant.const import PERCENTAGE, UnitOfPower
+from homeassistant.const import PERCENTAGE, UnitOfElectricPotential, UnitOfPower, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import IslandEnergyConfigEntry
 from .const import (
+    SET_BALANCE_DELTA,
+    SET_BALANCE_MINUTES,
     SET_CEILING,
     SET_CHARGE_POWER,
     SET_COOLING_OFF,
@@ -57,6 +59,20 @@ DESCRIPTIONS = (
         native_max_value=5000,
         native_step=50,
         native_unit_of_measurement=UnitOfPower.WATT,
+    ),
+    SettingDescription(
+        key=SET_BALANCE_MINUTES,
+        native_min_value=0,
+        native_max_value=240,
+        native_step=5,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+    ),
+    SettingDescription(
+        key=SET_BALANCE_DELTA,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=1,
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
     ),
 )
 

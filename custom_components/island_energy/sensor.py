@@ -11,10 +11,21 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import IslandEnergyConfigEntry
-from .const import SET_RESERVE
+from .const import SET_BALANCE_MINUTES, SET_RESERVE
 from .entity import IslandEnergyEntity
 
-STATUSES = ["shadow", "idle", "planned", "charging", "manual", "manual_waiting", "external", "skipped", "fault"]
+STATUSES = [
+    "shadow",
+    "idle",
+    "planned",
+    "charging",
+    "manual",
+    "manual_waiting",
+    "balancing",
+    "external",
+    "skipped",
+    "fault",
+]
 
 
 async def async_setup_entry(
@@ -142,4 +153,11 @@ class StatusSensor(IslandEnergyEntity, SensorEntity):
             "session_target": rt.session.target if rt.session else None,
             "suppressed_until": rt.suppress_until.isoformat() if rt.suppress_until else None,
             "skip_until": rt.skip_night.isoformat() if rt.skip_night else None,
+            # Manual charge to 100 %: hold AC IN on for cell balancing (setting, minutes).
+            "balance_minutes": rt.settings.get(SET_BALANCE_MINUTES),
+            "balancing_until": rt.manual.balance_until.isoformat() if rt.manual and rt.manual.balance_until else None,
+            "cell_delta_mv": rt.cell_delta_mv(),
+            # BMS full charge request (None without the entity) and whether it was answered.
+            "full_charge_request": rt.full_charge_requested(),
+            "full_charge_request_handled": rt.full_request_handled,
         }
